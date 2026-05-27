@@ -638,7 +638,12 @@ function tagCount(path: string): number {
 
 function colorForTag(path: string) {
   const record = tags.find((t) => t.name === path);
-  return record ? (TAG_COLORS[record.color] ?? TAG_COLORS.slate) : TAG_COLORS.slate;
+  if (record) return TAG_COLORS[record.color] ?? TAG_COLORS.slate;
+  // Stable pseudo-random color derived from the tag path.
+  let hash = 0;
+  for (let i = 0; i < path.length; i++) hash = (hash * 31 + path.charCodeAt(i)) | 0;
+  const key = TAG_COLOR_KEYS[Math.abs(hash) % TAG_COLOR_KEYS.length];
+  return TAG_COLORS[key];
 }
 
 async function selectTag(path: string) {

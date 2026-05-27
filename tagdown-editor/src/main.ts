@@ -603,7 +603,7 @@ function noteTagPaths(): string[] {
 }
 
 function buildTagTree(): TagNode[] {
-  const recordNames = new Set(tags.map((t) => t.name));
+  const recordNames = new Set(tags.map((t) => t.name.toLowerCase()));
   const paths = new Set<string>([...noteTagPaths(), ...recordNames]);
   for (const p of [...paths]) {
     const parts = p.split('/');
@@ -637,7 +637,7 @@ function tagCount(path: string): number {
 }
 
 function colorForTag(path: string) {
-  const record = tags.find((t) => t.name === path);
+  const record = tags.find((t) => t.name.toLowerCase() === path);
   if (record) return TAG_COLORS[record.color] ?? TAG_COLORS.slate;
   // Stable pseudo-random color derived from the tag path.
   let hash = 0;
@@ -738,7 +738,7 @@ function renderTags() {
     button.addEventListener('click', async (event) => {
       event.stopPropagation();
       const path = button.dataset.deleteTagName!;
-      const record = tags.find((t) => t.name === path);
+      const record = tags.find((t) => t.name.toLowerCase() === path);
       if (record) await deleteTag(record.id);
     });
   });

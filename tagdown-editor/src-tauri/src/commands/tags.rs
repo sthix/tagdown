@@ -45,7 +45,7 @@ pub async fn create_tag(name: String, color: String, state: State<'_, Mutex<AppS
         id = format!("{base}-{n}");
         n += 1;
     }
-    let record = TagRecord { id, name: name.trim().to_string(), color };
+    let record = TagRecord { id, name: name.trim().to_lowercase(), color };
     state.vault.meta.tags.push(record.clone());
     state.vault.save_meta()?;
     Ok(tag_from_record(&record))

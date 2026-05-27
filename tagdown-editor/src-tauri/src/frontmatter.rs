@@ -117,7 +117,8 @@ pub fn derive_tags(content: &str) -> Vec<String> {
                     .split('/')
                     .filter(|s| !s.is_empty())
                     .collect::<Vec<_>>()
-                    .join("/");
+                    .join("/")
+                    .to_lowercase();
                 if !normalized.is_empty() && !out.contains(&normalized) {
                     out.push(normalized);
                 }
@@ -184,5 +185,11 @@ mod tests {
     fn derive_tags_dedup_and_normalizes_slashes() {
         let body = "#a//b/ then #a/b again and #a/b/";
         assert_eq!(derive_tags(body), vec!["a/b"]);
+    }
+
+    #[test]
+    fn derive_tags_lowercases_and_dedups_case_variants() {
+        let body = "#hAhAHA and #hahaha and #Notes/Chemistry";
+        assert_eq!(derive_tags(body), vec!["hahaha", "notes/chemistry"]);
     }
 }

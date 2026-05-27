@@ -13,7 +13,7 @@ function hasSkippedAncestor(node: Node): boolean {
 }
 
 function normalizeTag(raw: string): string {
-  return raw.split('/').filter(Boolean).join('/');
+  return raw.split('/').filter(Boolean).join('/').toLowerCase();
 }
 
 export function renderPreview(source: string): string {
@@ -45,7 +45,7 @@ export function renderPreview(source: string): string {
       const span = document.createElement('span');
       span.className = 'td-tag';
       span.dataset.tag = tag;
-      span.textContent = `#${tag}`;
+      span.textContent = tag;
       frag.append(span);
       lastIndex = match.index + whole.length;
     }

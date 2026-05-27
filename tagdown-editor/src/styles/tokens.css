@@ -1,0 +1,160 @@
+/* Tagdown Editor recreation tokens from the bundled reference UI. */
+:root {
+  color-scheme: light;
+  font-family: var(--font-ui);
+  font-size: 14px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+
+  --bg-window: #fbfbfa;
+  --bg-sidebar: #f4f3f0;
+  --bg-notes: #fdfcfa;
+  --bg-list: #fdfcfa;
+  --bg-editor: #ffffff;
+  --bg-preview: #fbfbfa;
+  --bg-titlebar: #ebeae5;
+  --bg-button: rgba(255,255,255,.72);
+  --bg-button-hover: rgba(255,255,255,.94);
+  --bg-status: #eeede8;
+  --bg-search: #ffffff;
+  --bg-dialog: #fbfaf8;
+  --bg-dialog-header: rgba(247, 246, 244, 0.92);
+  --bg-dialog-close: rgba(232, 231, 229, 0.9);
+  --bg-dialog-tabs: #f4f3f1;
+  --bg-doc-example-pre: #ebe8e2;
+
+  --source-fg: #1d1d1f;
+  --text-primary: #1d1d1f;
+  --text-secondary: #51515a;
+  --text-muted: #8a8a90;
+  --ink: #1d1d1f;
+  --ink-2: #51515a;
+  --ink-3: #8a8a90;
+  --ink-4: #b5b5bb;
+  --accent: #3868c8;
+  --accent-strong: #2d56ac;
+  --accent-soft: #3868c8;
+  --accent-tint: oklch(0.92 0.045 256);
+  --accent-tint-strong: oklch(0.9 0.06 256);
+  --selection: oklch(0.92 0.045 256);
+  --selection-neutral: rgba(0,0,0,.06);
+  --hover-overlay: rgba(0,0,0,.04);
+  --rule: rgba(0,0,0,.08);
+  --rule-strong: rgba(0,0,0,.14);
+  --line: rgba(0,0,0,.08);
+  --line-strong: rgba(0,0,0,.14);
+  --shadow: rgba(0,0,0,.18);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.18);
+  --focus-ring: rgba(56,104,200,.42);
+  --chip-bg: rgba(0,0,0,.06);
+  --kbd-bg: #f4f3f0;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --pv-bg: var(--bg-preview);
+  --pv-surface: #f7f6f3;
+  --pv-ink: #1d1d1f;
+  --pv-ink-soft: #51515a;
+  --pv-rule: rgba(0,0,0,.12);
+  --pv-rule-soft: rgba(0,0,0,.075);
+  --pv-accent: #3868c8;
+  --pv-accent-2: #f0c56b;
+  --pv-code-bg: #f4f3f0;
+  --pv-pre-bg: #1f1f1f;
+  --pv-pre-fg: #efede8;
+  --pv-pre-header-bg: #2b2a28;
+  --pv-pre-header-fg: #d8d3ca;
+  --pv-pre-header-border: rgba(255,255,255,.08);
+  --pv-pre-lang-fg: #a9a49a;
+  --pv-pre-num-fg: #8a857d;
+  --pv-table-hover: #f6f5f2;
+  --pv-col-bg: #f7f6f3;
+  --pv-col-border: #dedbd4;
+  --pv-dl-bg: #f7f6f3;
+  --pv-dl-border: #e2ded6;
+  --pv-note-info-bg: #eef2f9;
+  --pv-note-info-border: #3868c8;
+  --pv-note-info-icon: #3868c8;
+  --pv-note-warn-bg: #fbf3e6;
+  --pv-note-warn-border: #b98508;
+  --pv-note-warn-icon: #9a6b00;
+  --pv-note-error-bg: #fff0ef;
+  --pv-note-error-border: #bf3d36;
+  --pv-note-error-icon: #a52c25;
+  --pv-note-ok-bg: #eef6ef;
+  --pv-note-ok-border: #2c8a43;
+  --pv-note-ok-icon: #23773a;
+  --pv-note-tip-bg: #f5f0ff;
+  --pv-note-tip-border: #8060c9;
+  --pv-note-tip-icon: #7155b0;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-window: #171716;
+  --bg-sidebar: #20201f;
+  --bg-notes: #191918;
+  --bg-list: #191918;
+  --bg-editor: #111111;
+  --bg-preview: #151514;
+  --bg-titlebar: #242421;
+  --bg-button: rgba(255,255,255,.08);
+  --bg-button-hover: rgba(255,255,255,.13);
+  --bg-status: #20201e;
+  --bg-search: rgba(255,255,255,.09);
+  --source-fg: #eeeeee;
+  --text-primary: #eeeeee;
+  --text-secondary: #aaa9a7;
+  --text-muted: #777570;
+  --ink: #eeeeee;
+  --ink-2: #aaa9a7;
+  --ink-3: #777570;
+  --ink-4: #5f5d59;
+  --selection: rgba(99,173,255,.22);
+  --selection-neutral: rgba(255,255,255,.09);
+  --hover-overlay: rgba(255,255,255,.055);
+  --rule: rgba(255,255,255,.11);
+  --rule-strong: rgba(255,255,255,.17);
+  --line: rgba(255,255,255,.11);
+  --line-strong: rgba(255,255,255,.17);
+  --chip-bg: rgba(255,255,255,.08);
+  --kbd-bg: #242421;
+  --pv-bg: #151514;
+  --pv-surface: #20201f;
+  --pv-ink: #eeeeee;
+  --pv-ink-soft: #aaa9a7;
+  --pv-rule: rgba(255,255,255,.13);
+  --pv-rule-soft: rgba(255,255,255,.08);
+  --pv-accent: #63adff;
+  --pv-code-bg: rgba(255,255,255,.08);
+  --pv-pre-bg: #080808;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  color: var(--text-primary);
+  background: var(--bg-window);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+button, input, textarea { font: inherit; }
+button { color: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, .note-card:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+::selection { background: var(--accent-tint-strong); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.16); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.28); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .001ms !important; }
+}

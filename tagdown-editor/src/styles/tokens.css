@@ -105,6 +105,11 @@
   --bg-button-hover: rgba(255,255,255,.13);
   --bg-status: #20201e;
   --bg-search: rgba(255,255,255,.09);
+  --bg-dialog: #1c1c1b;
+  --bg-dialog-header: rgba(32, 32, 30, 0.92);
+  --bg-dialog-close: rgba(255, 255, 255, 0.1);
+  --bg-dialog-tabs: #20201f;
+  --bg-doc-example-pre: #080808;
   --source-fg: #eeeeee;
   --text-primary: #eeeeee;
   --text-secondary: #aaa9a7;
@@ -113,6 +118,9 @@
   --ink-2: #aaa9a7;
   --ink-3: #777570;
   --ink-4: #5f5d59;
+  --accent-tint: rgba(99,173,255,.16);
+  --accent-tint-strong: rgba(99,173,255,.28);
+  --accent-soft: #63adff;
   --selection: rgba(99,173,255,.22);
   --selection-neutral: rgba(255,255,255,.09);
   --hover-overlay: rgba(255,255,255,.055);
@@ -131,6 +139,11 @@
   --pv-accent: #63adff;
   --pv-code-bg: rgba(255,255,255,.08);
   --pv-pre-bg: #080808;
+  --pv-note-info-bg: #16233a;
+  --pv-note-warn-bg: #2e2410;
+  --pv-note-error-bg: #321a18;
+  --pv-note-ok-bg: #142a1b;
+  --pv-note-tip-bg: #241d3a;
 }
 
 * { box-sizing: border-box; }

@@ -1,5 +1,5 @@
-import rootHtml from '../../../tagdown-live.html?raw';
 import { renderPreview } from '../tagdown/renderer';
+import { tagdownDocumentation } from '../tagdown/documentation';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
 
 const SETTINGS_PANELS = [
@@ -42,6 +42,48 @@ export function initSettings() {
 
     event.preventDefault();
     tabs[nextIndex].focus();
+  });
+
+  bindReferenceNav();
+}
+
+function bindReferenceNav() {
+  if (!dialog) return;
+  const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('[data-ref-component]')];
+  if (!buttons.length) return;
+
+  const selectComponent = (target: HTMLButtonElement) => {
+    const id = target.getAttribute('data-ref-component');
+    if (!id) return;
+    buttons.forEach((button) => {
+      const selected = button === target;
+      button.setAttribute('aria-pressed', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    dialog!.querySelectorAll<HTMLElement>('[data-ref-panel]').forEach((panel) => {
+      panel.hidden = panel.getAttribute('data-ref-panel') !== id;
+    });
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => selectComponent(button));
+  });
+
+  buttons[0].parentElement?.addEventListener('keydown', (event) => {
+    const currentIndex = buttons.findIndex((button) => button === document.activeElement);
+    if (currentIndex === -1) return;
+
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % buttons.length;
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = buttons.length - 1;
+    else if (event.key === 'Enter' || event.key === ' ') { selectComponent(buttons[currentIndex]); event.preventDefault(); return; }
+    else return;
+
+    event.preventDefault();
+    buttons[nextIndex].focus();
+    selectComponent(buttons[nextIndex]);
   });
 }
 
@@ -184,23 +226,37 @@ function updateThemeControls() {
 }
 
 function renderDocumentationPanel() {
-  const reference = extractTagdownReference(rootHtml);
-  if (!reference) {
-    return `
-      <article
-        id="settings-panel-tagdown-reference"
-        role="tabpanel"
-        tabindex="0"
-        aria-labelledby="settings-tab-tagdown-reference"
-        class="settings-panel tagdown-docs"
-      >
-        ${renderReferenceFallback()}
-      </article>
-    `;
-  }
+  const nav = tagdownDocumentation.map((section, index) => `
+    <button
+      type="button"
+      data-ref-component="${section.id}"
+      aria-pressed="${index === 0}"
+      tabindex="${index === 0 ? '0' : '-1'}"
+    >${escapeHtml(section.title)}</button>
+  `).join('');
 
-  const source = escapeHtml(reference);
-  const rendered = renderPreview(reference);
+  const detail = tagdownDocumentation.map((section, index) => `
+    <section data-ref-panel="${section.id}" class="tagdown-ref-section" ${index === 0 ? '' : 'hidden'}>
+      <h2>${escapeHtml(section.title)}</h2>
+      <p class="tagdown-ref-summary">${escapeHtml(section.summary)}</p>
+      ${section.examples.map((example) => `
+        <div class="tagdown-ref-example">
+          <h3>${escapeHtml(example.title)}</h3>
+          <p class="tagdown-ref-example-desc">${escapeHtml(example.description)}</p>
+          <div class="tagdown-reference-split">
+            <div class="tagdown-reference-source">
+              <div class="tagdown-reference-pane-label">Tagdown</div>
+              <pre><code>${escapeHtml(example.syntax)}</code></pre>
+            </div>
+            <div class="tagdown-reference-rendered">
+              <div class="tagdown-reference-pane-label">Preview</div>
+              <div class="tagdown-reference-preview">${renderPreview(example.syntax)}</div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </section>
+  `).join('');
 
   return `
     <article
@@ -210,61 +266,13 @@ function renderDocumentationPanel() {
       aria-labelledby="settings-tab-tagdown-reference"
       class="settings-panel tagdown-docs"
     >
-      <p class="settings-eyebrow">Loaded from tagdown-live.html</p>
-      <div class="tagdown-reference-split">
-        <div class="tagdown-reference-source">
-          <div class="tagdown-reference-pane-label">Tagdown</div>
-          <pre><code>${source}</code></pre>
-        </div>
-        <div class="tagdown-reference-rendered">
-          <div class="tagdown-reference-pane-label">Preview</div>
-          <div class="tagdown-reference-preview">${rendered}</div>
-        </div>
+      <nav class="tagdown-ref-nav" aria-label="Tagdown components">
+        ${nav}
+      </nav>
+      <div class="tagdown-ref-detail">
+        ${detail}
       </div>
     </article>
-  `;
-}
-
-function extractTagdownReference(html: string) {
-  const marker = 'reference: `';
-  const start = html.indexOf(marker);
-  if (start === -1) return null;
-
-  let cursor = start + marker.length;
-  let value = '';
-
-  while (cursor < html.length) {
-    const char = html[cursor];
-    const next = html[cursor + 1];
-
-    if (char === '`') return unescapeTemplateLiteral(value).trim();
-
-    if (char === '\\' && next !== undefined) {
-      value += char + next;
-      cursor += 2;
-      continue;
-    }
-
-    value += char;
-    cursor += 1;
-  }
-
-  return null;
-}
-
-function unescapeTemplateLiteral(value: string) {
-  return value
-    .replaceAll('\\`', '`')
-    .replaceAll('\\${', '${')
-    .replaceAll('\\\\', '\\');
-}
-
-function renderReferenceFallback() {
-  return `
-    <div class="settings-reference-error">
-      <h2>Tagdown Reference</h2>
-      <p>The syntax reference could not be extracted from <code>tagdown-live.html</code>.</p>
-    </div>
   `;
 }
 

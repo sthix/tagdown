@@ -1,8 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { initSettings, openSettings } from './settings/settings';
-import { initializeTheme } from './settings/theme';
-import { renderPreview } from './tagdown/renderer';
+import { initializeTheme, getEffectiveTheme, onThemePreferenceChange } from './settings/theme';
+import { renderPreview, applyExternals } from './tagdown/renderer';
+import { renderEditorToolbar } from './editorToolbar';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -13,6 +15,7 @@ import './styles/settings.css';
 
 type SortOrder = 'updatedDesc' | 'createdDesc' | 'titleAsc' | 'titleDesc' | 'wordCountDesc';
 type ViewMode = 'source' | 'split' | 'preview';
+type QuickFilter = 'all' | 'pinned' | 'untagged' | 'recent';
 
 type Note = {
   id: string;
@@ -66,6 +69,7 @@ const TAG_COLORS: Record<TagColorKey, { dot: string; soft: string; ink: string }
 };
 const TAG_COLOR_KEYS: TagColorKey[] = ['slate', 'blue', 'teal', 'green', 'amber', 'rose', 'violet'];
 
+
 let notes: Note[] = [];
 let folders: Folder[] = [];
 let allNotesCount = 0;
@@ -73,6 +77,7 @@ let tags: Tag[] = [];
 let selectedNote: Note | null = null;
 let selectedFolder: string | null = null;
 let selectedTag: string | null = null;
+let activeFilter: QuickFilter = 'all';
 let expandedTags: Record<string, boolean> = {};
 let content = '';
 let viewMode: ViewMode = 'split';
@@ -87,6 +92,15 @@ let creatingTag = false;
 let tagDraftColor: TagColorKey = 'blue';
 
 initializeTheme();
+
+// Re-render the live preview when the user toggles dark/light so KaTeX and
+// Mermaid pick up the new theme. Other DOM is theme-agnostic via CSS variables.
+onThemePreferenceChange(() => {
+  const lp = document.querySelector<HTMLDivElement>('#editor-root .preview');
+  if (!lp) return;
+  lp.innerHTML = renderPreview(content);
+  void applyExternals(lp, getEffectiveTheme());
+});
 
 app.innerHTML = `
   <header class="titlebar" data-tauri-drag-region>
@@ -129,7 +143,7 @@ app.innerHTML = `
           <button id="note-list-new" class="mini-icon-button" type="button" title="New note">+</button>
         </div>
         <div class="filter-pills" aria-label="Quick filters">
-          <button class="active" type="button">All</button><button type="button">Pinned</button><button type="button">Untagged</button><button type="button">Recent</button>
+          <button data-filter="all" type="button">All</button><button data-filter="pinned" type="button">Pinned</button><button data-filter="untagged" type="button">Untagged</button><button data-filter="recent" type="button">Recent</button>
         </div>
       </header>
       <div id="notes"></div>
@@ -158,6 +172,7 @@ async function boot() {
   await reloadFolders();
   await reloadTags();
   await reloadNotes();
+  renderFilterPills();
   if (notes[0]) await openNote(notes[0]);
   await listen('note-saved', () => { savedMessage = 'Saved'; renderStatus(); });
 }
@@ -183,8 +198,18 @@ function bindChrome() {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>('.filter-pills button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeFilter = (btn.dataset.filter as QuickFilter) ?? 'all';
+      renderFilterPills();
+      renderNotes();
+    });
+  });
+
   document.querySelector<HTMLInputElement>('#search')?.addEventListener('input', async (event) => {
     searchQuery = (event.target as HTMLInputElement).value;
+    activeFilter = 'all';
+    renderFilterPills();
     if (!searchQuery.trim()) return reloadNotes();
     const results = await invoke<Array<{ note: Note }>>('search', { query: searchQuery });
     notes = results.map((r) => r.note);
@@ -332,6 +357,8 @@ function renderFolders() {
     button.addEventListener('click', async () => {
       selectedFolder = button.dataset.folder || null;
       selectedTag = null;
+      activeFilter = 'all';
+      renderFilterPills();
       await reloadNotes();
     });
   });
@@ -535,14 +562,30 @@ function bindFolderDragHandlers(button: HTMLButtonElement) {
   });
 }
 
+function renderFilterPills() {
+  document.querySelectorAll<HTMLButtonElement>('.filter-pills button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.filter === activeFilter);
+  });
+}
+
+function applyQuickFilter(list: Note[]): Note[] {
+  switch (activeFilter) {
+    case 'pinned':   return list.filter((n) => n.starred);
+    case 'untagged': return list.filter((n) => n.tags.length === 0);
+    case 'recent':   return list.slice(0, 10); // already sorted updatedDesc
+    default:         return list;
+  }
+}
+
 function renderNotes() {
-  noteListCountEl.textContent = `${notes.length}`;
-  if (!notes.length) {
+  const visible = applyQuickFilter(notes);
+  noteListCountEl.textContent = `${visible.length}`;
+  if (!visible.length) {
     noteEl.innerHTML = '<div class="empty"><div class="empty-icon">▥</div><strong>No notes here</strong><span>Nothing matches this filter yet.</span></div>';
     renderTags();
     return;
   }
-  noteEl.innerHTML = notes.map((note) => {
+  noteEl.innerHTML = visible.map((note) => {
     const date = formatDate(note.updatedAt);
     const tagMarkup = note.tags.slice(0, 3).map((tag) => `<span><i></i>${escapeHtml(tag)}</span>`).join('');
     return `
@@ -550,7 +593,7 @@ function renderNotes() {
         <div class="note-card-topline"><time>${date}</time>${note.starred ? '<span class="starred" aria-label="Pinned">⌖</span>' : ''}</div>
         <h3>${escapeHtml(note.title || 'Untitled')}</h3>
         <p>${escapeHtml(note.preview || 'No additional text')}</p>
-        <small>${tagMarkup || '<span>untagged</span>'}<em>${note.wordCount || 0} w</em></small>
+        <small>${tagMarkup || '<span>untagged</span>'}<em>${note.wordCount || 0} ${(note.wordCount || 0) === 1 ? 'word' : 'words'}</em></small>
         <button class="note-delete" data-delete-note="${note.id}" type="button" title="Delete note" aria-label="Delete note">×</button>
       </article>
     `;
@@ -649,6 +692,8 @@ function colorForTag(path: string) {
 async function selectTag(path: string) {
   selectedTag = path;
   selectedFolder = null;
+  activeFilter = 'all';
+  renderFilterPills();
   const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
   notes = all.filter(
     (note) =>
@@ -800,18 +845,7 @@ function renderEditor() {
       </div>
       <button id="pin-note" class="mini-icon-button ${selectedNote.starred ? 'active' : ''}" type="button" title="Pin note">⌖</button>
     </header>
-    <div class="format-toolbar" aria-label="Formatting toolbar">
-      <button data-insert="# " data-line="true" title="Heading">H</button>
-      <button data-wrap="**|**" title="Bold">B</button>
-      <button data-wrap="*|*" title="Italic"><i>I</i></button>
-      <button data-wrap="\`|\`" title="Code">&lt;/&gt;</button>
-      <button data-insert="- " data-line="true" title="List">• List</button>
-      <span></span>
-      <button data-insert="key :: value" title="Tagdown pair">::</button>
-      <button data-insert="\n::: info\nYour message here\n:::\n" title="Callout">Callout</button>
-      <button data-insert="\n| Header | Header |\n| ------ | ------ |\n| Cell | Cell |\n" title="Table">Table</button>
-      <button data-wrap="&lt;kbd&gt;|&lt;/kbd&gt;" title="Keyboard key">kbd</button>
-    </div>
+    ${renderEditorToolbar()}
     <div class="editor-body">${viewMode === 'source' ? textarea : viewMode === 'preview' ? preview : `<div class="split">${textarea}${preview}</div>`}</div>
   ` : '<div class="empty-editor"><div>✎</div><strong>No note selected</strong><span>Pick a note from the list, or press ⌘N to start a new one.</span></div>';
 
@@ -839,9 +873,84 @@ function renderEditor() {
     });
   });
 
+  const trigger = editorRoot.querySelector<HTMLButtonElement>('#insert-module');
+  const menu = editorRoot.querySelector<HTMLElement>('.toolbar-menu');
+  if (trigger && menu) {
+    let docClick: ((e: MouseEvent) => void) | null = null;
+    let docKey: ((e: KeyboardEvent) => void) | null = null;
+    const close = () => {
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      if (docClick) document.removeEventListener('click', docClick);
+      if (docKey) document.removeEventListener('keydown', docKey);
+      docClick = null;
+      docKey = null;
+    };
+    const open = () => {
+      const rect = trigger.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+      docClick = (e) => {
+        if (!(e.target as Element).closest?.('.toolbar-dropdown')) close();
+      };
+      docKey = (e) => {
+        if (e.key === 'Escape') {
+          close();
+          trigger.focus();
+        }
+      };
+      document.addEventListener('click', docClick);
+      document.addEventListener('keydown', docKey);
+    };
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.hidden ? open() : close();
+    });
+    menu.addEventListener('keydown', (e) => {
+      const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(idx + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[(idx - 1 + items.length) % items.length]?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        items[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+      }
+    });
+  }
+
+  const livePreviewInit = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (livePreviewInit) void applyExternals(livePreviewInit, getEffectiveTheme());
+
   editorRoot.querySelector<HTMLDivElement>('.preview')?.addEventListener('click', (event) => {
-    const pill = (event.target as HTMLElement).closest<HTMLElement>('.td-tag');
-    if (pill?.dataset.tag) selectTag(pill.dataset.tag);
+    const target = event.target as HTMLElement;
+    // Video embeds / external links open in the system browser via the opener
+    // plugin, so the WebView never navigates away from the app.
+    const embed = target.closest<HTMLElement>('[data-embed-url]');
+    if (embed) {
+      event.preventDefault();
+      const url = embed.getAttribute('data-embed-url');
+      if (url) void openUrl(url);
+      return;
+    }
+    const pill = target.closest<HTMLElement>('.td-tag');
+    if (pill?.dataset.tag) { selectTag(pill.dataset.tag); return; }
+    if (target.matches('.td-task input[type="checkbox"]')) {
+      const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+      if (!preview) return;
+      const all = Array.from(preview.querySelectorAll<HTMLInputElement>('.td-task input[type="checkbox"]'));
+      const idx = all.indexOf(target as HTMLInputElement);
+      if (idx >= 0) toggleTaskAt(idx);
+    }
   });
 
   const source = document.querySelector<HTMLTextAreaElement>('#source');
@@ -851,7 +960,10 @@ function renderEditor() {
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(flushSave, 500);
     const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
-    if (livePreview) livePreview.innerHTML = renderPreview(content);
+    if (livePreview) {
+      livePreview.innerHTML = renderPreview(content);
+      void applyExternals(livePreview, getEffectiveTheme());
+    }
     renderStatus();
   });
   renderStatus();
@@ -887,6 +999,33 @@ function wrapSelection(left: string, right: string) {
   if (next) { next.selectionStart = start + left.length; next.selectionEnd = start + left.length + selected.length; }
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(flushSave, 500);
+}
+
+function toggleTaskAt(taskIndex: number) {
+  const lines = content.split('\n');
+  let seen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\s*[-*]\s+\[)([ xX])(\]\s+.+)$/);
+    if (!m) continue;
+    if (seen === taskIndex) {
+      const next = m[2] === ' ' ? 'x' : ' ';
+      lines[i] = m[1] + next + m[3];
+      content = lines.join('\n');
+      const source = document.querySelector<HTMLTextAreaElement>('#source');
+      if (source) source.value = content;
+      const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
+      if (livePreview) {
+        livePreview.innerHTML = renderPreview(content);
+        void applyExternals(livePreview, getEffectiveTheme());
+      }
+      savedMessage = 'Saving…';
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(flushSave, 500);
+      renderStatus();
+      return;
+    }
+    seen++;
+  }
 }
 
 async function flushSave() {

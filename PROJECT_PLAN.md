@@ -1,6 +1,6 @@
 # Tagdown Editor Implementation Plan
 
-This plan is derived from `../tagdown-editor-spec.md` and the current Tauri v2 research notes.
+This plan tracks the current Tauri v2 implementation and remaining product work.
 
 ## Phase 0 — Decisions and setup
 

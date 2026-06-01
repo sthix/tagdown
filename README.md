@@ -1,78 +1,109 @@
-# Tagdown
+# Tagdown Editor
 
-**A local-first desktop writing app for Tagdown — Markdown with structure, tags, math, diagrams, and polished previews.**
+**A fast, local-first desktop editor for Tagdown notes — Markdown plus rich semantic blocks, tags, math, diagrams, and export-ready previews.**
 
-Tagdown is for people who want notes to stay as durable plain-text files, but still want the reading experience of a beautiful, structured document. The editor is built with **Tauri + Rust + TypeScript** and gives you a fast desktop workspace for writing, organizing, previewing, and eventually exporting Tagdown notes.
+Tagdown Editor is a macOS-focused Tauri app for writing structured notes without giving up plain-text ownership. Notes live on disk, render instantly in a polished preview, and can use Tagdown components such as callouts, tabs, cards, details, math, Mermaid diagrams, and tag-aware metadata.
 
-<img width="1533" height="1035" alt="Tagdown editor screenshot" src="https://github.com/user-attachments/assets/1902befb-3b0d-4d1a-b27c-058b71fd77f7" />
+<p align="center">
+  <strong>Plain text in. Beautiful documents out.</strong><br />
+  Local vaults · Split editor/preview · Tag navigation · KaTeX · Mermaid · Tauri
+</p>
 
-## What makes it different?
+---
 
-Most Markdown editors stop at basic formatting. Tagdown keeps Markdown's simplicity and adds document-native building blocks:
+## What is Tagdown?
 
-- **Tags everywhere** — organize notes with frontmatter tags and inline hashtags.
-- **Rich components** — callouts, cards, tabs, columns, details blocks, keyboard hints, and more.
-- **Technical writing support** — KaTeX math and Mermaid diagrams built into the preview pipeline.
-- **Local ownership** — notes live in a filesystem vault, not a cloud silo.
-- **Instant preview** — write in source, split, or rendered preview mode.
-- **Desktop-native foundation** — Tauri keeps the app lightweight while Rust handles local vault operations.
+Tagdown is a note format built on Markdown with extra structure for knowledge work:
 
-## Repository layout
+- familiar Markdown for headings, lists, links, quotes, and code
+- inline and frontmatter tags for organization
+- reusable document components such as callouts, cards, tabs, columns, accordions, and keyboard hints
+- rich technical writing support through KaTeX math and Mermaid diagrams
+- preview output that feels closer to a finished document than a raw note
 
-```text
-.
-├── tagdown-editor/       # Tauri desktop editor app
-├── docs/                 # Design notes and Tagdown documentation
-├── LICENSE
-└── README.md
-```
+This repository contains the desktop editor for that format.
 
-The main application lives in [`tagdown-editor/`](tagdown-editor/).
+## Highlights
 
-## Quick start
+- **Local-first vaults** — notes are stored as regular files in a local vault, with a default vault created at `~/Documents/Tagdown`.
+- **Three-pane writing workspace** — folder navigation, note list, and editor/preview area.
+- **Source, split, and preview modes** — move from raw text to rendered document without leaving the app.
+- **Autosave workflow** — debounced saving keeps writing fluid.
+- **Tag-aware navigation** — parse tags from frontmatter and note bodies, then browse/filter by tag.
+- **Rich Tagdown renderer** — supports extended components, syntax highlighting-friendly code blocks, KaTeX math, and Mermaid diagrams.
+- **Formatting toolbar** — quick insert actions for common Markdown and Tagdown structures.
+- **Native shell** — built with Tauri v2 for a lightweight desktop app backed by Rust file commands.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Desktop shell | Tauri v2 |
+| UI | Vanilla TypeScript + Vite |
+| Local commands | Rust |
+| Math rendering | KaTeX |
+| Diagrams | Mermaid |
+| Storage model | Local filesystem vault |
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+
+- Rust stable
+- Tauri system prerequisites for macOS
+
+### Install
 
 ```sh
-cd tagdown-editor
 npm install
-npm run tauri:dev
 ```
 
-For a web-only development preview:
+### Run the web dev server
 
 ```sh
-cd tagdown-editor
 npm run dev
 ```
 
-## Build and validate
+### Run the desktop app
 
 ```sh
-cd tagdown-editor
+npm run tauri:dev
+```
+
+### Build
+
+```sh
+npm run build
+npm run tauri:build
+```
+
+## Validation
+
+```sh
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml
 node --test tests/*.mjs
 ```
 
-## Tech stack
+## Project structure
 
-| Area | Stack |
-| --- | --- |
-| Desktop shell | Tauri v2 |
-| Backend/local commands | Rust |
-| UI | Vanilla TypeScript + Vite |
-| Math | KaTeX |
-| Diagrams | Mermaid |
-| Storage | Local filesystem vault |
+```text
+.
+├── src/                  # TypeScript UI, editor behavior, parser, renderer, styles
+├── src-tauri/            # Tauri/Rust backend commands and app configuration
+├── tests/                # Node-based rendering tests
+├── package.json          # Frontend scripts and dependencies
+└── README.md
+```
 
-## Status
+## Current status
 
-Tagdown is in active early development. The editor currently includes the core three-pane workspace, vault bootstrap, note management foundations, autosave, Tagdown parsing/rendering, tag navigation, settings/reference UI, and production build pipeline.
+Tagdown Editor is an active early-stage desktop app. The core writing workspace, local vault bootstrap, note operations, Tagdown parsing/rendering, settings/reference UI, and build pipeline are in place. Remaining polish includes deeper search indexing, import/export expansion, file watching/conflict prompts, and native menu refinements.
 
-Next up: deeper search indexing, import/export polish, file watching/conflict handling, and native menu/context-menu refinement.
+See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the implementation roadmap.
 
-## Philosophy
+## Why this exists
 
-**Plain text should not mean plain documents.**
-
-Tagdown aims to make structured, presentation-quality notes while preserving the portability, inspectability, and longevity of files you can open anywhere.
+Most note apps force a tradeoff: beautiful rendered documents, or durable plain-text files. Tagdown aims for both. You write in a format that stays readable and portable, while the editor turns it into structured, presentation-quality notes.

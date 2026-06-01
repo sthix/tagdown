@@ -1,5 +1,5 @@
 /* ============================================================
-   TAGDOWN: parser + renderer  (v0.2 — easier tag syntax)
+   TAGDOWN: parser + renderer  (v0.4 — easier syntax + power features)
    ============================================================ */
 
 /* ---------- 0. Preprocessors (high-level shortcuts) ---------- */
@@ -88,13 +88,17 @@ function preprocessGridDivider(input) {
    doesn't read them as tags. We swap back to &lt; / &gt; at the very end. */
 function preprocessBacktickAngles(input) {
   return input.replace(/`([^`\n]*)`/g, (_, inner) =>
-    '`' + inner.replace(/</g, '\u0001').replace(/>/g, '\u0002') + '`'
+    '`' + inner.replace(/</g, '').replace(/>/g, '') + '`'
   );
 }
 
 function restoreSentinels(html) {
-  return html.replace(/\u0001/g, '&lt;').replace(/\u0002/g, '&gt;');
+  return html.replace(//g, '&lt;').replace(//g, '&gt;');
 }
+
+/* Module-scope state for cross-cutting features (footnotes, TOC, tabs). Reset at the
+   start of every preprocess() call. Declared early so preprocess() can reference it. */
+let _state = { frontmatter: null, footnotes: [], headings: [], tabsCounter: 0 };
 
 /* term :: description
    term2 :: description2          becomes  <defs>...</defs>
@@ -135,9 +139,55 @@ function preprocessDefs(input) {
   return out.join('\n');
 }
 
+/* YAML-ish frontmatter at the very top of the document, between --- lines.
+   For now we just strip it from the rendered output; callers can parse it
+   themselves by reading the source. */
+function preprocessFrontmatter(input) {
+  if (!input.startsWith('---\n')) return input;
+  const end = input.indexOf('\n---\n', 4);
+  if (end === -1) return input;
+  // Stash the raw frontmatter on the module-scope state so external callers
+  // (e.g. an editor) can access it via tagdown.lastFrontmatter()
+  _state.frontmatter = input.slice(4, end);
+  return input.slice(end + 5);
+}
+
+/* Footnotes: extract definitions of the form `[^id]: text` (with optional
+   indented continuation lines), collect them, and emit a <footnotes> block
+   at the bottom. Inline references like text[^id] are handled in inline(). */
+function preprocessFootnotes(input) {
+  const lines = input.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^\[\^([\w-]+)\]:\s+(.+)$/);
+    if (m) {
+      let text = m[2];
+      let j = i + 1;
+      // Absorb continuation lines (2+ space indent)
+      while (j < lines.length && /^\s{2,}\S/.test(lines[j])) {
+        text += ' ' + lines[j].trim();
+        j++;
+      }
+      // Append to state (cumulative across chunks)
+      _state.footnotes.push({ id: m[1], text });
+      i = j - 1;
+    } else {
+      out.push(lines[i]);
+    }
+  }
+  return out.join('\n');
+}
+
 function preprocess(input) {
+  // Reset per-document state
+  _state = { frontmatter: null, footnotes: [], headings: [], tabsCounter: 0 };
+
+  // Frontmatter must be first — runs on raw input
+  input = preprocessFrontmatter(input);
+
   // Backtick sentinels can run unconditionally — they don't disturb code blocks.
   input = preprocessBacktickAngles(input);
+
   // Skip <code>...</code>, <defs>...</defs>, and ```...``` regions so their contents
   // aren't re-parsed by the other block preprocessors.
   const protectRe = /(<code\b[^>]*>[\s\S]*?<\/code>|<defs\b[^>]*>[\s\S]*?<\/defs>|```[\w]*\n[\s\S]*?\n```)/;
@@ -148,8 +198,20 @@ function preprocess(input) {
     p = preprocessCallouts(p);
     p = preprocessDefs(p);
     p = preprocessPipeTables(p);
+    p = preprocessFootnotes(p);
     return p;
   }).join('');
+}
+
+/* slugify(text) — produce a URL-safe id from a heading title, for auto-IDs and TOC links. */
+function slugify(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/<[^>]+>/g, '')      // strip tags
+    .replace(/[^\w\s-]/g, '')     // remove punctuation
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 /* ---------- 1. Tokenizer ---------- */
@@ -292,7 +354,7 @@ function parse(tokens) {
 
 /* ---------- 3. Renderer ---------- */
 
-const INLINE_TAGS = new Set(['em', 'strong', 'b', 'i', 'a', 'code-inline', 'mark', 'kbd', 's', 'small', 'br']);
+const INLINE_TAGS = new Set(['em', 'strong', 'b', 'i', 'a', 'code-inline', 'mark', 'kbd', 's', 'small', 'br', 'sub', 'sup', 'abbr', 'keys', 'cite']);
 
 function esc(s) {
   return String(s)
@@ -305,30 +367,110 @@ function esc(s) {
 // Inline markdown transformations applied to plain text segments
 function inline(text) {
   let s = esc(text);
-  // Code spans first so we don't process inside them
+
+  // 1. Code spans first — anything inside is opaque text
   const codeSpans = [];
   s = s.replace(/`([^`\n]+)`/g, (_, c) => {
     codeSpans.push(c);
-    return `\u0000CODE${codeSpans.length - 1}\u0000`;
+    return ` CODE${codeSpans.length - 1} `;
   });
-  // Links [text](url)
+
+  // 2. Math placeholders (block $$...$$ then inline $...$) — preserved literally
+  //    so KaTeX (or any other math renderer) can find them later if loaded.
+  const mathSpans = [];
+  s = s.replace(/\$\$([^$\n]+?)\$\$/g, (_, c) => {
+    mathSpans.push({ block: true, tex: c });
+    return ` MATH${mathSpans.length - 1} `;
+  });
+  s = s.replace(/(?<![\\\d])\$([^$\n]+?)\$(?!\d)/g, (_, c) => {
+    mathSpans.push({ block: false, tex: c });
+    return ` MATH${mathSpans.length - 1} `;
+  });
+
+  // 3. Wikilinks [[Note]] or [[Note|alias]] — internal references for notes apps
+  s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => {
+    const t = target.trim();
+    const label = (alias || target).trim();
+    return `<a class="td-wikilink" href="#${encodeURIComponent(t)}" data-target="${esc(t)}">${label}</a>`;
+  });
+
+  // 4. Footnote references [^id]
+  s = s.replace(/\[\^([\w-]+)\]/g, (_, id) =>
+    `<sup class="td-fn-ref" id="td-fnref-${id}"><a href="#td-fn-${id}">${id}</a></sup>`
+  );
+
+  // 5. Links [text](url "optional title")
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_, t, u, title) => {
     const tAttr = title ? ` title="${esc(title)}"` : '';
     return `<a href="${esc(u)}"${tAttr}>${t}</a>`;
   });
-  // Auto-link bare URLs
+
+  // 6. Auto-link bare URLs
   s = s.replace(/(?<![">])(https?:\/\/[^\s<]+)/g, (m) => `<a href="${m}">${m}</a>`);
-  // Bold ** ** before single *
+
+  // 7. Email autolinks <user@host>
+  s = s.replace(/&lt;([^\s&]+@[^\s&]+\.[^\s&]+)&gt;/g, (_, e) => `<a href="mailto:${esc(e)}">${esc(e)}</a>`);
+
+  // 8. Bold ** ** before single *
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  // Italic * *
+
+  // 9. Italic * *
   s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
-  // Strike ~~
+
+  // 10. Strikethrough ~~text~~ (must run before single-tilde subscript)
   s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
-  // Mark ==
+
+  // 11. Mark ==text==
   s = s.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
-  // Restore code spans
-  s = s.replace(/\u0000CODE(\d+)\u0000/g, (_, n) => `<code>${codeSpans[+n]}</code>`);
+
+  // 12. Subscript ~text~ (no whitespace inside; must follow strike)
+  s = s.replace(/(?<!~)~([^~\s\n]+)~(?!~)/g, '<sub>$1</sub>');
+
+  // 13. Superscript ^text^
+  s = s.replace(/\^([^\^\s\n]+)\^/g, '<sup>$1</sup>');
+
+  // 14. Smart typography — quotes, dashes, ellipsis (skip inside placeholder marks)
+  s = applySmartTypography(s);
+
+  // 15. Restore math (rendered as either raw $...$ for KaTeX auto-render or as styled span)
+  s = s.replace(/ MATH(\d+) /g, (_, n) => {
+    const m = mathSpans[+n];
+    if (m.block) return `<span class="td-math td-math-block">$$${m.tex}$$</span>`;
+    return `<span class="td-math">$${m.tex}$</span>`;
+  });
+
+  // 16. Restore code spans
+  s = s.replace(/ CODE(\d+) /g, (_, n) => `<code>${codeSpans[+n]}</code>`);
+
   return s;
+}
+
+/* Smart typography: curly quotes, en/em dashes, ellipsis. Tags are protected
+   so attribute quotes aren't mangled. Operates on already-escaped HTML, so it
+   recognises &quot; for double quotes. */
+function applySmartTypography(s) {
+  // First, protect HTML tags so their attribute quotes don't get curled
+  const tags = [];
+  s = s.replace(/<[^>]+>/g, m => {
+    tags.push(m);
+    return ` TAG${tags.length - 1} `;
+  });
+
+  s = s
+    .replace(/\.\.\./g, '…')                                // … ellipsis
+    .replace(/(\w)---(\w)/g, '$1—$2')                       // word—word
+    .replace(/(\w) --- (\w)/g, '$1 — $2')                    // word — word
+    .replace(/(\w)--(\w)/g, '$1–$2')                        // word–word
+    .replace(/(\d) ?-- ?(\d)/g, '$1–$2')                    // 1990–2020
+    // Double quotes: esc() turned " into &quot;, so look for that entity
+    .replace(/(^|[\s—–(\[{])&quot;/g, '$1“')        // opening "
+    .replace(/&quot;/g, '”')                                 // closing "
+    // Single quotes / apostrophes (not escaped by esc())
+    .replace(/(^|[\s—–(\[{])'/g, '$1‘')             // opening '
+    .replace(/'/g, '’');                                     // closing ' / apostrophe
+
+  // Restore tags
+  return s.replace(/ TAG(\d+) /g, (_, n) => tags[+n]);
 }
 
 function attrsStr(attrs, allow = ['id', 'class', 'style']) {
@@ -354,6 +496,27 @@ function render(node, blockCtx = true) {
   return passThrough(node, blockCtx);
 }
 
+/* Split a text run into alternating prose runs and standalone horizontal rules.
+   A line whose only content is 3+ dashes is treated as a rule, so `---` on its
+   own line acts as a divider without requiring blank lines around it. */
+function splitHorizontalRules(value) {
+  const runs = [];
+  const buf = [];
+  const flush = () => {
+    if (buf.length) { runs.push({ text: buf.join('\n') }); buf.length = 0; }
+  };
+  for (const line of value.split('\n')) {
+    if (/^[ \t]*-{3,}[ \t]*$/.test(line)) {
+      flush();
+      runs.push({ rule: true });
+    } else {
+      buf.push(line);
+    }
+  }
+  flush();
+  return runs;
+}
+
 function renderChildren(node, blockCtx = true) {
   if (!blockCtx) {
     return node.children.map(c => render(c, false)).join('');
@@ -373,21 +536,30 @@ function renderChildren(node, blockCtx = true) {
 
   for (const c of node.children) {
     if (c.type === 'text') {
-      // Split text on blank lines; each break = paragraph boundary
-      const parts = c.value.split(/\n[ \t]*\n/);
-      parts.forEach((part, i) => {
-        if (i > 0) flushPara();
-        // Try to detect a markdown block, but only at fresh paragraph boundaries
-        const freshStart = (segs.length === 0);
-        if (freshStart) {
-          const blockHtml = tryBlockText(part);
-          if (blockHtml !== null) {
-            out += blockHtml;
-            return;
-          }
+      // A line that is only `---` (3+ dashes) is a horizontal rule. It needs
+      // just its own line — no blank lines around it — so peel those out first.
+      for (const run of splitHorizontalRules(c.value)) {
+        if (run.rule) {
+          flushPara();
+          out += '<hr>';
+          continue;
         }
-        if (part) segs.push({ kind: 'text', value: part });
-      });
+        // Within a run, split text on blank lines; each break = paragraph boundary
+        const parts = run.text.split(/\n[ \t]*\n/);
+        parts.forEach((part, i) => {
+          if (i > 0) flushPara();
+          // Try to detect a markdown block, but only at fresh paragraph boundaries
+          const freshStart = (segs.length === 0);
+          if (freshStart) {
+            const blockHtml = tryBlockText(part);
+            if (blockHtml !== null) {
+              out += blockHtml;
+              return;
+            }
+          }
+          if (part) segs.push({ kind: 'text', value: part });
+        });
+      }
     } else if (INLINE_TAGS.has(c.name)) {
       segs.push({ kind: 'html', value: render(c, false) });
     } else {
@@ -404,22 +576,46 @@ function tryBlockText(text) {
   if (!t) return null;
 
   // Heading with optional {#anchor}: # Title {#install}
+  // If no explicit anchor, generate one from a slug — also collected for TOC.
   const h = t.match(/^(#{1,6})\s+(.*?)(?:\s*\{#([\w-]+)\})?\s*$/);
   if (h && !t.includes('\n')) {
     const lvl = h[1].length;
-    const idAttr = h[3] ? ` id="${esc(h[3])}"` : '';
-    return `<h${lvl}${idAttr}>${inline(h[2])}</h${lvl}>`;
+    const title = h[2];
+    const id = h[3] || slugify(title);
+    _state.headings.push({ level: lvl, text: title, id });
+    return `<h${lvl} id="${esc(id)}">${inline(title)}</h${lvl}>`;
   }
   // Horizontal rule
   if (/^-{3,}$/.test(t)) return '<hr>';
-  // Fenced code: ```lang ... ```
-  const f = t.match(/^```(\w+)?\n([\s\S]*?)\n?```$/);
-  if (f) return renderCodeBlock(f[2], { lang: f[1] || '' });
 
-  // Lists: every line is a list item of the same kind
+  // Math block: $$...$$ on its own
+  const mb = t.match(/^\$\$([\s\S]+?)\$\$$/);
+  if (mb) return `<div class="td-math td-math-block">$$${esc(mb[1])}$$</div>`;
+
+  // Fenced code: ```lang ... ```. Mermaid gets a special wrapper so the
+  // mermaid.js library (if loaded) auto-renders it on display.
+  const f = t.match(/^```(\w+)?\n([\s\S]*?)\n?```$/);
+  if (f) {
+    const lang = f[1] || '';
+    if (lang.toLowerCase() === 'mermaid') {
+      return `<pre class="mermaid">${esc(f[2])}</pre>`;
+    }
+    return renderCodeBlock(f[2], { lang });
+  }
+
+  // Task list / unordered list — every line is `- text`, `* text`, `- [ ] text`, or `- [x] text`
   const lines = t.split('\n');
   if (lines.length >= 1 && lines.every(l => /^\s*[-*]\s+/.test(l))) {
-    return '<ul>' + lines.map(l => `<li>${inline(l.replace(/^\s*[-*]\s+/, ''))}</li>`).join('') + '</ul>';
+    const hasAnyTask = lines.some(l => /^\s*[-*]\s+\[[ xX]\]/.test(l));
+    const items = lines.map(l => {
+      const taskM = l.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+)$/);
+      if (taskM) {
+        const checked = taskM[1] !== ' ' ? ' checked' : '';
+        return `<li class="td-task"><input type="checkbox"${checked}><span>${inline(taskM[2])}</span></li>`;
+      }
+      return `<li>${inline(l.replace(/^\s*[-*]\s+/, ''))}</li>`;
+    }).join('');
+    return `<ul${hasAnyTask ? ' class="td-tasklist"' : ''}>${items}</ul>`;
   }
   if (lines.length >= 1 && lines.every(l => /^\s*\d+\.\s+/.test(l))) {
     return '<ol>' + lines.map(l => `<li>${inline(l.replace(/^\s*\d+\.\s+/, ''))}</li>`).join('') + '</ol>';
@@ -594,14 +790,97 @@ const HANDLERS = {
   embed: (n, a) => {
     const url = a.url || a.src;
     if (!url) return '';
-    // Simple YouTube detection
-    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
+    // We render a click-to-play "facade" (thumbnail + play button) rather than a
+    // live <iframe>. In a packaged Tauri app the WebView serves the document from
+    // a non-HTTPS scheme (tauri://localhost on macOS); YouTube/Vimeo reject the
+    // resulting Referer and refuse to configure the player ("Error 153"), no
+    // matter what referrerpolicy we set. The facade links to the real video page
+    // and main.ts intercepts the click to open it in the system browser via the
+    // opener plugin (so the WebView itself never navigates away).
+    const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/);
     if (yt) {
-      return `<figure class="td-figure"><iframe width="100%" height="360" src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen style="border-radius:6px"></iframe></figure>`;
+      const id = yt[1];
+      const watch = `https://www.youtube.com/watch?v=${esc(id)}`;
+      const thumb = `https://i.ytimg.com/vi/${esc(id)}/hqdefault.jpg`;
+      return `<a class="td-embed td-embed-youtube" href="${watch}" data-embed-url="${watch}" target="_blank" rel="noopener" aria-label="Play video on YouTube" style="background-image:url('${thumb}')"><span class="td-embed-play" aria-hidden="true"></span><span class="td-embed-label">Watch on YouTube</span></a>`;
     }
-    return `<a href="${esc(url)}">${esc(url)}</a>`;
+    // Vimeo — vimeo.com/ID, vimeo.com/video/ID, or player.vimeo.com/video/ID.
+    // Vimeo has no static thumbnail-by-id URL, so the card shows a plain play button.
+    const vm = url.match(/(?:vimeo\.com\/(?:video\/)?|player\.vimeo\.com\/video\/)(\d+)/);
+    if (vm) {
+      const watch = `https://vimeo.com/${esc(vm[1])}`;
+      return `<a class="td-embed td-embed-vimeo" href="${watch}" data-embed-url="${watch}" target="_blank" rel="noopener" aria-label="Play video on Vimeo"><span class="td-embed-play" aria-hidden="true"></span><span class="td-embed-label">Watch on Vimeo</span></a>`;
+    }
+    return `<a class="td-embed-link" href="${esc(url)}" data-embed-url="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
   },
+
+  /* <toc /> — table of contents, generated from all headings collected during render. */
+  toc: (n, a) => {
+    // We emit a placeholder; tagdown() substitutes after the full render pass
+    // so headings that appear after this point are still included.
+    return `<!--TD_TOC_PLACEHOLDER:${a.depth || 6}-->`;
+  },
+
+  /* <tabs> ... <tab "label"> ... </tab> ... </tabs> — tabbed content groups.
+     The tabs are wired via plain CSS using a unique radio-button group per tabs block. */
+  tabs: (n, a) => {
+    const groupId = 'td-tabs-' + (++_state.tabsCounter);
+    const tabs = n.children.filter(c => c.type === 'element' && c.name === 'tab');
+    if (tabs.length === 0) return '';
+    let labels = '';
+    let panels = '';
+    tabs.forEach((tab, i) => {
+      const label = tab.attrs.label || (tab.attrs._pos && tab.attrs._pos[0]) || `Tab ${i + 1}`;
+      const tabId = `${groupId}-t${i}`;
+      const checked = i === 0 ? ' checked' : '';
+      labels += `<input type="radio" name="${groupId}" id="${tabId}" class="td-tab-radio"${checked}>`;
+      labels += `<label for="${tabId}" class="td-tab-label">${esc(label)}</label>`;
+      panels += `<div class="td-tab-panel">${renderChildren(tab, true)}</div>`;
+    });
+    return `<div class="td-tabs" data-group="${groupId}">${labels}<div class="td-tab-panels">${panels}</div></div>`;
+  },
+  tab: (n) => renderChildren(n, true), // unused directly; handled by `tabs` parent
+
+  /* <footnotes> — the bibliography block generated by preprocessFootnotes. */
+  footnotes: (n) => {
+    if (_state.footnotes.length === 0) return '';
+    const items = _state.footnotes.map(d =>
+      `<li id="td-fn-${d.id}"><span class="td-fn-num">${esc(d.id)}.</span> ${inline(d.text)} <a href="#td-fnref-${d.id}" class="td-fn-back">↩</a></li>`
+    ).join('');
+    return `<aside class="td-footnotes"><h2 class="td-fn-heading">Footnotes</h2><ol class="td-fn-list">${items}</ol></aside>`;
+  },
+
+  /* <aside> — pull quote / sidenote, floats to the right on wider screens. */
+  aside: (n, a) => {
+    const side = a.side || (a._pos && a._pos[0]) || 'right';
+    return `<aside class="td-aside td-aside-${side}">${renderChildren(n, true)}</aside>`;
+  },
+
+  /* <keys>Cmd+K</keys> — auto-wraps each separated key in <kbd>. Try "+" and "-" as separators. */
+  keys: (n) => {
+    const text = getRawText(n).trim();
+    const parts = text.split(/(\+|\s+)/).map(p => {
+      if (p === '+' || /^\s+$/.test(p)) return p === '+' ? '<span class="td-keys-sep">+</span>' : ' ';
+      return `<kbd>${esc(p)}</kbd>`;
+    });
+    return `<span class="td-keys">${parts.join('')}</span>`;
+  },
+
+  /* <center> — centered block content (useful for figure-like headers). */
+  center: (n) => `<div class="td-center">${renderChildren(n, true)}</div>`,
 };
+
+/* Callout aliases — map GitHub-style alert names to existing note types. */
+const NOTE_ALIASES = {
+  note: 'info', warning: 'warn', caution: 'warn',
+  important: 'tip', danger: 'error',
+};
+// Apply aliases on top of NOTE_DEFAULTS so the note handler recognises them.
+for (const [alias, target] of Object.entries(NOTE_ALIASES)) {
+  if (NOTE_DEFAULTS[target] && !NOTE_DEFAULTS[alias]) {
+    NOTE_DEFAULTS[alias] = { ...NOTE_DEFAULTS[target], label: alias[0].toUpperCase() + alias.slice(1) };
+  }
+}
 
 function renderCodeBlock(raw, opts) {
   const lang = (opts.lang || '').toString();
@@ -643,5 +922,34 @@ export function tagdown(input) {
   const pre = preprocess(input);
   const tokens = tokenize(pre);
   const tree = parse(tokens);
-  return restoreSentinels(render(tree, true));
+  let rendered = restoreSentinels(render(tree, true));
+  rendered = substituteToc(rendered);
+  rendered = appendFootnotes(rendered);
+  return rendered;
+}
+
+/* Expose collected state (frontmatter, footnotes, headings) for advanced callers. */
+tagdown.state = () => ({ ..._state });
+
+function substituteToc(html) {
+  return html.replace(/<!--TD_TOC_PLACEHOLDER:(\d+)-->/g, (_, maxDepth) => {
+    const depth = parseInt(maxDepth, 10);
+    const filtered = _state.headings.filter(h => h.level <= depth);
+    if (filtered.length === 0) return '';
+    const items = filtered.map(h =>
+      `<li class="td-toc-l${h.level}"><a href="#${esc(h.id)}">${esc(h.text)}</a></li>`
+    ).join('');
+    return `<nav class="td-toc"><div class="td-toc-title">Contents</div><ol class="td-toc-list">${items}</ol></nav>`;
+  });
+}
+
+function appendFootnotes(html) {
+  if (_state.footnotes.length === 0) return html;
+  // If the user wrote an explicit <footnotes /> placeholder, that's already rendered
+  // via the handler; otherwise append at end. We detect prior rendering by class.
+  if (html.includes('td-footnotes')) return html;
+  const items = _state.footnotes.map(d =>
+    `<li id="td-fn-${esc(d.id)}"><span class="td-fn-num">${esc(d.id)}.</span> ${inline(d.text)} <a href="#td-fnref-${esc(d.id)}" class="td-fn-back" title="Back to reference">↩</a></li>`
+  ).join('');
+  return html + `<aside class="td-footnotes"><h2 class="td-fn-heading">Footnotes</h2><ol class="td-fn-list">${items}</ol></aside>`;
 }

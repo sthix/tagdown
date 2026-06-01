@@ -19,8 +19,8 @@ export const tagdownDocumentation: DocumentationSection[] = [
     examples: [
       {
         title: 'Headings',
-        description: 'Use one to six # characters. Add an optional anchor with {#id}.',
-        syntax: '# Main heading\n\n## Section heading {#section}'
+        description: 'One to six # characters. Every heading gets an auto-slug id; add an explicit anchor with {#id}.',
+        syntax: '# Main heading\n\n## Section heading {#section}\n\n[jump](#section)'
       },
       {
         title: 'Paragraphs and rules',
@@ -31,6 +31,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         title: 'Universal close',
         description: 'Use </> to close the most recent open Tagdown tag when the tag name is obvious.',
         syntax: '<quote "Ada Lovelace">\nThat brain of mine is something more than merely mortal.\n</>'
+      },
+      {
+        title: 'Table of contents',
+        description: 'A <toc /> tag becomes a clickable list of every heading in the document.',
+        syntax: '<toc />\n\n# Intro\n## Setup\n## Usage'
       }
     ]
   },
@@ -46,8 +51,23 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Links',
-        description: 'Use markdown links or paste a bare http/https URL.',
-        syntax: '[Tagdown](https://example.com)\n\nhttps://example.com'
+        description: 'Use markdown links, paste a bare http/https URL, or wrap an email in angle brackets.',
+        syntax: '[Tagdown](https://example.com)\n\nhttps://example.com\n\n<hi@example.com>'
+      },
+      {
+        title: 'Subscript and superscript',
+        description: 'Use ~x~ for subscript and ^x^ for superscript. Inside, no whitespace.',
+        syntax: 'Water is H~2~O and Einstein wrote E = mc^2^.'
+      },
+      {
+        title: 'Wikilinks',
+        description: 'Reference another note with [[Title]] or [[Title|display label]].',
+        syntax: 'See [[Welcome]] or [[Welcome|the intro]].'
+      },
+      {
+        title: 'Smart typography',
+        description: 'Straight quotes curl, -- becomes en-dash, --- becomes em-dash, ... becomes ellipsis.',
+        syntax: '"Hello" --- this is a test... 1990--2020.'
       }
     ]
   },
@@ -62,9 +82,19 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: '- one\n- two\n- three\n\n1. first\n2. second'
       },
       {
+        title: 'Task lists',
+        description: 'Mix - [x] and - [ ] entries inside a normal bullet list.',
+        syntax: '- [x] Done item\n- [ ] Pending item\n- Regular bullet'
+      },
+      {
         title: 'Fenced code',
         description: 'Standard fenced code blocks are supported for simple snippets.',
         syntax: '```js\nconsole.log("hello")\n```'
+      },
+      {
+        title: 'Footnote definition',
+        description: 'Reference with [^id]; define anywhere with [^id]: text. Definitions are collected into a bibliography at the bottom.',
+        syntax: 'Tagdown is small[^1].\n\n[^1]: The parser fits in one file.'
       },
       {
         title: 'Details',
@@ -76,7 +106,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
   {
     id: 'callouts',
     title: 'Callouts',
-    summary: 'Callouts create labelled note boxes. Supported types: info, warn, warning, error, ok, success, tip.',
+    summary: 'Callouts create labelled note boxes. Types: info, warn, error, ok, tip. GitHub-style aliases also work.',
     examples: [
       {
         title: 'Shortcut syntax',
@@ -87,6 +117,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         title: 'Explicit note tag',
         description: 'Use note tags when you want attributes or universal close.',
         syntax: '<note warn "Careful">\nThis changes the rendered output.\n</note>'
+      },
+      {
+        title: 'GitHub-style aliases',
+        description: 'note maps to info, warning/caution to warn, important to tip, danger to error.',
+        syntax: '::: warning Heads up\nAlias for ::: warn.\n:::'
       }
     ]
   },
@@ -163,25 +198,45 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Embed',
-        description: 'Embeds render links; YouTube URLs are detected and shown as iframes.',
+        description: 'YouTube and Vimeo URLs render as a click-to-play thumbnail that opens the video in your browser; other URLs render as links.',
         syntax: '<embed url=https://youtu.be/dQw4w9WgXcQ />'
       }
     ]
   },
   {
-    id: 'limitations',
-    title: 'Current limitations',
-    summary: 'This reference documents the syntax supported by the parser bundled in this build.',
+    id: 'advanced',
+    title: 'Advanced',
+    summary: 'Power features for technical writing: math, diagrams, tabs, asides, keys, and more.',
     examples: [
       {
-        title: 'Not a full markdown engine',
-        description: 'Nested markdown blocks, task lists, footnotes, math, Mermaid, and complex markdown tables are not implemented yet.',
-        syntax: 'Use the supported shortcuts above, or switch to explicit Tagdown tags for structure.'
+        title: 'Math (KaTeX)',
+        description: 'Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.',
+        syntax: 'Inline math like $E = mc^2$ or:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$'
       },
       {
-        title: 'HTML is intentionally limited',
-        description: 'Unknown tags are not rendered as arbitrary HTML; only a small safe set passes through.',
-        syntax: '<span class="small-note">Allowed simple inline HTML</span>'
+        title: 'Mermaid diagrams',
+        description: 'A fenced code block tagged ```mermaid is rendered as an SVG diagram.',
+        syntax: '```mermaid\ngraph LR\n  A[Source] --> B[Tokenize]\n  B --> C[Parse]\n  C --> D[Render]\n```'
+      },
+      {
+        title: 'Tabs',
+        description: 'Group content into switchable tabs. Pure CSS, no JS needed at render time.',
+        syntax: '<tabs>\n<tab "Source">\nSource view\n</tab>\n<tab "Preview">\nPreview view\n</tab>\n</tabs>'
+      },
+      {
+        title: 'Aside / sidenote',
+        description: 'A pull-quote that floats to the side on wider screens, becomes a block below 720px.',
+        syntax: '<aside right>\nA tangential thought that sits beside the main text.\n</aside>\n\nMain body wraps around the aside.'
+      },
+      {
+        title: 'Keyboard shortcut group',
+        description: 'Auto-wraps each key in <kbd>; uses + and spaces as separators.',
+        syntax: 'Press <keys>Cmd+K</keys> to search.'
+      },
+      {
+        title: 'Centered block',
+        description: 'A centered container — handy for figure-like headers or marquee callouts.',
+        syntax: '<center>\n*Featured chapter*\n</center>'
       }
     ]
   }

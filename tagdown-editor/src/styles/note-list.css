@@ -52,7 +52,7 @@
 }
 .filter-pills button {
   border: 0;
-  cursor: default;
+  cursor: pointer;
   padding: 4px 9px;
   border-radius: 20px;
   background: rgba(0,0,0,.05);

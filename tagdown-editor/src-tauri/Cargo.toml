@@ -1,0 +1,27 @@
+[package]
+name = "tagdown-editor"
+version = "0.1.0"
+description = "Local-first Tagdown note editor for macOS"
+authors = ["Tagdown"]
+edition = "2021"
+rust-version = "1.86"
+
+[lib]
+name = "tagdown_editor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+walkdir = "2"
+notify = "8"
+tantivy = "0.26.1"
+open = "5"

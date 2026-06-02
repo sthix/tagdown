@@ -11,6 +11,9 @@ Tagdown Editor is a macOS-focused Tauri app for writing structured notes without
 
 ---
 
+<img width="1412" height="912" alt="image" src="https://github.com/user-attachments/assets/1959c312-06eb-466e-8e4b-dcf3b3153714" />
+
+
 ## What is Tagdown?
 
 Tagdown is a note format built on Markdown with extra structure for knowledge work:

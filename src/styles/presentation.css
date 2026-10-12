@@ -1,0 +1,107 @@
+/* ---- Presentation mode ---- */
+.presentation {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  background: var(--bg-window);
+  outline: none;
+}
+.presentation.is-idle { cursor: none; }
+
+/* A fixed 1280×720 canvas, centered and scaled to the screen in script. */
+.presentation-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1280px;
+  height: 720px;
+  transform-origin: center;
+}
+.presentation-slide {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-preview);
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+.presentation-slide[hidden] { display: none; }
+
+.presentation .presentation-content {
+  --fit: 1;
+  height: 100%;
+  overflow: hidden;
+  padding: 64px 96px;
+  font-size: calc(27px * var(--fit));
+  line-height: 1.45;
+}
+.presentation .presentation-content > :first-child { margin-top: 0; }
+.presentation .presentation-content.is-overflowing { overflow-y: auto; }
+.presentation .presentation-content h1 { font-size: 2.2em; margin: 0 0 .45em; }
+.presentation .presentation-content h2 { font-size: 1.6em; margin: 0 0 .5em; }
+.presentation .presentation-content h3 { font-size: 1.2em; }
+.presentation .presentation-content pre,
+.presentation .presentation-content code { font-size: .8em; }
+.presentation .presentation-content img,
+.presentation .presentation-content svg { max-width: 100%; max-height: 520px; }
+/* Diagrams grow to fill the slide (Mermaid sets a small inline max-width). */
+.presentation .presentation-content pre.mermaid svg { width: 100%; max-width: 100% !important; height: auto; }
+
+/* Title slides: centered in the canvas. */
+.presentation-slide.is-title .presentation-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.presentation-slide.is-title .presentation-content h1 { font-size: 2.8em; }
+.presentation-slide.is-title .presentation-content p { color: var(--pv-ink-soft); }
+
+.presentation-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--rule);
+}
+.presentation-progress i {
+  display: block;
+  height: 100%;
+  background: var(--marker);
+  transition: width .2s var(--ease-out);
+}
+
+.presentation-bar {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg-glass);
+  box-shadow: var(--shadow-float);
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  transition: opacity .25s ease;
+}
+.presentation.is-idle .presentation-bar { opacity: 0; pointer-events: none; }
+.presentation-bar button {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.presentation-bar button:hover { background: var(--hover-overlay); color: var(--ink); }
+.presentation-bar .presentation-exit { font-size: 12px; }
+.presentation-bar kbd { margin-left: 4px; color: var(--ink-3); font-size: 10.5px; }
+.presentation-count { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }

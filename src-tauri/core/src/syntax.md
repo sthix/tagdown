@@ -319,6 +319,29 @@ YouTube and Vimeo URLs render as a click-to-play thumbnail that opens the video 
 
 Power features for technical writing: math, diagrams, tabs, asides, keys, and more.
 
+### Slides
+
+Present any note full screen with ⌥⌘P. Every line that is just --- starts a new slide (except inside code). A slide with only headings and a short line is centered as a title slide.
+
+```tagdown
+# Quarterly review
+
+Where we are
+
+---
+
+## Highlights
+
+- Shipped search
+- Doubled users
+
+---
+
+## Next
+
+<query tag:roadmap show:tasks />
+```
+
 ### Live queries
 
 A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.

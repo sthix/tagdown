@@ -7,6 +7,8 @@
     "core:default",
     "core:window:allow-start-dragging",
     "core:webview:allow-print",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
     "dialog:default",
     {
       "identifier": "opener:allow-reveal-item-in-dir",

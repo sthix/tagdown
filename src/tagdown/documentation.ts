@@ -209,6 +209,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
     summary: 'Power features for technical writing: math, diagrams, tabs, asides, keys, and more.',
     examples: [
       {
+        title: 'Slides',
+        description: 'Present any note full screen with ⌥⌘P. Every line that is just --- starts a new slide (except inside code). A slide with only headings and a short line is centered as a title slide.',
+        syntax: '# Quarterly review\n\nWhere we are\n\n---\n\n## Highlights\n\n- Shipped search\n- Doubled users\n\n---\n\n## Next\n\n<query tag:roadmap show:tasks />'
+      },
+      {
         title: 'Live queries',
         description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.',
         syntax: '## Open project tasks\n\n<query tag:project show:tasks />\n\n## Recently edited\n\n<query folder:Work sort:updated limit:5 />'

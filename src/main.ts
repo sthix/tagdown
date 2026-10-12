@@ -10,6 +10,7 @@ import type { SourceBlock } from './tagdown/blocks';
 import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
+import { startPresentation } from './presentation';
 import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import './styles/tokens.css';
@@ -89,6 +90,7 @@ const UI_ICONS: Record<string, string> = {
   share: '<path d="M8 2.5v7.5M5.2 5.2L8 2.5l2.8 2.7" /><path d="M5 7.5H4.2c-.7 0-1.2.5-1.2 1.2v3.6c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V8.7c0-.7-.5-1.2-1.2-1.2H11" />',
   globe: '<circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.5 1.6 2.2 3.4 2.2 5.5S9.5 11.9 8 13.5C6.5 11.9 5.8 10.1 5.8 8S6.5 4.1 8 2.5z" />',
   checklist: '<path d="M2.8 4.2l1.1 1.1 2-2.2M2.8 9.7l1.1 1.1 2-2.2" /><path d="M8 4.3h5.2M8 9.8h5.2" />',
+  play: '<path d="M5 3.4v9.2c0 .5.5.8.9.5l7-4.6c.4-.3.4-.8 0-1.1l-7-4.6c-.4-.2-.9 0-.9.6z" />',
   clock: '<circle cx="8" cy="8" r="5.6" /><path d="M8 4.8V8l2.2 1.4" />',
   printer: '<path d="M4.5 6V2.8h7V6" /><rect x="2.5" y="6" width="11" height="5" rx="1.1" /><path d="M4.5 9.5h7v3.7h-7z" />',
 };
@@ -337,6 +339,7 @@ function bindChrome() {
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); toggleTheme(); }
     if (event.metaKey && event.key === 's') { event.preventDefault(); await flushSave(); }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') { event.preventDefault(); await exportNoteHtml(); return; }
+    if (event.metaKey && event.altKey && event.code === 'KeyP') { event.preventDefault(); await presentNote(); return; }
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
@@ -386,6 +389,7 @@ function paletteActions(): PaletteAction[] {
     ...(selectedNote ? [
       { id: 'export-html', label: 'Export as HTML…', hint: 'A standalone page that opens anywhere', shortcut: '⌘⇧E', icon: uiIcon('globe', 15), run: exportNoteHtml },
       { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
+      { id: 'present', label: 'Present as slides', hint: 'Each --- starts a new slide', shortcut: '⌥⌘P', icon: uiIcon('play', 15), run: presentNote },
       { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
       { id: 'history', label: 'Show version history', hint: 'Restore an earlier version of this note', shortcut: '⌘⇧H', icon: uiIcon('clock', 15), run: showVersionHistory },
     ] : []),
@@ -1377,6 +1381,7 @@ function renderEditor() {
         <div class="mode-switch" role="group" aria-label="View mode">
           ${modeButton('source', 'source', 'Source', '1')}${modeButton('split', 'split', 'Split', '2')}${modeButton('preview', 'eye', 'Preview', '3')}
         </div>
+        <button id="present-note" class="chrome-icon-button" type="button" title="Present as slides (⌥⌘P)" aria-label="Present as slides">${uiIcon('play', 15)}</button>
         <button id="note-history" class="chrome-icon-button" type="button" title="Version history (⌘⇧H)" aria-label="Version history">${uiIcon('clock', 15)}</button>
         <div class="export-dropdown">
           <button id="export-note" class="chrome-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="Export" aria-label="Export">${uiIcon('share', 15)}</button>
@@ -1431,6 +1436,7 @@ function renderEditor() {
 
   bindExportMenu();
   editorRoot.querySelector('#note-history')?.addEventListener('click', () => void showVersionHistory());
+  editorRoot.querySelector('#present-note')?.addEventListener('click', () => void presentNote());
 
   // Keep focus in whichever editor is active when using the dock.
   editorRoot.querySelectorAll<HTMLButtonElement>('.format-dock button').forEach((button) => {
@@ -1759,6 +1765,22 @@ function bindExportMenu() {
       close();
       void (item.dataset.export === 'pdf' ? exportNotePdf() : exportNoteHtml());
     });
+  });
+}
+
+/** Present the open note as slides, starting from the one the cursor is in. */
+async function presentNote() {
+  if (!selectedNote) return;
+  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const fromLine = blockEdit ? blockEdit.start : source ? content.slice(0, source.selectionStart).split('\n').length - 1 : 0;
+  if (blockEdit) commitBlockEdit();
+  const noteId = selectedNote.id;
+  await startPresentation({
+    title: selectedNote.title,
+    source: content,
+    fromLine,
+    theme: getEffectiveTheme(),
+    decorate: (root) => fillQueries(root, { excludeId: noteId, interactive: false }),
   });
 }
 

@@ -1,0 +1,101 @@
+/* ---- Published website ---- */
+.td-site { font-family: var(--font-ui); color: var(--ink); }
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 14px 32px;
+  background: var(--bg-preview);
+  border-bottom: .5px solid var(--rule);
+}
+.site-title {
+  position: relative;
+  isolation: isolate;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.site-title::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 55% -4px -2px;
+  background: var(--marker);
+  border-radius: 3px;
+}
+.site-search-wrap { position: relative; width: min(260px, 50vw); }
+.site-search {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: .5px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--bg-field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+}
+.site-search:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.site-results {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: min(420px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-dialog);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg), 0 12px 32px rgba(48,40,16,.12);
+}
+.site-results[hidden] { display: none; }
+.site-result { display: block; padding: 8px 10px; border-radius: 7px; color: inherit; text-decoration: none; }
+.site-result:hover, .site-result:focus { background: var(--marker-soft); outline: none; }
+.site-result strong { display: block; font-size: 13.5px; }
+.site-result span { display: block; margin-top: 2px; color: var(--ink-3); font-size: 12px; line-height: 1.4; }
+.site-no-results { margin: 8px 10px; color: var(--ink-3); font-size: 13px; }
+
+.site-meta { margin: 0 0 18px; color: var(--ink-3); font-family: var(--font-ui); font-size: 12.5px; }
+.td-site .preview.td-export { padding-top: 32px; }
+.td-site .td-tag { text-decoration: none; }
+
+.site-backlinks { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--pv-rule-soft); font-family: var(--font-ui); }
+.site-backlinks h2 { margin: 0 0 8px; border: 0; color: var(--ink-3); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.site-backlinks ul { margin: 0; padding-left: 18px; }
+.site-backlinks a { color: var(--pv-accent); }
+
+.site-index { max-width: 760px; margin: 0 auto; padding: 40px 32px 80px; }
+.site-index h1 { margin: 0 0 6px; font-family: var(--font-display); font-size: 34px; }
+.site-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
+.site-tags .td-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.site-tags .td-tag span { color: var(--ink-3); font-size: 11px; }
+.site-tags .td-tag:hover, .site-tags .td-tag.is-active { background: var(--marker-soft); color: var(--ink); }
+.site-filter { margin: -8px 0 16px; color: var(--ink-2); font-size: 13px; }
+.site-filter[hidden] { display: none; }
+.site-note-list { margin: 0; padding: 0; list-style: none; }
+.site-note-list li { padding: 14px 0; border-top: .5px solid var(--rule); }
+.site-note-list li[hidden] { display: none; }
+.site-note-title { color: var(--ink); font-size: 17px; font-weight: 650; text-decoration: none; }
+.site-note-title:hover { text-decoration: underline; text-decoration-color: var(--marker-strong); text-decoration-thickness: 3px; }
+.site-note-meta { margin-left: 8px; color: var(--ink-3); font-size: 12px; }
+.site-note-list p { margin: 4px 0 0; color: var(--ink-2); font-family: var(--font-serif); font-size: 14.5px; line-height: 1.5; }
+.site-footer { max-width: 760px; margin: 0 auto; padding: 24px 32px 40px; color: var(--ink-4); font-size: 12px; }
+
+@media (max-width: 600px) {
+  .site-header, .site-index, .site-footer { padding-left: 18px; padding-right: 18px; }
+  .td-site .preview.td-export { padding-left: 18px; padding-right: 18px; }
+}

@@ -11,6 +11,7 @@ import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
 import { startPresentation } from './presentation';
+import { openPublishDialog } from './publish';
 import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import './styles/tokens.css';
@@ -389,6 +390,7 @@ function paletteActions(): PaletteAction[] {
     ...(selectedNote ? [
       { id: 'export-html', label: 'Export as HTML…', hint: 'A standalone page that opens anywhere', shortcut: '⌘⇧E', icon: uiIcon('globe', 15), run: exportNoteHtml },
       { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
+      { id: 'publish', label: 'Publish as website…', hint: 'Notes as web pages for any host', icon: uiIcon('globe', 15), run: showPublish },
       { id: 'present', label: 'Present as slides', hint: 'Each --- starts a new slide', shortcut: '⌥⌘P', icon: uiIcon('play', 15), run: presentNote },
       { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
       { id: 'history', label: 'Show version history', hint: 'Restore an earlier version of this note', shortcut: '⌘⇧H', icon: uiIcon('clock', 15), run: showVersionHistory },
@@ -1388,6 +1390,7 @@ function renderEditor() {
           <div class="export-menu" role="menu" hidden>
             <button type="button" role="menuitem" data-export="html">${uiIcon('globe', 14)}<span>Export as HTML…</span><kbd>⌘⇧E</kbd></button>
             <button type="button" role="menuitem" data-export="pdf">${uiIcon('printer', 14)}<span>Print or save as PDF…</span><kbd>⌘P</kbd></button>
+            <button type="button" role="menuitem" data-export="site">${uiIcon('globe', 14)}<span>Publish as website…</span></button>
           </div>
         </div>
         <button id="pin-note" class="chrome-icon-button pin-button ${selectedNote.starred ? 'active' : ''}" type="button" aria-pressed="${selectedNote.starred}" title="${selectedNote.starred ? 'Unpin note' : 'Pin note'}" aria-label="${selectedNote.starred ? 'Unpin note' : 'Pin note'}">${uiIcon('pin', 15)}</button>
@@ -1763,7 +1766,8 @@ function bindExportMenu() {
   menu.querySelectorAll<HTMLButtonElement>('[data-export]').forEach((item) => {
     item.addEventListener('click', () => {
       close();
-      void (item.dataset.export === 'pdf' ? exportNotePdf() : exportNoteHtml());
+      const kind = item.dataset.export;
+      void (kind === 'pdf' ? exportNotePdf() : kind === 'site' ? showPublish() : exportNoteHtml());
     });
   });
 }
@@ -1781,6 +1785,17 @@ async function presentNote() {
     fromLine,
     theme: getEffectiveTheme(),
     decorate: (root) => fillQueries(root, { excludeId: noteId, interactive: false }),
+  });
+}
+
+async function showPublish() {
+  await settlePendingWork();
+  const folder = folders.find((f) => f.id === selectedFolder && f.id !== 'archive');
+  openPublishDialog({
+    folders: folders.filter((f) => f.id !== 'archive').map((f) => ({ id: f.id, name: f.name })),
+    tags: noteTagPaths().sort(),
+    defaultTitle: folder?.name ?? 'My Notes',
+    confirm: (title, message, detail, confirmLabel) => confirmDialog({ title, message, detail, confirmLabel }),
   });
 }
 

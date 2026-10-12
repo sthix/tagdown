@@ -41,11 +41,11 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
 }
 
-/** Render a note to export-ready HTML: externals applied, title heading guaranteed. */
 /** Fills live parts of a rendered note (query blocks) before it is captured. */
 export type Decorate = (root: HTMLElement) => Promise<void>;
 
-async function renderDocument(title: string, source: string, decorate?: Decorate): Promise<string> {
+/** Render a note to export-ready HTML: externals applied, title heading guaranteed. */
+export async function renderDocument(title: string, source: string, decorate?: Decorate): Promise<string> {
   const root = document.createElement('div');
   root.innerHTML = renderPreview(source);
   await applyExternals(root, 'light');
@@ -80,11 +80,15 @@ async function embeddedKatexCss(): Promise<string> {
   return faces.reduce((css, face, i) => css.replace(face, embedded[i]), katexCss);
 }
 
+/** The stylesheet for exported documents; math fonts are embedded when needed. */
+export async function documentCss(withMath: boolean): Promise<string> {
+  return [tokensCss, previewCss, withMath ? await embeddedKatexCss() : '', EXPORT_CSS].join('\n');
+}
+
 /** A standalone HTML document for the note. */
 export async function buildStandaloneHtml(title: string, source: string, decorate?: Decorate): Promise<string> {
   const body = await renderDocument(title, source, decorate);
-  const katex = body.includes('class="katex') ? await embeddedKatexCss() : '';
-  const css = [tokensCss, previewCss, katex, EXPORT_CSS].join('\n');
+  const css = await documentCss(body.includes('class="katex'));
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>

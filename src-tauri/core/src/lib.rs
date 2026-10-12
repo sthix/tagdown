@@ -5,6 +5,7 @@ pub mod history;
 pub mod links;
 pub mod models;
 pub mod search_index;
+pub mod site;
 pub mod tasks;
 pub mod vault;
 pub mod watcher;

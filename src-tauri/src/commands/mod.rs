@@ -5,4 +5,5 @@ pub mod links;
 pub mod notes;
 pub mod query;
 pub mod search;
+pub mod site;
 pub mod tags;

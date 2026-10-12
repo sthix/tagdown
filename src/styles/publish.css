@@ -1,0 +1,28 @@
+/* ---- Publish dialog (in the app) ---- */
+.publish-dialog {
+  width: min(480px, calc(100vw - 48px));
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--bg-dialog);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+}
+.publish-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
+.publish-shell { display: flex; flex-direction: column; gap: 12px; padding: 22px; }
+.publish-shell h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.publish-intro { margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.publish-shell label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.publish-shell select, .publish-shell input {
+  height: 32px;
+  padding: 0 10px;
+  border: .5px solid var(--rule-strong);
+  border-radius: 7px;
+  background: var(--bg-field);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
+}
+.publish-status { min-height: 18px; margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.publish-link { padding: 0; border: 0; background: none; color: var(--pv-accent); font: inherit; cursor: pointer; text-decoration: underline; }

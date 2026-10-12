@@ -33,6 +33,7 @@ This repository contains the desktop editor for that format.
 - **Source, split, and preview modes** — move from raw text to rendered document without leaving the app.
 - **Autosave with version history** — debounced saving keeps writing fluid, and earlier versions are kept locally (thinned out over time) so any of them can be restored.
 - **Tag-aware navigation** — parse tags from frontmatter and note bodies, then browse/filter by tag.
+- **Publish as a website** — turn all notes, a folder, or a tag into static pages with working links, backlinks, tag filters and search; host them anywhere or open them from disk. Links to unpublished notes become plain text.
 - **Slides** — present any note full screen with ⌥⌘P; each `---` starts a new slide, scaled to fit any screen.
 - **Live queries** — `<query tag:project show:tasks />` lists matching notes or tasks from across the vault, kept up to date; tick a task right in the list. ⌘⇧T shows every open task.
 - **Linked notes** — `[[wikilinks]]` with autocomplete open (or create) the linked note, follow renames automatically, and show up as “Linked mentions” under the target.

@@ -427,7 +427,7 @@ async function revealNote(id: string) {
   const note = all.find((candidate) => candidate.id === id);
   if (!note) return;
   if (!notes.some((candidate) => candidate.id === id)) {
-    selectedFolder = null;
+    selectedFolder = note.folderId === 'archive' ? 'archive' : null;
     selectedTag = null;
     activeFilter = 'all';
     renderFilterPills();
@@ -505,6 +505,8 @@ async function reloadNotes() {
   // Any change to the notes can change what query blocks list.
   invalidateQueries();
   notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
+  // Archived notes only show up in the Archive itself, not in All.
+  if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
   if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {
     selectedNote = null;
     content = '';

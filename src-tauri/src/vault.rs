@@ -9,6 +9,9 @@ use crate::{
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
 };
 
+const NOTE_EXT: &str = "md";
+const LEGACY_NOTE_EXT: &str = "td";
+
 #[derive(Debug, Clone)]
 pub struct Vault {
     pub root: PathBuf,
@@ -25,6 +28,7 @@ impl Vault {
     pub fn open_or_create(root: PathBuf) -> Result<Self, String> {
         fs::create_dir_all(root.join(".tagdown")).map_err(|e| e.to_string())?;
         fs::create_dir_all(root.join("Archive")).map_err(|e| e.to_string())?;
+        Self::migrate_legacy_notes(&root)?;
         let meta_path = root.join(".tagdown").join("vault.json");
         let meta = if meta_path.exists() {
             serde_json::from_str(&fs::read_to_string(&meta_path).map_err(|e| e.to_string())?)
@@ -143,7 +147,27 @@ impl Vault {
             let id = Uuid::new_v4().to_string();
             let meta = NoteFrontmatter { id: id.clone(), title: title.into(), tags: Vec::new(), starred: false, folder_id: None, created: now, updated: now };
             let content = format!("# {}\n\nStart writing in Tagdown.", title);
-            fs::write(root.join(format!("note-{id}.td")), write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
+            fs::write(root.join(format!("note-{id}.{NOTE_EXT}")), write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Renames notes from the old `.td` extension to `.md`, leaving any file
+    /// alone if a `.md` sibling already exists.
+    fn migrate_legacy_notes(root: &Path) -> Result<(), String> {
+        let legacy: Vec<PathBuf> = WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.into_path())
+            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some(LEGACY_NOTE_EXT))
+            .filter(|path| path.file_name().and_then(|n| n.to_str()).is_some_and(|name| name.starts_with("note-")))
+            .collect();
+        for path in legacy {
+            let target = path.with_extension(NOTE_EXT);
+            if !target.exists() {
+                fs::rename(&path, &target).map_err(|e| e.to_string())?;
+            }
         }
         Ok(())
     }
@@ -154,19 +178,19 @@ impl Vault {
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().is_file())
             .map(|entry| entry.into_path())
-            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("td"))
+            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some(NOTE_EXT))
             .collect()
     }
 
     fn note_path(&self, id: &str) -> Result<PathBuf, String> {
         self.note_paths()
             .into_iter()
-            .find(|path| path.file_name().and_then(|n| n.to_str()).is_some_and(|name| name == format!("note-{id}.td")))
+            .find(|path| path.file_name().and_then(|n| n.to_str()).is_some_and(|name| name == format!("note-{id}.{NOTE_EXT}")))
             .ok_or_else(|| format!("note not found: {id}"))
     }
 
     fn path_for_new_note(&self, meta: &NoteFrontmatter) -> PathBuf {
-        self.root.join(format!("note-{}.td", meta.id))
+        self.root.join(format!("note-{}.{NOTE_EXT}", meta.id))
     }
 }
 
@@ -198,6 +222,30 @@ mod tests {
             .save_note(&note.id, "# Title\n\nText with #notes/chemistry and #physics".into())
             .unwrap();
         assert_eq!(saved.tags, vec!["notes/chemistry", "physics"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn notes_are_stored_as_markdown() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.create_note(None).unwrap();
+        let path = vault.note_file_path(&note.id).unwrap();
+        assert_eq!(path.extension().and_then(|s| s.to_str()), Some("md"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn legacy_td_notes_are_migrated_on_open() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.create_note(None).unwrap();
+        let md = vault.note_file_path(&note.id).unwrap();
+        std::fs::rename(&md, md.with_extension("td")).unwrap();
+
+        let reopened = Vault::open_or_create(dir.clone()).unwrap();
+        assert!(md.exists());
+        assert!(reopened.get_note_content(&note.id).is_ok());
         std::fs::remove_dir_all(&dir).ok();
     }
 }

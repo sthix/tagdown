@@ -34,7 +34,7 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 
 ## Phase 4 — Import, export, settings
 
-- Add drag-and-drop `.td` import.
+- Add drag-and-drop `.md` import.
 - Implement standalone HTML export using the parser output and bundled CSS/fonts.
 - Add settings persistence and panels.
 - Spike PDF export separately.

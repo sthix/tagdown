@@ -138,7 +138,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       {
         title: 'Definition list',
         description: 'Use at least two consecutive entries to trigger auto-detection.',
-        syntax: 'Tagdown :: Markdown plus a small tag layer\nVault :: A local folder of .td files'
+        syntax: 'Tagdown :: Markdown plus a small tag layer\nVault :: A local folder of .md files'
       },
       {
         title: 'Explicit defs tag',

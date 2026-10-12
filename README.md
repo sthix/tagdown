@@ -1,94 +1,112 @@
 # Tagdown Editor
 
-**A fast, local-first desktop editor for Tagdown notes — Markdown plus rich semantic blocks, tags, math, diagrams, and export-ready previews.**
+**A fast, local-first desktop editor for Tagdown notes — Markdown plus rich semantic blocks, tags, links, live queries, math, and diagrams.**
 
-Tagdown Editor is a macOS-focused Tauri app for writing structured notes without giving up plain-text ownership. Notes live on disk, render instantly in a polished preview, and can use Tagdown components such as callouts, tabs, cards, details, math, Mermaid diagrams, and tag-aware metadata.
+Tagdown Editor is a macOS-focused Tauri app for writing structured notes without giving up plain-text ownership. Notes are ordinary Markdown files on disk. They render instantly in a polished preview, link to each other, and can be exported, presented as slides, published as a website, or handed to an AI assistant.
 
 <p align="center">
   <strong>Plain text in. Beautiful documents out.</strong><br />
-  Local vaults · Split editor/preview · Tag navigation · KaTeX · Mermaid · Tauri
+  Local vaults · Wikilinks · Live queries · Full-text search · Slides · Publishing · MCP
+</p>
+
+<p align="center">
+  <a href="docs/README.md"><strong>Read the documentation →</strong></a>
 </p>
 
 ---
 
-<img width="1440" alt="Tagdown Editor in split view: the sidebar with library folders and tags, a note list grouped by date, and a note shown as Tagdown source beside its rendered preview" src="docs/tagdown-editor.png" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/tagdown-editor-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/tagdown-editor-light.png" />
+  <img width="1440" alt="Tagdown Editor in split view: the sidebar with library folders and a tag tree, a note list grouped by date, and a launch-plan note shown as Tagdown source beside its rendered preview with a callout, task list, table, and math" src="docs/images/tagdown-editor-light.png" />
+</picture>
 
+<details>
+<summary>Light and dark side by side</summary>
+
+| Light | Dark |
+| --- | --- |
+| <img alt="Tagdown Editor, light theme" src="docs/images/tagdown-editor-light.png" /> | <img alt="Tagdown Editor, dark theme" src="docs/images/tagdown-editor-dark.png" /> |
+
+</details>
 
 ## What is Tagdown?
 
 Tagdown is a note format built on Markdown with extra structure for knowledge work:
 
-- familiar Markdown for headings, lists, links, quotes, and code
-- inline and frontmatter tags for organization
-- reusable document components such as callouts, cards, tabs, columns, accordions, and keyboard hints
-- rich technical writing support through KaTeX math and Mermaid diagrams
-- preview output that feels closer to a finished document than a raw note
+- familiar Markdown for headings, lists, links, quotes, tables, and code
+- `#tags` (nested with `/`) and `[[wikilinks]]` between notes
+- document components such as callouts, tabs, grids, collapsible details, asides, figures, quotes, and keyboard hints
+- technical writing with KaTeX math and Mermaid diagrams
+- live `<query />` blocks that list notes or tasks from across the vault
 
-This repository contains the desktop editor for that format.
+```tagdown
+# Atlas launch plan
 
-## Highlights
+The plan for shipping **Atlas** this quarter. #project/atlas
 
-- **Local-first vaults** — notes are stored as regular files in a local vault, with a default vault created at `~/Documents/Tagdown`.
-- **Three-pane writing workspace** — folder navigation, note list, and editor/preview area.
-- **Source, split, and preview modes** — move from raw text to rendered document without leaving the app.
-- **Autosave with version history** — debounced saving keeps writing fluid, and earlier versions are kept locally (thinned out over time) so any of them can be restored.
-- **Tag-aware navigation** — parse tags from frontmatter and note bodies, then browse/filter by tag.
-- **Publish as a website** — turn all notes, a folder, or a tag into static pages with working links, backlinks, tag filters and search; host them anywhere or open them from disk. Links to unpublished notes become plain text.
-- **Slides** — present any note full screen with ⌥⌘P; each `---` starts a new slide, scaled to fit any screen.
-- **Live queries** — `<query tag:project show:tasks />` lists matching notes or tasks from across the vault, kept up to date; tick a task right in the list. ⌘⇧T shows every open task.
-- **Linked notes** — `[[wikilinks]]` with autocomplete open (or create) the linked note, follow renames automatically, and show up as “Linked mentions” under the target.
-- **Rich Tagdown renderer** — supports extended components, syntax highlighting-friendly code blocks, KaTeX math, and Mermaid diagrams.
-- **Formatting toolbar** — quick insert actions for common Markdown and Tagdown structures.
-- **AI-ready vault** — a `tagdown` command-line tool and MCP server let assistants like Claude search, read, and write rich Tagdown notes.
-- **Native shell** — built with Tauri v2 for a lightweight desktop app backed by Rust file commands.
+::: tip Goal
+Public beta by **November 14**.
+:::
 
-## Tech stack
+<query tag:project show:tasks />
+```
 
-| Layer | Technology |
-| --- | --- |
-| Desktop shell | Tauri v2 |
-| UI | Vanilla TypeScript + Vite |
-| Local commands | Rust |
-| Math rendering | KaTeX |
-| Diagrams | Mermaid |
-| Storage model | Local filesystem vault |
+See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
+
+## Features
+
+### Writing
+
+- **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
+- **Formatting toolbar** with one-click templates for every Tagdown component.
+- **Command palette** (⌘K) to jump to any note, search, or run any action.
+- **Focus mode** (⌘\\) hides everything but the note.
+- **Light and dark themes** (⌘⇧D), or follow the system.
+
+### Organizing
+
+- **Local-first vault** of plain `.md` files in `~/Documents/Tagdown`, with nested folders and an archive.
+- **Tags** from the note body or frontmatter, shown as a colour-coded tree.
+- **Wikilinks** with autocomplete. Links follow renames automatically and show up as *Linked mentions* under the target note.
+- **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
+- **Live queries** such as `<query tag:project show:tasks />`; tick tasks right in the list. ⌘⇧T shows every open task.
+- **Outside edits** from other editors, git, or sync services are picked up while the app runs.
+
+### Safety
+
+- **Autosave** with **version history** (⌘⇧H). Earlier versions are kept locally, thinned out over time, and can be restored with one click.
+
+### Sharing
+
+- **Export** a note as a self-contained HTML file (⌘⇧E) or **print / save as PDF** (⌘P).
+- **Present as slides** (⌥⌘P): each `---` starts a new slide, scaled to fit any screen.
+- **Publish as a website**: all notes, a folder, or a tag become static pages with working links, backlinks, tag filters, and search. Links to unpublished notes become plain text.
+
+### AI-ready
+
+- The **`tagdown` CLI** searches, reads, creates, and appends to notes from the terminal.
+- **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
 ## Getting started
 
-### Prerequisites
-
-- Node.js 20+
-- Rust stable
-- Tauri system prerequisites for macOS
-
-### Install
+You need Node.js 20+, Rust stable, and the [Tauri prerequisites for macOS](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
 npm install
-```
-
-### Run the web dev server
-
-```sh
-npm run dev
-```
-
-### Run the desktop app
-
-```sh
 npm run tauri:dev
 ```
 
-### Build
+Build a release with:
 
 ```sh
 npm run build
 npm run tauri:build
 ```
 
-## Command line and AI assistants
+On first launch the app creates a vault at `~/Documents/Tagdown` with a few starter notes. More in [Getting started](docs/getting-started.md).
 
-The `tagdown` binary works on the same vault as the app (`~/Documents/Tagdown`, or `--vault PATH` / `TAGDOWN_VAULT`). Changes it makes show up in the running app right away, and anything it replaces is kept in the note's version history.
+## Command line and AI assistants
 
 ```sh
 cargo install --path src-tauri/core
@@ -99,25 +117,40 @@ tagdown append "Meeting notes" "- [ ] Send recap"
 tagdown tasks
 ```
 
-`tagdown mcp` runs an [MCP](https://modelcontextprotocol.io) server, so AI assistants can work with your notes. It offers tools to search, read, list, create, append to, and replace notes, list tasks, and find backlinks, plus the Tagdown syntax reference so assistants write callouts, tabs, and links rather than plain Markdown.
-
-Claude Code:
+Connect Claude Code to your vault:
 
 ```sh
 claude mcp add tagdown -- tagdown mcp
 ```
 
-Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Claude Desktop setup, every command, and the full list of MCP tools are in [Command line and AI assistants](docs/cli-and-mcp.md).
 
-```json
-{
-  "mcpServers": {
-    "tagdown": { "command": "/Users/you/.cargo/bin/tagdown", "args": ["mcp"] }
-  }
-}
-```
+## Documentation
 
-The syntax reference the server hands out is generated from the app's own reference; run `npm run gen:syntax` after changing `src/tagdown/documentation.ts`.
+| | |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | Install, run, build, first launch |
+| [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes |
+| [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
+| [Organizing your vault](docs/organizing.md) | Folders, tags, pinning, archive, search, wikilinks |
+| [Queries and tasks](docs/queries-and-tasks.md) | Live queries and the open-tasks view |
+| [Version history](docs/version-history.md) | Snapshots and restoring |
+| [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
+| [Command line and AI assistants](docs/cli-and-mcp.md) | The `tagdown` CLI and MCP server |
+| [Keyboard shortcuts](docs/keyboard-shortcuts.md) | Every shortcut on one page |
+| [Development](docs/development.md) | Architecture, layout, tests |
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Desktop shell | Tauri v2 |
+| UI | Vanilla TypeScript + Vite |
+| Vault, search, CLI, MCP | Rust (`tagdown-core`) |
+| Search | Tantivy |
+| Math rendering | KaTeX |
+| Diagrams | Mermaid |
+| Storage model | Local filesystem vault of Markdown files |
 
 ## Validation
 
@@ -128,23 +161,11 @@ cargo check --manifest-path src-tauri/Cargo.toml --workspace
 node --test tests/*.mjs
 ```
 
-## Project structure
-
-```text
-.
-├── src/                  # TypeScript UI, editor behavior, parser, renderer, styles
-├── src-tauri/            # Tauri app: commands and configuration
-│   └── core/             # The vault (notes, search, links, history), the `tagdown` CLI and MCP server
-├── tests/                # Node-based rendering tests
-├── package.json          # Frontend scripts and dependencies
-└── README.md
-```
-
 ## Current status
 
-Tagdown Editor is an active early-stage desktop app. The core writing workspace, local vault bootstrap, note operations, Tagdown parsing/rendering, settings/reference UI, and build pipeline are in place. Remaining polish includes deeper search indexing, import/export expansion, file watching/conflict prompts, and native menu refinements.
+Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace, vault, full-text search, wikilinks and backlinks, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
-See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the implementation roadmap.
+See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
 
 ## Why this exists
 

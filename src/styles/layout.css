@@ -7,6 +7,7 @@
   grid-template-columns: 236px minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg-window);
+  background-image: var(--bg-desk);
   transition: grid-template-columns .28s var(--ease-out);
 }
 #app.is-focus { grid-template-columns: 0 minmax(0, 1fr); }
@@ -71,7 +72,6 @@
   font-size: 12.5px;
   font-weight: 650;
   white-space: nowrap;
-  box-shadow: inset 0 -1px 0 rgba(0,0,0,.12), 0 1px 2px rgba(120,90,0,.25);
   transition: background-color .12s ease, transform .08s ease;
 }
 .new-note-button:hover { background: var(--marker-strong); }

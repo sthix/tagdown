@@ -119,6 +119,8 @@ let expandedFolders: Record<string, boolean> = {};
 let draggingFolderId: string | null = null;
 let dragOverTarget: { el: HTMLElement; cls: string } | null = null;
 let creatingTag = false;
+let showAllTags = false;
+const TAG_PREVIEW_LIMIT = 6;
 let tagDraftColor: TagColorKey = 'blue';
 
 initializeTheme();
@@ -134,27 +136,23 @@ onThemePreferenceChange(() => {
 app.innerHTML = `
   <aside class="sidebar">
     <div class="sidebar-top" data-tauri-drag-region>
-      <button id="sidebar-collapse" class="chrome-icon-button" type="button" title="Focus mode (⌘\\)" aria-label="Toggle focus mode">${uiIcon('sidebar', 15)}</button>
-    </div>
-    <div class="sidebar-actions">
-      <button id="open-palette" class="sidebar-search" type="button" title="Search and commands (⌘K)">
-        ${uiIcon('search', 14)}<span>Search</span><kbd>⌘K</kbd>
-      </button>
-      <button id="new-note" class="new-note-button" type="button" title="New note (⌘N)">${uiIcon('compose', 14)}<span>New note</span></button>
+      <button id="open-palette" class="chrome-icon-button" type="button" title="Search and commands (⌘K)" aria-label="Search and commands">${uiIcon('search', 16)}</button>
+      <button id="theme-toggle" class="chrome-icon-button" type="button" title="Switch theme (⌘⇧D)" aria-label="Switch theme"></button>
+      <button id="sidebar-collapse" class="chrome-icon-button" type="button" title="Focus mode (⌘\\)" aria-label="Toggle focus mode">${uiIcon('sidebar', 16)}</button>
     </div>
     <nav class="sidebar-scroll" aria-label="Library">
       <section>
-        <h2 class="section-header"><span>Library</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">${uiIcon('plus', 12)}</button></h2>
+        <h2 class="section-header"><span>Library</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">${uiIcon('plus', 13)}</button></h2>
         <div id="folders"></div>
       </section>
       <section>
-        <h2 class="section-header"><span>Tags <span class="section-count" id="tag-count">0</span></span><button id="new-tag" class="section-add" type="button" title="New tag" aria-label="New tag">${uiIcon('plus', 12)}</button></h2>
+        <h2 class="section-header"><span>Tags</span><span class="section-count" id="tag-count" hidden>0</span><button id="new-tag" class="section-add" type="button" title="New tag" aria-label="New tag">${uiIcon('plus', 13)}</button></h2>
         <div id="tags"></div>
       </section>
     </nav>
     <footer class="sidebar-foot">
-      <button id="settings-button" class="sidebar-foot-button" type="button" title="Settings (⌘,)">${uiIcon('sliders', 14)}<span>Settings</span></button>
-      <button id="theme-toggle" class="chrome-icon-button" type="button" title="Switch theme (⌘⇧D)" aria-label="Switch theme"></button>
+      <button id="new-note" class="new-note-pill" type="button" title="New note (⌘N)">${uiIcon('compose', 15)}<span>New note</span><kbd>⌘N</kbd></button>
+      <button id="settings-button" class="round-icon-button" type="button" title="Settings (⌘,)" aria-label="Settings">${uiIcon('sliders', 16)}</button>
     </footer>
   </aside>
   <main class="sheet">
@@ -861,7 +859,16 @@ function renderTags() {
     `;
   };
 
-  const rows = roots.map((node) => renderTagRow(node, 0)).join('');
+  // Like Notion's sidebar sections: show the first few, tuck the rest behind "More".
+  const selectedRoot = selectedTag?.split('/')[0];
+  const hiddenCount = Math.max(0, roots.length - TAG_PREVIEW_LIMIT);
+  const visibleRoots = showAllTags || !hiddenCount
+    ? roots
+    : roots.filter((node, index) => index < TAG_PREVIEW_LIMIT || node.path === selectedRoot);
+  const moreRow = hiddenCount
+    ? `<button type="button" class="tag-row more-row" data-tags-more aria-expanded="${showAllTags}"><span class="more-dots" aria-hidden="true">···</span><span class="tag-name">${showAllTags ? 'Show less' : `More`}</span></button>`
+    : '';
+  const rows = visibleRoots.map((node) => renderTagRow(node, 0)).join('') + moreRow;
 
   const empty = !creatingTag && totalNodes === 0
     ? '<div class="tag-empty">Type <kbd>#tag</kbd> in a note, or press <kbd>+</kbd>.</div>'
@@ -869,7 +876,11 @@ function renderTags() {
 
   tagEl.innerHTML = createCard + rows + empty;
 
-  tagEl.querySelectorAll<HTMLElement>('.tag-row').forEach((row) => {
+  tagEl.querySelector('[data-tags-more]')?.addEventListener('click', () => {
+    showAllTags = !showAllTags;
+    renderTags();
+  });
+  tagEl.querySelectorAll<HTMLElement>('.tag-row:not(.more-row)').forEach((row) => {
     row.addEventListener('click', () => selectTag(row.dataset.tagPath!));
     row.addEventListener('keydown', (event) => {
       if (event.target !== row) return;

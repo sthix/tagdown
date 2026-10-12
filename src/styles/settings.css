@@ -6,7 +6,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-dialog);
   color: var(--text-primary);
-  box-shadow: 0 28px 80px var(--shadow);
+  box-shadow: var(--shadow-lg);
 }
 
 .settings-dialog::backdrop {
@@ -177,7 +177,6 @@
 .theme-option:has(input:checked) {
   border-color: var(--accent);
   background: var(--accent-tint);
-  box-shadow: 0 8px 24px rgba(0, 122, 255, .08);
 }
 
 .theme-option input {
@@ -828,7 +827,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-dialog);
   color: var(--text-primary);
-  box-shadow: 0 28px 80px var(--shadow);
+  box-shadow: var(--shadow-lg);
 }
 
 .confirm-dialog::backdrop {

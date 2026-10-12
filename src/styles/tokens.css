@@ -12,7 +12,9 @@
   --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
 
   /* Surfaces */
-  --bg-window: #e9ebef;
+  --bg-window: #fffae6;
+  /* The "desk" behind the sheet: pale highlighter yellow fading to near-white. */
+  --bg-desk: linear-gradient(180deg, #fff6d1 0%, #fffdf4 100%);
   --bg-sidebar: transparent;
   --bg-sheet: #ffffff;
   --bg-notes: #f6f7f9;
@@ -66,10 +68,11 @@
   --line: rgba(22,24,29,.08);
   --line-strong: rgba(22,24,29,.14);
   --shadow: rgba(22,24,29,.18);
-  --shadow-sheet: 0 0 0 .5px rgba(22,24,29,.09), 0 1px 2px rgba(22,24,29,.05), 0 8px 24px -8px rgba(22,24,29,.10);
-  --shadow-raised: 0 0 0 .5px rgba(22,24,29,.08), 0 1px 2px rgba(22,24,29,.07);
-  --shadow-float: 0 0 0 .5px rgba(22,24,29,.10), 0 2px 4px rgba(22,24,29,.05), 0 12px 32px -6px rgba(22,24,29,.18);
-  --shadow-lg: 0 0 0 .5px rgba(22,24,29,.12), 0 4px 10px rgba(22,24,29,.06), 0 28px 64px -12px rgba(22,24,29,.28);
+  /* Flat UI: no drop shadows. Surfaces are separated by hairline outlines only. */
+  --shadow-sheet: 0 0 0 .5px rgba(22,24,29,.10);
+  --shadow-raised: 0 0 0 .5px rgba(22,24,29,.10);
+  --shadow-float: 0 0 0 .5px rgba(22,24,29,.14);
+  --shadow-lg: 0 0 0 .5px rgba(22,24,29,.14);
   --focus-ring: rgba(229,180,0,.6);
   --chip-bg: rgba(22,24,29,.055);
   --kbd-bg: rgba(22,24,29,.05);
@@ -125,6 +128,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg-window: #1c1d21;
+  --bg-desk: var(--bg-window);
   --bg-sheet: #24262b;
   --bg-notes: #212327;
   --bg-list: #212327;
@@ -172,10 +176,10 @@
   --line: rgba(255,255,255,.08);
   --line-strong: rgba(255,255,255,.14);
   --shadow: rgba(0,0,0,.5);
-  --shadow-sheet: 0 0 0 .5px rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -10px rgba(0,0,0,.5);
-  --shadow-raised: 0 0 0 .5px rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.4);
-  --shadow-float: 0 0 0 .5px rgba(255,255,255,.1), 0 2px 4px rgba(0,0,0,.25), 0 14px 36px -6px rgba(0,0,0,.6);
-  --shadow-lg: 0 0 0 .5px rgba(255,255,255,.1), 0 4px 10px rgba(0,0,0,.3), 0 28px 64px -12px rgba(0,0,0,.7);
+  --shadow-sheet: 0 0 0 .5px rgba(255,255,255,.08);
+  --shadow-raised: 0 0 0 .5px rgba(255,255,255,.09);
+  --shadow-float: 0 0 0 .5px rgba(255,255,255,.14);
+  --shadow-lg: 0 0 0 .5px rgba(255,255,255,.14);
   --focus-ring: rgba(255,214,10,.55);
   --chip-bg: rgba(255,255,255,.07);
   --kbd-bg: rgba(255,255,255,.07);

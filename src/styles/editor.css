@@ -365,7 +365,7 @@ textarea#source,
   transition: background-color .12s ease;
 }
 .empty-editor-action:hover { background: var(--bg-field); }
-.empty-editor-action.is-primary { background: var(--marker); color: var(--marker-ink); box-shadow: inset 0 -1px 0 rgba(0,0,0,.12), 0 1px 2px rgba(120,90,0,.25); }
+.empty-editor-action.is-primary { background: var(--marker); color: var(--marker-ink); }
 .empty-editor-action.is-primary:hover { background: var(--marker-strong); }
 .empty-editor-action kbd {
   margin-left: 4px;

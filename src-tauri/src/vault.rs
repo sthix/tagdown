@@ -5,6 +5,7 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::{
+    history::History,
     frontmatter::{derive_preview, derive_tags, derive_title, split_frontmatter, word_count, write_frontmatter},
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
     watcher::FileTracker,
@@ -19,6 +20,7 @@ pub struct Vault {
     pub meta: VaultMeta,
     /// Shared by every clone, so the file watcher can tell the app's own writes apart.
     pub tracker: Arc<FileTracker>,
+    pub history: History,
 }
 
 impl Vault {
@@ -54,7 +56,8 @@ impl Vault {
             Self::seed_notes(&root)?;
             meta
         };
-        Ok(Self { root, meta, tracker: Arc::default() })
+        let history = History::new(&root);
+        Ok(Self { root, meta, tracker: Arc::default(), history })
     }
 
     pub fn save_meta(&self) -> Result<(), String> {
@@ -116,7 +119,8 @@ impl Vault {
     pub fn save_note(&self, id: &str, content: String) -> Result<Note, String> {
         let path = self.note_path(id)?;
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, _) = split_frontmatter(&raw)?;
+        let (mut meta, previous) = split_frontmatter(&raw)?;
+        self.keep_version(id, &previous, &content);
         meta.title = derive_title(&content);
         meta.tags = derive_tags(&content);
         meta.updated = Utc::now();
@@ -129,7 +133,8 @@ impl Vault {
     pub fn rewrite_content(&self, id: &str, content: &str) -> Result<Note, String> {
         let path = self.note_path(id)?;
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, _) = split_frontmatter(&raw)?;
+        let (mut meta, previous) = split_frontmatter(&raw)?;
+        self.keep_version(id, &previous, content);
         meta.title = derive_title(content);
         meta.tags = derive_tags(content);
         self.write_note(&path, &write_frontmatter(&meta, content))?;
@@ -161,7 +166,15 @@ impl Vault {
     }
 
     pub fn destroy_note(&self, id: &str) -> Result<(), String> {
-        fs::remove_file(self.note_path(id)?).map_err(|e| e.to_string())
+        fs::remove_file(self.note_path(id)?).map_err(|e| e.to_string())?;
+        self.history.remove_all(id)
+    }
+
+    /// Version history must never block a save: failures are only logged.
+    fn keep_version(&self, id: &str, previous: &str, next: &str) {
+        if let Err(e) = self.history.before_save(id, previous, next, Utc::now()) {
+            eprintln!("history: could not snapshot note {id}: {e}");
+        }
     }
 
     /// Write a note file, recording the content for the file watcher first.

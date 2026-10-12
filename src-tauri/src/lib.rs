@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager};
 
 mod commands;
 mod frontmatter;
+mod history;
 mod links;
 mod models;
 mod search_index;
@@ -55,6 +56,10 @@ pub fn run() {
             commands::folders::delete_folder,
             commands::search::search,
             commands::links::backlinks,
+            commands::history::list_versions,
+            commands::history::get_version,
+            commands::history::snapshot_note,
+            commands::history::restore_version,
             commands::links::rename_links,
             commands::tags::list_tags,
             commands::tags::create_tag,

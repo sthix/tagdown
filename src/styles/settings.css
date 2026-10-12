@@ -896,7 +896,7 @@
 .confirm-button.is-primary {
   background: var(--accent);
   border-color: var(--accent-strong);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .confirm-button.is-primary:hover {

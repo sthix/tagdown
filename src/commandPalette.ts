@@ -9,6 +9,13 @@ export type PaletteNote = {
   updatedLabel: string;
 };
 
+/** A full-text match: an excerpt of the note body with matched ranges. */
+export type PaletteHit = {
+  id: string;
+  excerpt: string;
+  highlights: Array<[number, number]>;
+};
+
 export type PaletteAction = {
   id: string;
   label: string;
@@ -20,14 +27,14 @@ export type PaletteAction = {
 
 export type PaletteSource = {
   notes: () => Promise<PaletteNote[]>;
-  searchContent: (query: string) => Promise<string[]>;
+  searchContent: (query: string) => Promise<PaletteHit[]>;
   actions: () => PaletteAction[];
   openNote: (id: string) => void | Promise<void>;
   noteIcon: string;
 };
 
 type Row =
-  | { kind: 'note'; note: PaletteNote }
+  | { kind: 'note'; note: PaletteNote; hit?: PaletteHit }
   | { kind: 'action'; action: PaletteAction };
 
 let dialog: HTMLDialogElement | null = null;
@@ -57,6 +64,7 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
       <footer class="palette-foot">
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
         <span><kbd>↵</kbd> open</span>
+        <span class="palette-foot-syntax"><code>tag:</code><code>title:</code><code>"phrase"</code><code>-word</code></span>
         <span class="palette-foot-brand">Tagdown</span>
       </footer>
     </div>`;
@@ -89,14 +97,17 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
     const actionRows = rows.filter((r): r is Extract<Row, { kind: 'action' }> => r.kind === 'action');
     let index = -1;
     const section = (title: string, body: string) => body ? `<div class="palette-section" role="presentation"><h3>${title}</h3>${body}</div>` : '';
-    const noteMarkup = noteRows.map(({ note }) => {
+    const noteMarkup = noteRows.map(({ note, hit }) => {
       index++;
+      const detail = hit?.highlights.length
+        ? markRanges(hit.excerpt, hit.highlights)
+        : escapeHtml([note.folderName, note.preview].filter(Boolean).join(' — '));
       return `
         <div class="palette-row ${index === active ? 'active' : ''}" role="option" id="palette-opt-${index}" aria-selected="${index === active}" data-index="${index}">
           <span class="palette-row-icon">${source.noteIcon}</span>
           <span class="palette-row-main">
             <strong>${highlight(note.title || 'Untitled', input.value)}</strong>
-            <small>${escapeHtml([note.folderName, note.preview].filter(Boolean).join(' — '))}</small>
+            <small>${detail}</small>
           </span>
           <span class="palette-row-meta">${escapeHtml(note.updatedLabel)}</span>
         </div>`;
@@ -112,14 +123,17 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
     }).join('');
     list.innerHTML = rows.length
       ? section(input.value.trim() ? 'Notes' : 'Recent notes', noteMarkup) + section('Commands', actionMarkup)
-      : `<div class="palette-empty"><strong>No matches for “${escapeHtml(input.value.trim())}”</strong><span>Try a shorter or different word. Archived notes aren’t searched.</span></div>`;
+      : `<div class="palette-empty"><strong>No matches for “${escapeHtml(input.value.trim())}”</strong><span>Try a shorter or different word, or filter with tag:name, title:word, "exact phrase" or -exclude. Archived notes aren’t searched.</span></div>`;
     input.setAttribute('aria-activedescendant', rows.length ? `palette-opt-${active}` : '');
     list.querySelector('.palette-row.active')?.scrollIntoView({ block: 'nearest' });
   };
 
   const update = async () => {
-    const query = input.value.trim().toLowerCase();
+    const raw = input.value.trimStart();
+    const query = raw.trim().toLowerCase();
     const actions = source.actions();
+    // Filters and phrases only make sense to the full-text index.
+    const advanced = /(^|\s)(-\S|(tag|title):)|"/i.test(raw);
     if (!query) {
       rows = [
         ...allNotes.slice(0, 6).map((note) => ({ kind: 'note' as const, note })),
@@ -129,6 +143,16 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
       render();
       return;
     }
+    const token = ++searchToken;
+    if (advanced) {
+      const hits = await source.searchContent(raw).catch(() => [] as PaletteHit[]);
+      if (token !== searchToken || !dialog) return;
+      rows = hitRows(hits, 10);
+      active = 0;
+      render();
+      return;
+    }
+
     const scored = allNotes
       .map((note) => ({ note, score: score(query, note.title, [note.preview, ...note.tags, note.folderName ?? ''].join(' ')) }))
       .filter((entry) => entry.score > 0)
@@ -142,17 +166,24 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
     active = 0;
     render();
 
-    // Full-text matches from the vault index arrive a beat later.
-    const token = ++searchToken;
-    const ids = await source.searchContent(query).catch(() => [] as string[]);
-    if (token !== searchToken || !dialog) return;
-    const seen = new Set(scored.map((note) => note.id));
-    const extra = ids.filter((id) => !seen.has(id)).map((id) => allNotes.find((note) => note.id === id)).filter((note): note is PaletteNote => !!note);
-    if (!extra.length) return;
-    const noteCount = rows.filter((r) => r.kind === 'note').length;
-    rows.splice(noteCount, 0, ...extra.slice(0, Math.max(0, 8 - noteCount)).map((note) => ({ kind: 'note' as const, note })));
+    // Full-text matches from the vault index arrive a beat later: they add
+    // body excerpts to the title matches and append notes matched by content.
+    const hits = await source.searchContent(raw).catch(() => [] as PaletteHit[]);
+    if (token !== searchToken || !dialog || !hits.length) return;
+    const byId = new Map(hits.map((hit) => [hit.id, hit]));
+    const noteRows = rows.filter((r): r is Extract<Row, { kind: 'note' }> => r.kind === 'note');
+    noteRows.forEach((row) => { row.hit = byId.get(row.note.id); });
+    const seen = new Set(noteRows.map((row) => row.note.id));
+    const extra = hitRows(hits.filter((hit) => !seen.has(hit.id)), Math.max(0, 8 - noteRows.length));
+    rows.splice(noteRows.length, 0, ...extra);
     render();
   };
+
+  const hitRows = (hits: PaletteHit[], limit: number): Row[] => hits
+    .map((hit) => ({ hit, note: allNotes.find((note) => note.id === hit.id) }))
+    .filter((entry): entry is { hit: PaletteHit; note: PaletteNote } => !!entry.note)
+    .slice(0, limit)
+    .map(({ hit, note }) => ({ kind: 'note' as const, note, hit }));
 
   input.addEventListener('input', () => { void update(); });
   input.addEventListener('keydown', (event) => {
@@ -198,6 +229,18 @@ function highlight(text: string, query: string) {
   const at = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
   if (at < 0) return escapeHtml(text);
   return `${escapeHtml(text.slice(0, at))}<mark>${escapeHtml(text.slice(at, at + q.length))}</mark>${escapeHtml(text.slice(at + q.length))}`;
+}
+
+/** Escape `text`, wrapping the given [start, end) ranges in <mark>. */
+function markRanges(text: string, ranges: Array<[number, number]>) {
+  let out = '';
+  let at = 0;
+  for (const [start, end] of [...ranges].sort((a, b) => a[0] - b[0])) {
+    if (start < at) continue;
+    out += `${escapeHtml(text.slice(at, start))}<mark>${escapeHtml(text.slice(start, end))}</mark>`;
+    at = end;
+  }
+  return out + escapeHtml(text.slice(at));
 }
 
 function escapeHtml(value: string) {

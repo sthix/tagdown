@@ -74,6 +74,18 @@ impl Vault {
         Ok(notes)
     }
 
+    /// Every note with its body, for building the search index.
+    pub fn notes_with_content(&self) -> Result<Vec<(Note, String)>, String> {
+        let mut notes = Vec::new();
+        for path in self.note_paths() {
+            let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let Ok((meta, content)) = split_frontmatter(&raw) else { continue; };
+            let note = note_from_meta(meta, &content);
+            notes.push((note, content));
+        }
+        Ok(notes)
+    }
+
     pub fn get_note_content(&self, id: &str) -> Result<NoteContent, String> {
         let path = self.note_path(id)?;
         let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -175,6 +187,8 @@ impl Vault {
     fn note_paths(&self) -> Vec<PathBuf> {
         WalkDir::new(&self.root)
             .into_iter()
+            // Skip app data such as the search index.
+            .filter_entry(|entry| entry.file_name() != ".tagdown")
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().is_file())
             .map(|entry| entry.into_path())

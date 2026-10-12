@@ -8,7 +8,7 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 - Use Rust for local vault/file commands and TypeScript for UI and Tagdown rendering.
 - Use `@tauri-apps/plugin-dialog` for folder/save dialogs.
 - Use `@tauri-apps/plugin-opener` for Finder reveal/open actions.
-- Use Tantivy for full search once the command/UI slice is stable; the scaffold currently includes a lightweight search fallback.
+- Use Tantivy for full-text search (`.tagdown/search.idx/`).
 - Export PDF through the native print dialog (Tauri's `window.print()` on macOS) with a print-only stylesheet.
 
 ## Phase 1 — MVP vertical slice
@@ -28,9 +28,9 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 
 ## Phase 3 — Search and indexing
 
-- Replace the fallback search with a real Tantivy index in `.tagdown/search.idx/`.
-- Rebuild the index on first launch and incrementally update it on save/delete.
-- Support query syntax: words, phrases, `tag:`, `title:`, and exclusions.
+- ~~Replace the fallback search with a real Tantivy index in `.tagdown/search.idx/`.~~ Done.
+- ~~Rebuild the index on first launch and incrementally update it on save/delete.~~ Done (rebuilt on every launch in the background).
+- ~~Support query syntax: words, phrases, `tag:`, `title:`, and exclusions.~~ Done, plus prefix matching on the word being typed, accent folding, and highlighted excerpts.
 
 ## Phase 4 — Import, export, settings
 

@@ -126,6 +126,7 @@
   text-underline-offset: 1px;
   text-decoration-skip-ink: none;
 }
+.palette-row-main small mark { color: var(--ink-2); font-weight: 600; }
 .palette-row-meta {
   flex-shrink: 0;
   color: var(--ink-3);
@@ -155,6 +156,14 @@
   font-size: 11.5px;
 }
 .palette-foot span { display: inline-flex; align-items: center; gap: 4px; }
+.palette-foot-syntax code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--kbd-bg);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
 .palette-foot-brand {
   margin-left: auto;
   font-family: var(--font-display);

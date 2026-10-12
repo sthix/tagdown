@@ -48,6 +48,8 @@ pub struct Folder {
 pub struct SearchResult {
     pub note: Note,
     pub excerpt: String,
+    /// Matched ranges in `excerpt`, as UTF-16 offsets (JavaScript string indices).
+    pub highlights: Vec<[u32; 2]>,
     pub score: f32,
 }
 

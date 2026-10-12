@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, State};
 use uuid::Uuid;
 
-use crate::{models::{Folder, FolderRecord, SortOrder}, AppState};
+use crate::{commands::search::SearchState, models::{Folder, FolderRecord, SortOrder}, AppState};
 
 fn folder_from_record(record: &FolderRecord, note_count: u32) -> Folder {
     Folder {
@@ -123,7 +123,7 @@ pub async fn move_folder(id: String, parent_id: Option<String>, position: Option
 }
 
 #[tauri::command]
-pub async fn delete_folder(id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+pub async fn delete_folder(id: String, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<(), String> {
     if id == "archive" {
         return Err("archive folder cannot be deleted".into());
     }
@@ -147,7 +147,8 @@ pub async fn delete_folder(id: String, state: State<'_, Mutex<AppState>>) -> Res
     let all_notes = state.vault.list_notes(None, SortOrder::UpdatedDesc)?;
     for note in all_notes {
         if note.folder_id.as_ref().is_some_and(|folder_id| to_delete.contains(folder_id)) {
-            state.vault.update_note_folder(&note.id, None)?;
+            let moved = state.vault.update_note_folder(&note.id, None)?;
+            search.index(&moved, &state.vault.get_note_content(&moved.id)?.content);
         }
     }
 

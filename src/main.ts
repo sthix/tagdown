@@ -309,7 +309,8 @@ function openPalette() {
         updatedLabel: formatDate(note.updatedAt),
       }));
     },
-    searchContent: async (query) => (await invoke<Array<{ note: Note }>>('search', { query })).map((r) => r.note.id),
+    searchContent: async (query) => (await invoke<Array<{ note: Note; excerpt: string; highlights: Array<[number, number]> }>>('search', { query }))
+      .map((r) => ({ id: r.note.id, excerpt: r.excerpt, highlights: r.highlights })),
     actions: paletteActions,
     openNote: async (id) => {
       const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });

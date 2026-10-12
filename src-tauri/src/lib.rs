@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 mod commands;
 mod frontmatter;
@@ -6,6 +6,8 @@ mod models;
 mod search_index;
 mod vault;
 
+use commands::search::SearchState;
+use search_index::SearchIndex;
 use vault::Vault;
 
 pub struct AppState {
@@ -15,11 +17,13 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let vault = Vault::open_or_create_default().expect("failed to open or create default vault");
+    let search = open_search_index(&vault);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState { vault }))
+        .manage(search)
         .invoke_handler(tauri::generate_handler![
             commands::notes::list_notes,
             commands::notes::get_note_content,
@@ -45,4 +49,23 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Open the vault's search index and rebuild it from the notes on a background
+/// thread, so launch isn't blocked and edits made outside the app are picked up.
+fn open_search_index(vault: &Vault) -> SearchState {
+    let index = match SearchIndex::open(&vault.root.join(".tagdown").join("search.idx")) {
+        Ok(index) => Arc::new(index),
+        Err(e) => {
+            eprintln!("search index unavailable: {e}");
+            return SearchState(None);
+        }
+    };
+    let (rebuild, vault) = (index.clone(), vault.clone());
+    std::thread::spawn(move || {
+        if let Err(e) = vault.notes_with_content().and_then(|notes| rebuild.rebuild(notes)) {
+            eprintln!("search index rebuild failed: {e}");
+        }
+    });
+    SearchState(Some(index))
 }

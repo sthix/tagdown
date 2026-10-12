@@ -5,10 +5,11 @@ import { save, message } from '@tauri-apps/plugin-dialog';
 import { initSettings, openSettings } from './settings/settings';
 import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
 import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
-import { renderEditablePreview, applyExternals } from './tagdown/renderer';
+import { renderEditablePreview, renderPreview, applyExternals } from './tagdown/renderer';
 import type { SourceBlock } from './tagdown/blocks';
 import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
+import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -49,6 +50,8 @@ type TagColorKey = 'slate' | 'blue' | 'teal' | 'green' | 'amber' | 'rose' | 'vio
 type FolderIcon = { key: string; label: string; svg: string };
 
 type NoteContent = { id: string; content: string };
+
+type Backlink = { note: Note; mentions: string[] };
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -132,6 +135,12 @@ type BlockEdit = { el: HTMLTextAreaElement; start: number; lineCount: number; or
 let blockEdit: BlockEdit | null = null;
 let previewBlocks: SourceBlock[] = [];
 let suppressPreviewClick = false;
+// Links follow a renamed note: the title other notes link to, and a pending sync.
+let linkNoteId: string | null = null;
+let linkTitle = '';
+let linkSyncTimer: number | undefined;
+// "Linked mentions" for the open note, once loaded.
+let backlinks: { id: string; items: Backlink[] } | null = null;
 const TAG_PREVIEW_LIMIT = 6;
 let tagDraftColor: TagColorKey = 'blue';
 
@@ -312,21 +321,24 @@ function openPalette() {
     searchContent: async (query) => (await invoke<Array<{ note: Note; excerpt: string; highlights: Array<[number, number]> }>>('search', { query }))
       .map((r) => ({ id: r.note.id, excerpt: r.excerpt, highlights: r.highlights })),
     actions: paletteActions,
-    openNote: async (id) => {
-      const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
-      const note = all.find((candidate) => candidate.id === id);
-      if (!note) return;
-      if (!notes.some((candidate) => candidate.id === id)) {
-        selectedFolder = null;
-        selectedTag = null;
-        activeFilter = 'all';
-        renderFilterPills();
-        await reloadNotes();
-      }
-      await openNote(note);
-      document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
-    },
+    openNote: revealNote,
   });
+}
+
+/** Open a note from anywhere, widening the note list if it isn't in view. */
+async function revealNote(id: string) {
+  const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
+  const note = all.find((candidate) => candidate.id === id);
+  if (!note) return;
+  if (!notes.some((candidate) => candidate.id === id)) {
+    selectedFolder = null;
+    selectedTag = null;
+    activeFilter = 'all';
+    renderFilterPills();
+    await reloadNotes();
+  }
+  await openNote(note);
+  document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 function markerClass(selected: boolean) {
@@ -960,12 +972,131 @@ function renderTags() {
 }
 
 async function openNote(note: Note) {
+  await settlePendingWork();
   selectedNote = note;
+  linkNoteId = note.id;
+  linkTitle = note.title;
   const noteContent = await invoke<NoteContent>('get_note_content', { id: note.id });
   content = noteContent.content;
   setDocumentTitle(note.title || 'Untitled');
   renderNotes();
   renderEditor();
+  void loadBacklinks(note.id);
+}
+
+/** Save pending edits and link renames before leaving the open note. */
+async function settlePendingWork() {
+  if (selectedNote && savedMessage === 'Saving…') {
+    window.clearTimeout(saveTimer);
+    await flushSave();
+  }
+  if (linkSyncTimer !== undefined) await syncLinks();
+}
+
+// ---- Wikilinks ----
+
+function scheduleLinkSync() {
+  window.clearTimeout(linkSyncTimer);
+  linkSyncTimer = window.setTimeout(() => void syncLinks(), 1200);
+}
+
+/**
+ * Point links in other notes at the open note's new title. Runs once the title
+ * settles; the backend declines titles that are empty or belong to another
+ * note, in which case the old title is kept and a later save retries.
+ */
+async function syncLinks() {
+  window.clearTimeout(linkSyncTimer);
+  linkSyncTimer = undefined;
+  const id = linkNoteId;
+  const oldTitle = linkTitle;
+  const newTitle = selectedNote?.id === id ? selectedNote.title : null;
+  if (!id || newTitle === null || newTitle === oldTitle) return;
+  const outcome = await invoke<{ applied: boolean; updated: number }>('rename_links', { id, oldTitle, newTitle });
+  if (!outcome.applied) return;
+  if (linkNoteId === id) linkTitle = newTitle;
+  if (outcome.updated) {
+    savedMessage = `Updated links in ${outcome.updated} ${outcome.updated === 1 ? 'note' : 'notes'}`;
+    renderStatus();
+    await reloadNotes();
+  }
+  if (selectedNote?.id === id) void loadBacklinks(id);
+}
+
+async function followWikilink(target: string) {
+  const { title, anchor } = splitTarget(target);
+  if (!title) return;
+  let note = resolveTarget(target, libraryNotes);
+  if (!note) note = await createNoteTitled(title);
+  if (note.id !== selectedNote?.id) await revealNote(note.id);
+  if (anchor) scrollToHeading(anchor);
+}
+
+/** A link to a note that doesn't exist yet creates it, next to the current one. */
+async function createNoteTitled(title: string) {
+  await settlePendingWork();
+  const folderId = selectedNote?.folderId && selectedNote.folderId !== 'archive' ? selectedNote.folderId : null;
+  const created = await invoke<Note>('create_note', { folderId });
+  const note = await invoke<Note>('save_note', { id: created.id, content: `# ${title}\n\n` });
+  await reloadFolders();
+  await reloadNotes();
+  return note;
+}
+
+function scrollToHeading(anchor: string) {
+  const wanted = normalizeTitle(anchor);
+  const headings = Array.from(editorRoot.querySelectorAll<HTMLElement>('.preview :is(h1, h2, h3, h4, h5, h6)'));
+  const heading = headings.find((h) => h.id === anchor || normalizeTitle(h.textContent || '') === wanted);
+  heading?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+async function loadBacklinks(id: string) {
+  const items = await invoke<Backlink[]>('backlinks', { id }).catch(() => [] as Backlink[]);
+  if (selectedNote?.id !== id) return;
+  backlinks = { id, items };
+  const section = editorRoot.querySelector<HTMLElement>('.preview [data-backlinks]');
+  if (!section) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = backlinksHtml();
+  const fresh = holder.firstElementChild as HTMLElement;
+  section.replaceWith(fresh);
+  void applyExternals(fresh, getEffectiveTheme());
+}
+
+function backlinksHtml() {
+  if (!selectedNote || backlinks?.id !== selectedNote.id) return '<section class="backlinks" data-backlinks hidden></section>';
+  const { items } = backlinks;
+  const self = normalizeTitle(selectedNote.title);
+  const mention = (line: string) => {
+    const holder = document.createElement('div');
+    holder.innerHTML = renderPreview(line);
+    holder.querySelectorAll<HTMLElement>('.td-wikilink').forEach((link) => {
+      if (normalizeTitle(splitTarget(link.dataset.target || '').title) === self) link.classList.add('is-self');
+    });
+    // One line of context: unwrap the paragraph the renderer adds.
+    const only = holder.children.length === 1 && holder.firstElementChild?.tagName === 'P' ? holder.firstElementChild : holder;
+    return `<div class="backlink-line">${only.innerHTML}</div>`;
+  };
+  const list = items.map(({ note, mentions }) => `
+    <div class="backlink" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
+      <div class="backlink-title">${iconSvg('notes', 13)}<strong>${escapeHtml(note.title || 'Untitled')}</strong></div>
+      ${mentions.map(mention).join('')}
+    </div>`).join('');
+  return `
+    <section class="backlinks" data-backlinks aria-label="Linked mentions">
+      <h2>Linked mentions${items.length ? `<span>${items.length}</span>` : ''}</h2>
+      ${list || `<p class="backlinks-empty">No other notes link here yet. Link to this note with <code>[[${escapeHtml(selectedNote.title || 'Untitled')}]]</code>.</p>`}
+    </section>`;
+}
+
+/** Mark links whose target note doesn't exist (clicking one creates it). */
+function markWikilinks(el: HTMLElement) {
+  el.querySelectorAll<HTMLAnchorElement>('.td-wikilink').forEach((link) => {
+    const target = link.dataset.target || '';
+    const note = resolveTarget(target, libraryNotes);
+    link.classList.toggle('is-missing', !note);
+    link.title = note ? `Open “${note.title}”` : `Create note “${splitTarget(target).title}”`;
+  });
 }
 
 function paintPreview(el: HTMLElement) {
@@ -976,8 +1107,9 @@ function paintPreview(el: HTMLElement) {
   const append = blocks.length || empty
     ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing…' : 'Click to add a block'}</div>`
     : '';
-  el.innerHTML = html + append;
+  el.innerHTML = html + append + backlinksHtml();
   markDocTitle(el);
+  markWikilinks(el);
   void applyExternals(el, getEffectiveTheme());
 }
 
@@ -1077,6 +1209,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
   const caret = caretOffset(text, hint);
   textarea.setSelectionRange(caret, caret);
 
+  attachWikilinkAutocomplete(textarea, wikilinkOptions);
   textarea.addEventListener('input', () => {
     if (blockEdit?.el !== textarea) return;
     const lines = content.split('\n');
@@ -1315,6 +1448,18 @@ function renderEditor() {
   editorRoot.querySelector<HTMLDivElement>('.preview')?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
     if (suppressPreviewClick) { suppressPreviewClick = false; return; }
+    const backlink = target.closest<HTMLElement>('[data-open-note]');
+    if (backlink) {
+      event.preventDefault();
+      void revealNote(backlink.dataset.openNote!);
+      return;
+    }
+    const wikilink = target.closest<HTMLAnchorElement>('.td-wikilink');
+    if (wikilink) {
+      event.preventDefault();
+      void followWikilink(wikilink.dataset.target || '');
+      return;
+    }
     // Video embeds / external links open in the system browser via the opener
     // plugin, so the WebView never navigates away from the app.
     const embed = target.closest<HTMLElement>('[data-embed-url]');
@@ -1343,7 +1488,16 @@ function renderEditor() {
     if (blockEl) startBlockEdit(blockEl, textAroundPoint(event.clientX, event.clientY));
   });
 
+  editorRoot.querySelector('.preview')?.addEventListener('keydown', (event) => {
+    const backlink = (event.target as HTMLElement).closest<HTMLElement>('[data-open-note]');
+    if (backlink && ((event as KeyboardEvent).key === 'Enter' || (event as KeyboardEvent).key === ' ')) {
+      event.preventDefault();
+      void revealNote(backlink.dataset.openNote!);
+    }
+  });
+
   const source = document.querySelector<HTMLTextAreaElement>('#source');
+  if (source) attachWikilinkAutocomplete(source, wikilinkOptions);
   source?.addEventListener('input', () => {
     content = source.value;
     savedMessage = 'Saving…';
@@ -1359,8 +1513,13 @@ function renderEditor() {
 }
 
 function isInteractive(target: HTMLElement) {
-  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag');
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks');
 }
+
+const wikilinkOptions = {
+  notes: () => libraryNotes,
+  currentId: () => selectedNote?.id ?? null,
+};
 
 function insertText(text: string, atLineStart = false) {
   if (blockEdit) {
@@ -1444,6 +1603,7 @@ async function flushSave() {
   selectedNote = await invoke<Note>('save_note', { id: selectedNote.id, content });
   const saved = selectedNote;
   libraryNotes = libraryNotes.map((note) => (note.id === saved.id ? saved : note));
+  if (saved.id === linkNoteId && saved.title !== linkTitle) scheduleLinkSync();
   await reloadNotes();
   savedMessage = 'Saved';
   setDocumentTitle(selectedNote.title || 'Untitled');
@@ -1525,7 +1685,7 @@ function renderStatus() {
   const words = wordCount(content);
   if (countsEl) countsEl.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
   if (!savedEl) return;
-  const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Saved' || savedMessage.startsWith('Exported') ? 'saved' : 'idle';
+  const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Ready' ? 'idle' : 'saved';
   savedEl.className = `save-state is-${state}`;
   savedEl.innerHTML = `<i aria-hidden="true"></i><span>${state === 'idle' ? 'Saved to vault' : escapeHtml(savedMessage)}</span>`;
 }

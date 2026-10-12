@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 mod commands;
 mod frontmatter;
+mod links;
 mod models;
 mod search_index;
 mod vault;
@@ -40,6 +41,8 @@ pub fn run() {
             commands::folders::move_folder,
             commands::folders::delete_folder,
             commands::search::search,
+            commands::links::backlinks,
+            commands::links::rename_links,
             commands::tags::list_tags,
             commands::tags::create_tag,
             commands::tags::delete_tag,

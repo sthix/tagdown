@@ -121,6 +121,18 @@ impl Vault {
         Ok(note_from_meta(meta, &content))
     }
 
+    /// Replace a note's body without touching its edit time, for changes the
+    /// user didn't make in that note (such as links following a rename).
+    pub fn rewrite_content(&self, id: &str, content: &str) -> Result<Note, String> {
+        let path = self.note_path(id)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let (mut meta, _) = split_frontmatter(&raw)?;
+        meta.title = derive_title(content);
+        meta.tags = derive_tags(content);
+        fs::write(path, write_frontmatter(&meta, content)).map_err(|e| e.to_string())?;
+        Ok(note_from_meta(meta, content))
+    }
+
     pub fn update_note_folder(&self, id: &str, folder_id: Option<String>) -> Result<Note, String> {
         let path = self.note_path(id)?;
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -236,6 +248,17 @@ mod tests {
             .save_note(&note.id, "# Title\n\nText with #notes/chemistry and #physics".into())
             .unwrap();
         assert_eq!(saved.tags, vec!["notes/chemistry", "physics"]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn rewrite_content_keeps_edit_time() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.save_note(&vault.create_note(None).unwrap().id, "# A\n\nSee [[Old]].".into()).unwrap();
+        let rewritten = vault.rewrite_content(&note.id, "# A\n\nSee [[New]].").unwrap();
+        assert_eq!(rewritten.updated_at, note.updated_at);
+        assert_eq!(vault.get_note_content(&note.id).unwrap().content, "# A\n\nSee [[New]].");
         std::fs::remove_dir_all(&dir).ok();
     }
 

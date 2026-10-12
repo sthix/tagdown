@@ -33,6 +33,7 @@ This repository contains the desktop editor for that format.
 - **Source, split, and preview modes** — move from raw text to rendered document without leaving the app.
 - **Autosave workflow** — debounced saving keeps writing fluid.
 - **Tag-aware navigation** — parse tags from frontmatter and note bodies, then browse/filter by tag.
+- **Linked notes** — `[[wikilinks]]` with autocomplete open (or create) the linked note, follow renames automatically, and show up as “Linked mentions” under the target.
 - **Rich Tagdown renderer** — supports extended components, syntax highlighting-friendly code blocks, KaTeX math, and Mermaid diagrams.
 - **Formatting toolbar** — quick insert actions for common Markdown and Tagdown structures.
 - **Native shell** — built with Tauri v2 for a lightweight desktop app backed by Rust file commands.

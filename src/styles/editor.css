@@ -430,3 +430,32 @@ textarea#source,
 .export-menu button[role="menuitem"] kbd { color: var(--ink-3); font-size: 11px; }
 .export-menu button[role="menuitem"]:hover,
 .export-menu button[role="menuitem"]:focus-visible { background: var(--hover-overlay); outline: none; }
+
+/* ---- [[ wikilink suggestions ---- */
+.wikilink-suggest {
+  position: fixed;
+  z-index: 200;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--bg-dialog);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-ui);
+  animation: menu-in .12s var(--ease-out) both;
+}
+.wikilink-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.wikilink-suggest-row.active { background: var(--marker-soft); }
+.wikilink-suggest-brackets { color: var(--ink-4); font-family: var(--font-mono); font-size: 11px; }

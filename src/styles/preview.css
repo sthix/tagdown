@@ -279,6 +279,10 @@
   background: var(--accent-tint);
   border-bottom-style: solid;
 }
+.preview .td-wikilink { cursor: pointer; }
+/* A link to a note that doesn't exist yet: muted until clicked (which creates it). */
+.preview .td-wikilink.is-missing { color: var(--pv-ink-soft); border-bottom-color: var(--pv-rule); }
+.preview .td-wikilink.is-missing:hover { color: var(--pv-accent); border-bottom-color: var(--pv-accent); }
 
 /* ---- Footnotes ---- */
 .preview .td-fn-ref { font-size: 0.7em; margin-left: 2px; }
@@ -680,3 +684,77 @@
 .preview .td-code-text {
   white-space: pre;
 }
+
+/* ---- Linked mentions ---- */
+.preview .backlinks {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pv-rule-soft);
+  font-family: var(--font-ui);
+}
+.preview .backlinks[hidden] { display: none; }
+.preview .backlinks h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.preview .backlinks h2 span {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+.preview .backlinks-empty { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+.preview .backlinks-empty code { font-size: 11.5px; }
+.preview .backlink {
+  display: block;
+  margin: 0 -12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color .12s ease;
+}
+.preview .backlink:hover { background: var(--hover-overlay); }
+.preview .backlink:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.preview .backlink-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.preview .backlink-title svg { color: var(--ink-3); flex-shrink: 0; }
+.preview .backlink-title strong { font-weight: 600; }
+.preview .backlink-line {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 3px;
+  padding-left: 19px;
+  color: var(--ink-2);
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.preview .backlink-line .td-wikilink { pointer-events: none; }
+.preview .backlink-line .td-wikilink.is-self {
+  color: var(--ink);
+  border-bottom: 0;
+  background: var(--marker-soft);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.preview .backlink-line .td-wikilink.is-self::before,
+.preview .backlink-line .td-wikilink.is-self::after { content: none; }

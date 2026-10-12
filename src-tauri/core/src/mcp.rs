@@ -186,6 +186,24 @@ impl Server {
                 }
                 Ok(out)
             }
+            "run_query" => {
+                let out = lib.query(&str_arg("query").unwrap_or_default())?;
+                let shown = out.notes.len().max(out.tasks.len());
+                let mut text = String::new();
+                for n in &out.notes {
+                    text.push_str(&format!("- \"{}\" (id: {}{})\n", n.title, n.id, n.folder.as_ref().map(|f| format!(", folder: {f}")).unwrap_or_default()));
+                }
+                for t in &out.tasks {
+                    text.push_str(&format!("- [{}] {} — \"{}\" (id: {}, line {})\n", if t.done { "x" } else { " " }, t.text, t.note_title, t.note_id, t.line));
+                }
+                if text.is_empty() {
+                    return Ok("Nothing matches.".into());
+                }
+                if out.total > shown {
+                    text.push_str(&format!("\n(showing {shown} of {}; add limit:N for more)\n", out.total));
+                }
+                Ok(text)
+            }
             "get_tagdown_syntax" => Ok(SYNTAX.to_string()),
             _ => Err(format!("unknown tool: {name}")),
         }
@@ -280,6 +298,13 @@ fn tools() -> Value {
             "annotations": read_only,
         },
         {
+            "name": "run_query",
+            "title": "Run query",
+            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks, status:open|done|all, sort:updated|created|title, folder:Name, limit:N. Empty lists recent notes.",
+            "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "e.g. tag:project show:tasks" } } },
+            "annotations": read_only,
+        },
+        {
             "name": "get_tagdown_syntax",
             "title": "Tagdown syntax",
             "description": "The Tagdown syntax reference. Read it before writing notes that use more than plain Markdown.",
@@ -314,7 +339,7 @@ mod tests {
         assert_eq!(init["result"]["serverInfo"]["name"], "tagdown");
         assert!(s.handle(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
         let tools = s.handle(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 9);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 10);
         let syntax = s.handle(json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": { "uri": SYNTAX_URI } })).unwrap();
         assert!(syntax["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Tagdown syntax"));
         let unknown = s.handle(json!({ "jsonrpc": "2.0", "id": 4, "method": "nope" })).unwrap();
@@ -335,6 +360,8 @@ mod tests {
         assert!(text.contains("tags: project/atlas") && text.ends_with("- [x] Pick name\n"), "{text}");
         let (text, _) = call(&mut s, "list_tasks", json!({}));
         assert!(text.contains("## Atlas") && text.contains("- [ ] Draft brief") && !text.contains("Pick name"), "{text}");
+        let (text, _) = call(&mut s, "run_query", json!({ "query": "tag:project show:tasks status:all" }));
+        assert!(text.contains("- [ ] Draft brief — \"Atlas\"") && text.contains("- [x] Pick name"), "{text}");
         let (text, _) = call(&mut s, "get_backlinks", json!({ "note": "Your First Note" }));
         assert!(text.contains("- Atlas") && text.contains("> Kickoff [[Your First Note]]."), "{text}");
         std::fs::remove_dir_all(root).ok();

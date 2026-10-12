@@ -758,3 +758,100 @@
 }
 .preview .backlink-line .td-wikilink.is-self::before,
 .preview .backlink-line .td-wikilink.is-self::after { content: none; }
+
+/* ---- Live query blocks ---- */
+.preview .td-query {
+  margin: 1.1em 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--pv-rule-soft);
+  border-radius: 10px;
+  background: var(--pv-surface);
+  font-family: var(--font-ui);
+}
+.preview .td-query-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.preview .td-query-label { font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.preview .td-query-head code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.preview .td-query-notes, .preview .td-query-tasks { margin: 0; padding: 0; list-style: none; }
+.preview .td-query-notes li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  border-top: .5px solid var(--pv-rule-soft);
+}
+.preview .td-query-notes li:first-child { border-top: 0; }
+.preview .td-query-note {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.preview .td-query-note:hover { color: var(--pv-accent); text-decoration: underline; }
+.preview .td-query-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.preview .td-query-group + .td-query-group { margin-top: 10px; }
+.preview .td-query-tasks { margin-top: 3px; }
+.preview .td-query-task {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--pv-ink);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.preview .td-query-task input { flex-shrink: 0; margin: 0; accent-color: var(--marker-strong); cursor: pointer; }
+.preview .td-query-task input:disabled { cursor: default; }
+.preview .td-query-task.is-done span { color: var(--ink-3); text-decoration: line-through; }
+.preview .td-query-empty, .preview .td-query-more { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
+.preview .td-query-error { margin: 2px 0 0; color: var(--danger); font-size: 12.5px; }
+
+/* "Open tasks" dialog */
+.task-list-dialog {
+  width: min(640px, calc(100vw - 48px));
+  height: min(620px, calc(100vh - 64px));
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--bg-dialog);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.task-list-dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
+.task-list-shell { display: flex; flex-direction: column; height: 100%; }
+.task-list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: .5px solid var(--line);
+}
+.task-list-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink); }
+.task-list-head span { display: block; margin-top: 3px; color: var(--ink-3); font-size: 12px; }
+.task-list-head code { font-size: 11px; }
+.task-list-dialog .task-list-body { flex: 1; height: auto; padding: 4px 18px 24px; background: transparent; }
+.task-list-dialog .td-query { margin: 8px 0 0; padding: 0; border: 0; background: transparent; }

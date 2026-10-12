@@ -5,7 +5,7 @@ use tauri::{Emitter, Manager};
 mod commands;
 
 // The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
-pub use tagdown_core::{history, links, models, search_index, vault, watcher};
+pub use tagdown_core::{history, links, models, query, search_index, tasks, vault, watcher};
 
 use commands::search::SearchState;
 use search_index::SearchIndex;
@@ -52,6 +52,8 @@ pub fn run() {
             commands::folders::delete_folder,
             commands::search::search,
             commands::links::backlinks,
+            commands::query::run_query,
+            commands::query::set_task_done,
             commands::history::list_versions,
             commands::history::get_version,
             commands::history::snapshot_note,

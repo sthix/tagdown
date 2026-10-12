@@ -147,6 +147,22 @@ impl SearchIndex {
         self.reader.reload().map_err(err)
     }
 
+    /// Ids of notes matching `raw`, best first, without building excerpts.
+    pub fn matching_ids(&self, raw: &str, limit: usize) -> Result<Vec<String>, String> {
+        let parsed = parse_query(raw);
+        let Some(query) = self.build_query(&parsed, &mut analyzer()) else { return Ok(Vec::new()) };
+        let searcher = self.reader.searcher();
+        let hits = searcher.search(&query, &TopDocs::with_limit(limit).order_by_score()).map_err(err)?;
+        let mut ids = Vec::with_capacity(hits.len());
+        for (_, address) in hits {
+            let doc: TantivyDocument = searcher.doc(address).map_err(err)?;
+            if let Some(id) = doc.get_first(self.fields.id).and_then(|v| v.as_str()) {
+                ids.push(id.to_string());
+            }
+        }
+        Ok(ids)
+    }
+
     pub fn search(&self, raw: &str) -> Result<Vec<SearchResult>, String> {
         let parsed = parse_query(raw);
         let mut analyzer = analyzer();

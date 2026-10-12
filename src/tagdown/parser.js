@@ -223,6 +223,8 @@ function tokenize(input) {
   let i = 0;
   const tagRe = /^<\s*(\/?)\s*([a-zA-Z][\w-]*)((?:\s+(?:"[^"]*"|'[^']*'|[\w-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+))?))*)\s*(\/?)\s*>/;
   const closeAnyRe = /^<\s*\/\s*>/;
+  // <query tag:project show:tasks /> — its text is a search, not attributes.
+  const queryRe = /^<\s*query\b([^>]*?)\s*\/\s*>/i;
 
   while (i < input.length) {
     const ch = input[i];
@@ -238,6 +240,12 @@ function tokenize(input) {
       if (closeAny) {
         tokens.push({ type: 'close', name: '*' });
         i += closeAny[0].length;
+        continue;
+      }
+      const q = slice.match(queryRe);
+      if (q) {
+        tokens.push({ type: 'void', name: 'query', attrs: { _pos: [], _raw: q[1].trim() } });
+        i += q[0].length;
         continue;
       }
       const m = slice.match(tagRe);
@@ -812,6 +820,13 @@ const HANDLERS = {
       return `<a class="td-embed td-embed-vimeo" href="${watch}" data-embed-url="${watch}" target="_blank" rel="noopener" aria-label="Play video on Vimeo"><span class="td-embed-play" aria-hidden="true"></span><span class="td-embed-label">Watch on Vimeo</span></a>`;
     }
     return `<a class="td-embed-link" href="${esc(url)}" data-embed-url="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
+  },
+
+  /* <query tag:project show:tasks /> — a live list of matching notes or tasks.
+     The app fills the placeholder with results from the vault. */
+  query: (n, a) => {
+    const raw = a._raw || '';
+    return `<div class="td-query" data-query="${esc(raw)}"><div class="td-query-head"><span class="td-query-label">Query</span><code>${esc(raw || 'all notes')}</code></div><div class="td-query-body"></div></div>`;
   },
 
   /* <toc /> — table of contents, generated from all headings collected during render. */

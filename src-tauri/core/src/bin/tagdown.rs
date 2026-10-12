@@ -27,6 +27,7 @@ Commands:
   tasks [--done | --all] [--tag TAG]
                               Checklist items across notes (open ones by default)
   backlinks <note>            Notes that link to a note
+  query <query>               What a <query /> block lists, e.g. tag:project show:tasks
   syntax                      The Tagdown syntax reference
   mcp                         Run the MCP server on stdin/stdout for AI assistants
 
@@ -156,6 +157,20 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
                     current = task.note_id.clone();
                 }
                 println!("  [{}] {}", if task.done { "x" } else { " " }, task.text);
+            }
+            Ok(())
+        }
+        "query" => {
+            let out = lib.query(&args.join(" "))?;
+            for note in &out.notes {
+                println!("{}  {}", note.title, dim(&note.updated_at.format("%Y-%m-%d").to_string()));
+            }
+            for task in &out.tasks {
+                println!("[{}] {}  {}", if task.done { "x" } else { " " }, task.text, dim(&task.note_title));
+            }
+            let shown = out.notes.len().max(out.tasks.len());
+            if out.total > shown {
+                eprintln!("(showing {shown} of {}; add limit:N for more)", out.total);
             }
             Ok(())
         }

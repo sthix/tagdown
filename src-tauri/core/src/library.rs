@@ -11,8 +11,10 @@ use std::{
 use chrono::Utc;
 use serde::Serialize;
 
+pub use crate::tasks::{Task, TaskFilter};
 use crate::{
     frontmatter::derive_tags,
+    tasks::parse_tasks,
     links::{self, normalize_title, Backlink},
     models::{Note, SearchResult, SortOrder},
     search_index::SearchIndex,
@@ -37,24 +39,6 @@ pub struct NoteView {
     pub content: String,
     /// Titles of notes that link here.
     pub linked_from: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskFilter {
-    Open,
-    Done,
-    All,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Task {
-    pub note_id: String,
-    pub note_title: String,
-    pub text: String,
-    pub done: bool,
-    /// 1-based line in the note body.
-    pub line: usize,
 }
 
 impl Library {
@@ -196,6 +180,12 @@ impl Library {
         self.vault.save_note(&note.id, format!("{}\n", content.trim_end()))
     }
 
+    /// Run a query-block query (see `query.rs`) over the whole vault.
+    pub fn query(&mut self, raw: &str) -> Result<crate::query::QueryOutput, String> {
+        self.refresh_index()?;
+        crate::query::run(raw, self.vault.notes_with_content()?, Some(&self.search), &self.vault.meta.folders, None)
+    }
+
     pub fn backlinks(&self, reference: &str) -> Result<Vec<Backlink>, String> {
         let (note, _) = self.resolve(reference)?;
         Ok(links::backlinks(self.vault.notes_with_content()?, &note.id))
@@ -211,45 +201,10 @@ impl Library {
             if tag.as_ref().is_some_and(|t| !note.tags.iter().any(|nt| nt == t || nt.starts_with(&format!("{t}/")))) {
                 continue;
             }
-            for (line_index, text, done) in parse_tasks(&content) {
-                let wanted = match filter {
-                    TaskFilter::Open => !done,
-                    TaskFilter::Done => done,
-                    TaskFilter::All => true,
-                };
-                if wanted {
-                    tasks.push(Task { note_id: note.id.clone(), note_title: note.title.clone(), text, done, line: line_index + 1 });
-                }
-            }
+            tasks.extend(parse_tasks(&note, &content).into_iter().filter(|t| filter.wants(t.done)));
         }
         Ok(tasks)
     }
-}
-
-/// (line index, text, done) for each checklist item outside fenced code.
-fn parse_tasks(content: &str) -> Vec<(usize, String, bool)> {
-    let mut tasks = Vec::new();
-    let mut fence: Option<&str> = None;
-    for (i, line) in content.lines().enumerate() {
-        let trimmed = line.trim_start();
-        if let Some(f) = ["```", "~~~"].into_iter().find(|f| trimmed.starts_with(f)) {
-            fence = match fence { Some(open) if open == f => None, None => Some(f), other => other };
-            continue;
-        }
-        if fence.is_some() {
-            continue;
-        }
-        let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")).or_else(|| trimmed.strip_prefix("+ ")) else { continue };
-        let (done, text) = if let Some(t) = rest.strip_prefix("[ ] ") {
-            (false, t)
-        } else if let Some(t) = rest.strip_prefix("[x] ").or_else(|| rest.strip_prefix("[X] ")) {
-            (true, t)
-        } else {
-            continue;
-        };
-        tasks.push((i, text.trim().to_string(), done));
-    }
-    tasks
 }
 
 #[cfg(test)]

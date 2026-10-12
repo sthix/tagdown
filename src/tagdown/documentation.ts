@@ -209,6 +209,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
     summary: 'Power features for technical writing: math, diagrams, tabs, asides, keys, and more.',
     examples: [
       {
+        title: 'Live queries',
+        description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.',
+        syntax: '## Open project tasks\n\n<query tag:project show:tasks />\n\n## Recently edited\n\n<query folder:Work sort:updated limit:5 />'
+      },
+      {
         title: 'Math (KaTeX)',
         description: 'Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.',
         syntax: 'Inline math like $E = mc^2$ or:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$'

@@ -319,6 +319,20 @@ YouTube and Vimeo URLs render as a click-to-play thumbnail that opens the video 
 
 Power features for technical writing: math, diagrams, tabs, asides, keys, and more.
 
+### Live queries
+
+A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.
+
+```tagdown
+## Open project tasks
+
+<query tag:project show:tasks />
+
+## Recently edited
+
+<query folder:Work sort:updated limit:5 />
+```
+
 ### Math (KaTeX)
 
 Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.

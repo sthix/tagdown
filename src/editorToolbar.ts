@@ -40,6 +40,7 @@ export const MODULES: ToolbarModule[] = [
   { label: 'Definition list',   description: 'Term :: Definition pairs',        category: 'References',  template: '\nHTML :: HyperText Markup Language\nCSS :: Cascading Style Sheets\n' },
   { label: 'Wikilink',          description: 'Cross-note link [[Name]]',        category: 'References',  template: '[[Note Name]]' },
   { label: 'Horizontal rule',   description: 'Section divider',                 category: 'Blocks',      template: '\n---\n' },
+  { label: 'Query',             description: 'Live list of matching notes or tasks', category: 'References', template: '\n<query tag:project show:tasks />\n' },
   { label: 'Table of contents', description: 'Auto-generated headings list',    category: 'References',  template: '\n<toc />\n' },
   { label: 'Frontmatter',       description: 'YAML metadata header',            category: 'References',  template: '---\ntitle: \ndate: \n---\n' },
   { label: 'Highlight',         description: 'Marked / highlighted text',       category: 'Text',        template: '==highlighted==' },

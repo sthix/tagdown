@@ -10,6 +10,7 @@ import type { SourceBlock } from './tagdown/blocks';
 import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
+import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -87,6 +88,7 @@ const UI_ICONS: Record<string, string> = {
   eye: '<path d="M1.8 8s2.3-4.3 6.2-4.3S14.2 8 14.2 8s-2.3 4.3-6.2 4.3S1.8 8 1.8 8z" /><circle cx="8" cy="8" r="1.9" />',
   share: '<path d="M8 2.5v7.5M5.2 5.2L8 2.5l2.8 2.7" /><path d="M5 7.5H4.2c-.7 0-1.2.5-1.2 1.2v3.6c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V8.7c0-.7-.5-1.2-1.2-1.2H11" />',
   globe: '<circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.5 1.6 2.2 3.4 2.2 5.5S9.5 11.9 8 13.5C6.5 11.9 5.8 10.1 5.8 8S6.5 4.1 8 2.5z" />',
+  checklist: '<path d="M2.8 4.2l1.1 1.1 2-2.2M2.8 9.7l1.1 1.1 2-2.2" /><path d="M8 4.3h5.2M8 9.8h5.2" />',
   clock: '<circle cx="8" cy="8" r="5.6" /><path d="M8 4.8V8l2.2 1.4" />',
   printer: '<path d="M4.5 6V2.8h7V6" /><rect x="2.5" y="6" width="11" height="5" rx="1.1" /><path d="M4.5 9.5h7v3.7h-7z" />',
 };
@@ -336,6 +338,7 @@ function bindChrome() {
     if (event.metaKey && event.key === 's') { event.preventDefault(); await flushSave(); }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') { event.preventDefault(); await exportNoteHtml(); return; }
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
     if (event.metaKey && event.key.toLowerCase() === 'n') { event.preventDefault(); await createNote(); }
     if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
@@ -383,6 +386,7 @@ function paletteActions(): PaletteAction[] {
     ...(selectedNote ? [
       { id: 'export-html', label: 'Export as HTML…', hint: 'A standalone page that opens anywhere', shortcut: '⌘⇧E', icon: uiIcon('globe', 15), run: exportNoteHtml },
       { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
+      { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
       { id: 'history', label: 'Show version history', hint: 'Restore an earlier version of this note', shortcut: '⌘⇧H', icon: uiIcon('clock', 15), run: showVersionHistory },
     ] : []),
     { id: 'reference', label: 'Open Tagdown reference', hint: 'Syntax for callouts, tabs, math and more', icon: uiIcon('book', 15), run: () => openSettings('tagdown-reference') },
@@ -492,6 +496,8 @@ async function reloadFolders() {
 }
 
 async function reloadNotes() {
+  // Any change to the notes can change what query blocks list.
+  invalidateQueries();
   notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
   if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {
     selectedNote = null;
@@ -1196,6 +1202,7 @@ function paintPreview(el: HTMLElement) {
   el.innerHTML = html + append + backlinksHtml();
   markDocTitle(el);
   markWikilinks(el);
+  void fillQueries(el, { excludeId: selectedNote?.id ?? null });
   void applyExternals(el, getEffectiveTheme());
 }
 
@@ -1523,7 +1530,8 @@ function renderEditor() {
     // Reset on every press: the click this flag suppresses may never arrive if
     // the pressed element was re-rendered away.
     suppressPreviewClick = false;
-    if (!blockEdit || target.closest('.td-block-editor')) return;
+    // Ticking a task in a query block leaves an open block alone.
+    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note]')) return;
     event.preventDefault();
     suppressPreviewClick = true;
     const hint = textAroundPoint(event.clientX, event.clientY);
@@ -1536,6 +1544,20 @@ function renderEditor() {
   editorRoot.querySelector<HTMLDivElement>('.preview')?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
     if (suppressPreviewClick) { suppressPreviewClick = false; return; }
+    const queryTask = target.closest<HTMLInputElement>('input[data-task-note]');
+    if (queryTask) {
+      void toggleQueryTask(queryTask)
+        .then(async () => {
+          await reloadNotes();
+          const preview = editorRoot.querySelector<HTMLElement>('.preview');
+          if (preview) await fillQueries(preview, { excludeId: selectedNote?.id ?? null });
+        })
+        .catch(async (error) => {
+          queryTask.checked = !queryTask.checked;
+          await message(String(error), { title: 'Could not update the task', kind: 'warning' });
+        });
+      return;
+    }
     const backlink = target.closest<HTMLElement>('[data-open-note]');
     if (backlink) {
       event.preventDefault();
@@ -1740,6 +1762,14 @@ function bindExportMenu() {
   });
 }
 
+async function showOpenTasks() {
+  await settlePendingWork();
+  openTaskList({
+    openNote: (id) => revealNote(id),
+    afterToggle: () => reloadNotes(),
+  });
+}
+
 async function showVersionHistory() {
   if (!selectedNote) return;
   if (blockEdit) commitBlockEdit();
@@ -1766,6 +1796,12 @@ async function showVersionHistory() {
   });
 }
 
+/** Exports show a snapshot of each query block's current results. */
+async function exportQueries(root: HTMLElement) {
+  invalidateQueries();
+  await fillQueries(root, { excludeId: selectedNote?.id ?? null, interactive: false });
+}
+
 async function exportNoteHtml() {
   if (!selectedNote) return;
   const title = selectedNote.title || 'Untitled';
@@ -1776,7 +1812,7 @@ async function exportNoteHtml() {
   });
   if (!destPath) return;
   try {
-    await invoke('export_html', { html: await buildStandaloneHtml(title, content), destPath });
+    await invoke('export_html', { html: await buildStandaloneHtml(title, content, exportQueries), destPath });
     savedMessage = `Exported ${destPath.split('/').pop()}`;
     renderStatus();
   } catch (err) {
@@ -1787,7 +1823,7 @@ async function exportNoteHtml() {
 async function exportNotePdf() {
   if (!selectedNote) return;
   try {
-    await printNote(selectedNote.title || 'Untitled', content);
+    await printNote(selectedNote.title || 'Untitled', content, exportQueries);
   } catch (err) {
     await message(String(err), { title: 'Print failed', kind: 'error' });
   }

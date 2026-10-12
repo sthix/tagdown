@@ -42,10 +42,14 @@ function escapeHtml(value: string) {
 }
 
 /** Render a note to export-ready HTML: externals applied, title heading guaranteed. */
-async function renderDocument(title: string, source: string): Promise<string> {
+/** Fills live parts of a rendered note (query blocks) before it is captured. */
+export type Decorate = (root: HTMLElement) => Promise<void>;
+
+async function renderDocument(title: string, source: string, decorate?: Decorate): Promise<string> {
   const root = document.createElement('div');
   root.innerHTML = renderPreview(source);
   await applyExternals(root, 'light');
+  if (decorate) await decorate(root);
   const first = root.firstElementChild;
   if (title && first?.tagName !== 'H1') root.insertAdjacentHTML('afterbegin', `<h1>${escapeHtml(title)}</h1>`);
   return root.innerHTML;
@@ -77,8 +81,8 @@ async function embeddedKatexCss(): Promise<string> {
 }
 
 /** A standalone HTML document for the note. */
-export async function buildStandaloneHtml(title: string, source: string): Promise<string> {
-  const body = await renderDocument(title, source);
+export async function buildStandaloneHtml(title: string, source: string, decorate?: Decorate): Promise<string> {
+  const body = await renderDocument(title, source, decorate);
   const katex = body.includes('class="katex') ? await embeddedKatexCss() : '';
   const css = [tokensCss, previewCss, katex, EXPORT_CSS].join('\n');
   return `<!doctype html>
@@ -114,7 +118,7 @@ let printStyleInjected = false;
  * app's chrome is hidden by a print-only stylesheet and a light-theme render
  * of the note is shown instead, whatever theme the app is in.
  */
-export async function printNote(title: string, source: string) {
+export async function printNote(title: string, source: string, decorate?: Decorate) {
   if (!printStyleInjected) {
     const style = document.createElement('style');
     style.id = 'td-print-style';
@@ -136,6 +140,6 @@ export async function printNote(title: string, source: string) {
     root.id = 'print-root';
     document.body.append(root);
   }
-  root.innerHTML = `<main class="preview td-export">${await renderDocument(title, source)}</main>`;
+  root.innerHTML = `<main class="preview td-export">${await renderDocument(title, source, decorate)}</main>`;
   window.print();
 }

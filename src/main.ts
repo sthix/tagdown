@@ -4,7 +4,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { initSettings, openSettings } from './settings/settings';
 import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
 import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
-import { renderPreview, applyExternals } from './tagdown/renderer';
+import { renderEditablePreview, applyExternals } from './tagdown/renderer';
+import type { SourceBlock } from './tagdown/blocks';
 import { renderEditorToolbar } from './editorToolbar';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -120,6 +121,12 @@ let draggingFolderId: string | null = null;
 let dragOverTarget: { el: HTMLElement; cls: string } | null = null;
 let creatingTag = false;
 let showAllTags = false;
+// In-preview editing: the block currently open as raw Tagdown, and the block
+// map of the last preview render.
+type BlockEdit = { el: HTMLTextAreaElement; start: number; lineCount: number; originalCount: number; restoreIfEmpty: string | null };
+let blockEdit: BlockEdit | null = null;
+let previewBlocks: SourceBlock[] = [];
+let suppressPreviewClick = false;
 const TAG_PREVIEW_LIMIT = 6;
 let tagDraftColor: TagColorKey = 'blue';
 
@@ -130,7 +137,8 @@ initializeTheme();
 onThemePreferenceChange(() => {
   const lp = document.querySelector<HTMLDivElement>('#editor-root .preview');
   if (!lp) return;
-  paintPreview(lp);
+  if (blockEdit) commitBlockEdit();
+  else paintPreview(lp);
 });
 
 app.innerHTML = `
@@ -949,21 +957,170 @@ async function openNote(note: Note) {
 }
 
 function paintPreview(el: HTMLElement) {
-  el.innerHTML = renderPreview(content);
+  const { html, blocks } = renderEditablePreview(content);
+  previewBlocks = blocks;
+  const empty = !content.trim();
+  // Only offer in-place editing when the source could be mapped to blocks.
+  const append = blocks.length || empty
+    ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing…' : 'Click to add a block'}</div>`
+    : '';
+  el.innerHTML = html + append;
   markDocTitle(el);
   void applyExternals(el, getEffectiveTheme());
 }
 
 // The document header already shows the note title in large type; hide the
-// preview's leading H1 when it repeats that title.
+// preview's leading heading block when it only repeats that title.
 function markDocTitle(el: HTMLElement) {
-  const first = el.firstElementChild;
-  if (first?.tagName === 'H1' && first.textContent?.trim() === (selectedNote?.title || '').trim()) first.classList.add('is-doc-title');
+  const first = el.querySelector<HTMLElement>(':scope > .td-block');
+  const only = first?.children.length === 1 ? first.firstElementChild : null;
+  if (only?.tagName === 'H1' && only.textContent?.trim() === (selectedNote?.title || '').trim()) first!.classList.add('is-doc-title');
+}
+
+function scheduleSave() {
+  savedMessage = 'Saving…';
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(flushSave, 500);
+  renderStatus();
+}
+
+function syncSourceTextarea() {
+  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  if (!source || source.value === content) return;
+  const { scrollTop } = source;
+  source.value = content;
+  source.scrollTop = scrollTop;
+}
+
+function textAroundPoint(x: number, y: number): { before: string; after: string } | null {
+  const range = document.caretRangeFromPoint?.(x, y);
+  const node = range?.startContainer;
+  if (!range || !node || node.nodeType !== Node.TEXT_NODE) return null;
+  const data = (node as Text).data;
+  return { before: data.slice(Math.max(0, range.startOffset - 16), range.startOffset), after: data.slice(range.startOffset, range.startOffset + 16) };
+}
+
+// Place the caret where the click landed by finding the clicked words in the source.
+function caretOffset(text: string, hint: { before: string; after: string } | null) {
+  if (!hint) return text.length;
+  for (let n = hint.before.length; n >= 3; n--) {
+    const at = text.indexOf(hint.before.slice(-n));
+    if (at >= 0) return at + n;
+  }
+  for (let n = hint.after.length; n >= 3; n--) {
+    const at = text.indexOf(hint.after.slice(0, n));
+    if (at >= 0) return at;
+  }
+  return text.length;
+}
+
+function autoGrow(textarea: HTMLTextAreaElement) {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function startBlockEdit(blockEl: HTMLElement, hint: { before: string; after: string } | null = null) {
+  let index = Number(blockEl.dataset.block);
+  let block = previewBlocks[index];
+  if (!block) return;
+  if (blockEdit) {
+    // Close the open block first; lines after it shift by however much it grew.
+    const delta = blockEdit.lineCount - blockEdit.originalCount;
+    const targetStart = block.start + (block.start > blockEdit.start ? delta : 0);
+    commitBlockEdit();
+    index = previewBlocks.findIndex((candidate) => candidate.start === targetStart);
+    const fresh = editorRoot.querySelector<HTMLElement>(`.preview .td-block[data-block="${index}"]`);
+    if (index < 0 || !fresh) return;
+    blockEl = fresh;
+    block = previewBlocks[index];
+  }
+  openBlockEditor(blockEl, block.start, block.end - block.start, hint, null);
+}
+
+function startAppendBlock(preview: HTMLElement) {
+  if (blockEdit) commitBlockEdit();
+  const original = content;
+  const trimmed = content.replace(/\s+$/, '');
+  content = trimmed ? `${trimmed}\n\n` : '';
+  const wrap = document.createElement('div');
+  wrap.className = 'td-block';
+  preview.querySelector('[data-append-block]')?.before(wrap);
+  openBlockEditor(wrap, content.split('\n').length - 1, 1, null, original);
+}
+
+function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hint: { before: string; after: string } | null, restoreIfEmpty: string | null) {
+  const text = content.split('\n').slice(start, start + lineCount).join('\n');
+  const textarea = document.createElement('textarea');
+  textarea.className = 'td-block-editor';
+  textarea.value = text;
+  textarea.spellcheck = true;
+  textarea.setAttribute('aria-label', 'Edit block. Press Escape to finish.');
+  wrap.classList.remove('is-doc-title');
+  wrap.classList.add('is-editing');
+  wrap.replaceChildren(textarea);
+  blockEdit = { el: textarea, start, lineCount, originalCount: lineCount, restoreIfEmpty };
+  editorRoot.classList.add('is-block-editing');
+  autoGrow(textarea);
+  textarea.focus({ preventScroll: true });
+  const caret = caretOffset(text, hint);
+  textarea.setSelectionRange(caret, caret);
+
+  textarea.addEventListener('input', () => {
+    if (blockEdit?.el !== textarea) return;
+    const lines = content.split('\n');
+    const next = textarea.value.split('\n');
+    lines.splice(blockEdit.start, blockEdit.lineCount, ...next);
+    blockEdit.lineCount = next.length;
+    content = lines.join('\n');
+    autoGrow(textarea);
+    syncSourceTextarea();
+    scheduleSave();
+  });
+  textarea.addEventListener('keydown', (event) => {
+    const finish = event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey));
+    if (finish || (event.key === 'Backspace' && !textarea.value)) {
+      event.preventDefault();
+      event.stopPropagation();
+      commitBlockEdit();
+    }
+  });
+  textarea.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      if (blockEdit?.el !== textarea) return;
+      // Formatting from the dock or the components menu keeps the block open.
+      const active = document.activeElement;
+      if (active === textarea || active?.closest('.format-dock, .toolbar-menu')) return;
+      commitBlockEdit();
+    }, 0);
+  });
+}
+
+function commitBlockEdit() {
+  if (!blockEdit) return;
+  const edit = blockEdit;
+  blockEdit = null;
+  editorRoot.classList.remove('is-block-editing');
+  if (!edit.el.value.trim()) {
+    if (edit.restoreIfEmpty !== null) {
+      content = edit.restoreIfEmpty;
+    } else {
+      // An emptied block is removed, along with the blank line that separated it.
+      const lines = content.split('\n');
+      lines.splice(edit.start, edit.lineCount);
+      if (lines[edit.start - 1]?.trim() === '' && (lines[edit.start] === undefined || lines[edit.start].trim() === '')) lines.splice(edit.start - 1, 1);
+      content = lines.join('\n');
+      scheduleSave();
+    }
+    syncSourceTextarea();
+  }
+  const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (preview) paintPreview(preview);
 }
 
 function renderEditor() {
+  blockEdit = null;
   const title = selectedNote?.title || 'Untitled';
-  const preview = `<div class="preview td-note-root">${renderPreview(content)}</div>`;
+  const preview = '<div class="preview td-note-root"></div>';
   const textarea = `<textarea id="source" spellcheck="true" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
   editorRoot.className = `editor-root mode-${viewMode}`;
   const folder = selectedNote ? folders.find((f) => f.id === selectedNote!.folderId) : null;
@@ -994,7 +1151,7 @@ function renderEditor() {
       </div>
     </div>
     <div class="editor-body">${viewMode === 'source' ? textarea : viewMode === 'preview' ? preview : `<div class="split">${textarea}${preview}</div>`}</div>
-    ${viewMode === 'preview' ? '' : `<div class="format-dock">${renderEditorToolbar()}</div>`}
+    <div class="format-dock">${renderEditorToolbar()}</div>
   ` : `
     <header class="editor-topbar is-empty" data-tauri-drag-region>
       ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
@@ -1026,8 +1183,17 @@ function renderEditor() {
     renderEditor();
   });
 
+  // Keep focus in whichever editor is active when using the dock.
+  editorRoot.querySelectorAll<HTMLButtonElement>('.format-dock button').forEach((button) => {
+    button.addEventListener('mousedown', (event) => event.preventDefault());
+  });
   editorRoot.querySelectorAll<HTMLButtonElement>('[data-insert], [data-wrap]').forEach((button) => {
     button.addEventListener('click', () => {
+      const openMenu = button.closest<HTMLElement>('.toolbar-menu');
+      if (openMenu) {
+        openMenu.hidden = true;
+        editorRoot.querySelector('#insert-module')?.setAttribute('aria-expanded', 'false');
+      }
       if (button.dataset.wrap) {
         const [left, right] = button.dataset.wrap.split('|');
         wrapSelection(left, right);
@@ -1101,10 +1267,33 @@ function renderEditor() {
   }
 
   const livePreviewInit = editorRoot.querySelector<HTMLDivElement>('.preview');
-  if (livePreviewInit) { markDocTitle(livePreviewInit); void applyExternals(livePreviewInit, getEffectiveTheme()); }
+  if (livePreviewInit) paintPreview(livePreviewInit);
+
+  editorRoot.querySelector('.doc-title')?.addEventListener('click', () => {
+    const titleBlock = editorRoot.querySelector<HTMLElement>('.preview .td-block.is-doc-title');
+    if (titleBlock) startBlockEdit(titleBlock);
+  });
+
+  // While a block is open, a press elsewhere in the preview closes it (and opens
+  // the pressed block) before focus moves, so the follow-up click is ignored.
+  livePreviewInit?.addEventListener('mousedown', (event) => {
+    const target = event.target as HTMLElement;
+    // Reset on every press: the click this flag suppresses may never arrive if
+    // the pressed element was re-rendered away.
+    suppressPreviewClick = false;
+    if (!blockEdit || target.closest('.td-block-editor')) return;
+    event.preventDefault();
+    suppressPreviewClick = true;
+    const hint = textAroundPoint(event.clientX, event.clientY);
+    const blockEl = target.closest<HTMLElement>('.td-block');
+    if (target.closest('[data-append-block]')) { startAppendBlock(livePreviewInit); return; }
+    if (blockEl && !isInteractive(target)) startBlockEdit(blockEl, hint);
+    else commitBlockEdit();
+  });
 
   editorRoot.querySelector<HTMLDivElement>('.preview')?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
+    if (suppressPreviewClick) { suppressPreviewClick = false; return; }
     // Video embeds / external links open in the system browser via the opener
     // plugin, so the WebView never navigates away from the app.
     const embed = target.closest<HTMLElement>('[data-embed-url]');
@@ -1122,7 +1311,15 @@ function renderEditor() {
       const all = Array.from(preview.querySelectorAll<HTMLInputElement>('.td-task input[type="checkbox"]'));
       const idx = all.indexOf(target as HTMLInputElement);
       if (idx >= 0) toggleTaskAt(idx);
+      return;
     }
+    const previewEl = event.currentTarget as HTMLElement;
+    if (target.closest('[data-append-block]')) { startAppendBlock(previewEl); return; }
+    if (isInteractive(target)) return;
+    // Let people select text to copy without opening the editor.
+    if (window.getSelection()?.isCollapsed === false) return;
+    const blockEl = target.closest<HTMLElement>('.td-block');
+    if (blockEl) startBlockEdit(blockEl, textAroundPoint(event.clientX, event.clientY));
   });
 
   const source = document.querySelector<HTMLTextAreaElement>('#source');
@@ -1140,7 +1337,20 @@ function renderEditor() {
   renderStatus();
 }
 
+function isInteractive(target: HTMLElement) {
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag');
+}
+
 function insertText(text: string, atLineStart = false) {
+  if (blockEdit) {
+    const textarea = blockEdit.el;
+    let start = textarea.selectionStart;
+    if (atLineStart) while (start > 0 && textarea.value[start - 1] !== '\n') start--;
+    textarea.focus();
+    textarea.setRangeText(text, start, textarea.selectionEnd, 'end');
+    textarea.dispatchEvent(new Event('input'));
+    return;
+  }
   const source = document.querySelector<HTMLTextAreaElement>('#source');
   if (!source) return;
   let start = source.selectionStart;
@@ -1157,6 +1367,16 @@ function insertText(text: string, atLineStart = false) {
 }
 
 function wrapSelection(left: string, right: string) {
+  if (blockEdit) {
+    const textarea = blockEdit.el;
+    const { selectionStart: start, selectionEnd: end } = textarea;
+    const selected = textarea.value.slice(start, end);
+    textarea.focus();
+    textarea.setRangeText(left + selected + right, start, end);
+    textarea.setSelectionRange(start + left.length, start + left.length + selected.length);
+    textarea.dispatchEvent(new Event('input'));
+    return;
+  }
   const source = document.querySelector<HTMLTextAreaElement>('#source');
   if (!source) return;
   const start = source.selectionStart;

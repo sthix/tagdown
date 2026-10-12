@@ -78,6 +78,8 @@
   line-height: 1.15;
   letter-spacing: -.015em;
 }
+.mode-split .doc-title,
+.mode-preview .doc-title { cursor: text; }
 .doc-meta {
   margin-top: 8px;
   display: flex;
@@ -177,6 +179,11 @@ textarea#source,
   backdrop-filter: blur(18px) saturate(1.6);
 }
 .mode-split .format-dock { right: 50%; }
+/* In Preview the dock only appears while a block is open for editing; in Split
+   it follows the block over to the preview half. */
+.mode-preview .format-dock { display: none; }
+.mode-preview.is-block-editing .format-dock { display: block; }
+.mode-split.is-block-editing .format-dock { right: 0; left: 50%; }
 @keyframes dock-in { from { opacity: 0; translate: 0 8px; } }
 
 .format-toolbar {

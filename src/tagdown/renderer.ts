@@ -1,4 +1,5 @@
 import { tagdown } from './parser.js';
+import { markSource, splitBlocks, wrapBlocks, type SourceBlock } from './blocks';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import mermaid from 'mermaid';
@@ -59,6 +60,18 @@ export function renderPreview(source: string): string {
   }
 
   return host.innerHTML;
+}
+
+/**
+ * Render with every top-level block wrapped in `.td-block[data-block]` so the
+ * preview can be edited in place. Falls back to a plain render (and no blocks)
+ * when the source can't be mapped reliably.
+ */
+export function renderEditablePreview(source: string): { html: string; blocks: SourceBlock[] } {
+  const blocks = splitBlocks(source);
+  if (!blocks.length) return { html: '', blocks };
+  const wrapped = wrapBlocks(renderPreview(markSource(source, blocks)), blocks.length);
+  return wrapped === null ? { html: renderPreview(source), blocks: [] } : { html: wrapped, blocks };
 }
 
 let mermaidConfiguredTheme: 'light' | 'dark' | null = null;

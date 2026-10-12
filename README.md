@@ -10,7 +10,7 @@ Tagdown Editor is a macOS-focused Tauri app for writing structured notes without
 </p>
 
 <p align="center">
-  <a href="docs/README.md"><strong>Read the documentation →</strong></a>
+  <a href="https://sthix.github.io/tagdown/"><strong>Read the documentation →</strong></a>
 </p>
 
 ---
@@ -126,6 +126,8 @@ claude mcp add tagdown -- tagdown mcp
 Claude Desktop setup, every command, and the full list of MCP tools are in [Command line and AI assistants](docs/cli-and-mcp.md).
 
 ## Documentation
+
+The guides below are also published at **[sthix.github.io/tagdown](https://sthix.github.io/tagdown/)**.
 
 | | |
 | --- | --- |

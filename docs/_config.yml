@@ -1,0 +1,65 @@
+# GitHub Pages site for the docs: https://sthix.github.io/tagdown/
+# GitHub builds it from main /docs. The pages carry no front matter so they
+# read the same on github.com; titles come from each page's first heading and
+# the sidebar order is set under `defaults`.
+title: Tagdown
+description: A fast, local-first desktop editor for Tagdown notes.
+baseurl: /tagdown
+url: https://sthix.github.io
+
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+  - jekyll-relative-links
+  - jekyll-readme-index
+
+titles_from_headings:
+  enabled: true
+  strip_title: false
+  collections: false
+
+relative_links:
+  enabled: true
+
+search_enabled: true
+heading_anchors: true
+back_to_top: true
+aux_links:
+  GitHub: https://github.com/sthix/tagdown
+aux_links_new_tab: true
+footer_content: 'Tagdown Editor is <a href="https://github.com/sthix/tagdown/blob/main/LICENSE">MIT licensed</a>.'
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub
+gh_edit_repository: https://github.com/sthix/tagdown
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+
+defaults:
+  - scope: { path: "" }
+    values: { layout: default }
+  - scope: { path: "README.md" }
+    values: { nav_order: 1, title: Home }
+  - scope: { path: "getting-started.md" }
+    values: { nav_order: 2 }
+  - scope: { path: "writing-notes.md" }
+    values: { nav_order: 3 }
+  - scope: { path: "syntax.md" }
+    values: { nav_order: 4 }
+  - scope: { path: "organizing.md" }
+    values: { nav_order: 5 }
+  - scope: { path: "queries-and-tasks.md" }
+    values: { nav_order: 6 }
+  - scope: { path: "version-history.md" }
+    values: { nav_order: 7 }
+  - scope: { path: "sharing.md" }
+    values: { nav_order: 8 }
+  - scope: { path: "cli-and-mcp.md" }
+    values: { nav_order: 9 }
+  - scope: { path: "keyboard-shortcuts.md" }
+    values: { nav_order: 10 }
+  - scope: { path: "development.md" }
+    values: { nav_order: 11 }

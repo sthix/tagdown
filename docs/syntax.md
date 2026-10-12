@@ -2,7 +2,7 @@
 
 Tagdown is Markdown plus a small tag layer. Plain Markdown is always valid Tagdown; reach for the extras when they make a note clearer.
 
-This page is a quick tour. The complete reference, with every attribute and an example for each component, is [`src-tauri/core/src/syntax.md`](../src-tauri/core/src/syntax.md). It is generated from the same source as the app's **Settings → Tagdown Reference** and the reference the MCP server gives AI assistants, so it is always current.
+This page is a quick tour. The complete reference, with every attribute and an example for each component, is [`src-tauri/core/src/syntax.md`](https://github.com/sthix/tagdown/blob/main/src-tauri/core/src/syntax.md). It is generated from the same source as the app's **Settings → Tagdown Reference** and the reference the MCP server gives AI assistants, so it is always current.
 
 ## Notes, tags, and links
 

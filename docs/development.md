@@ -56,4 +56,4 @@ The Tagdown reference has one source: `src/tagdown/documentation.ts`. It feeds t
 
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org): `feat(scope): …`, `fix: …`, `docs: …`, `style(ui): …`.
 - Notes stay plain Markdown files. New features should keep the vault readable without the app.
-- See [`PROJECT_PLAN.md`](../PROJECT_PLAN.md) for the roadmap.
+- See [`PROJECT_PLAN.md`](https://github.com/sthix/tagdown/blob/main/PROJECT_PLAN.md) for the roadmap.

@@ -2,7 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { initSettings, openSettings } from './settings/settings';
-import { initializeTheme, getEffectiveTheme, onThemePreferenceChange } from './settings/theme';
+import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
+import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
 import { renderPreview, applyExternals } from './tagdown/renderer';
 import { renderEditorToolbar } from './editorToolbar';
 import './styles/tokens.css';
@@ -12,6 +13,7 @@ import './styles/note-list.css';
 import './styles/editor.css';
 import './styles/preview.css';
 import './styles/settings.css';
+import './styles/palette.css';
 
 type SortOrder = 'updatedDesc' | 'createdDesc' | 'titleAsc' | 'titleDesc' | 'wordCountDesc';
 type ViewMode = 'source' | 'split' | 'preview';
@@ -58,6 +60,30 @@ const FOLDER_ICONS: FolderIcon[] = [
   { key: 'person', label: 'Personal', svg: '<circle cx="8" cy="5.5" r="2.1" /><path d="M3.8 13c.7-2.1 2.2-3.2 4.2-3.2s3.5 1.1 4.2 3.2" />' },
 ];
 
+const UI_ICONS: Record<string, string> = {
+  search: '<circle cx="7.2" cy="7.2" r="4.4" /><path d="M10.5 10.5l3 3" />',
+  compose: '<path d="M8.5 3H4.2c-.7 0-1.2.5-1.2 1.2v7.6c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" /><path d="M11.6 2.6l1.8 1.8-5.2 5.2-2.3.5.5-2.3 5.2-5.2z" />',
+  plus: '<path d="M8 3.5v9M3.5 8h9" />',
+  sliders: '<path d="M2.5 4.5h4.2M10.3 4.5h3.2M2.5 11.5h1.7M7.8 11.5h5.7" /><circle cx="8.5" cy="4.5" r="1.8" /><circle cx="6" cy="11.5" r="1.8" />',
+  pin: '<path d="M9.8 2.5l3.7 3.7-1.6.6-2.3 2.3-.3 2.6-1 1-4-4 1-1 2.6-.3 2.3-2.3z" /><path d="M5 11l-2.5 2.5" />',
+  close: '<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />',
+  trash: '<path d="M3 4.5h10M6.5 4.5V3.2c0-.4.3-.7.7-.7h1.6c.4 0 .7.3.7.7v1.3M4.3 4.5l.6 8.2c0 .5.5.8.9.8h4.4c.5 0 .9-.4.9-.8l.6-8.2" />',
+  hash: '<path d="M6.3 2.5L5 13.5M11 2.5L9.7 13.5M3 6h10.5M2.5 10H13" />',
+  chevronDown: '<path d="M4.5 6.3L8 9.8l3.5-3.5" />',
+  focus: '<path d="M2.8 6V3.6c0-.4.4-.8.8-.8H6M10 2.8h2.4c.4 0 .8.4.8.8V6M13.2 10v2.4c0 .4-.4.8-.8.8H10M6 13.2H3.6c-.4 0-.8-.4-.8-.8V10" />',
+  sidebar: '<rect x="2.5" y="3" width="11" height="10" rx="1.6" /><path d="M6.3 3v10" />',
+  moon: '<path d="M12.8 9.6A5.2 5.2 0 016.4 3.2a5.2 5.2 0 106.4 6.4z" />',
+  sun: '<circle cx="8" cy="8" r="2.6" /><path d="M8 1.8v1.4M8 12.8v1.4M3.6 3.6l1 1M11.4 11.4l1 1M1.8 8h1.4M12.8 8h1.4M3.6 12.4l1-1M11.4 4.6l1-1" />',
+  book: '<path d="M3.4 3.2h4c.7 0 1.3.6 1.3 1.3v8.3c-.3-.5-.8-.8-1.5-.8H3.4V3.2z" /><path d="M8.7 4.5c0-.7.6-1.3 1.3-1.3h2.6V12H10c-.6 0-1.1.3-1.3.8" />',
+  source: '<path d="M5.5 4.5L2.5 8l3 3.5M10.5 4.5l3 3.5-3 3.5" />',
+  split: '<rect x="2.5" y="3" width="11" height="10" rx="1.6" /><path d="M8 3v10" />',
+  eye: '<path d="M1.8 8s2.3-4.3 6.2-4.3S14.2 8 14.2 8s-2.3 4.3-6.2 4.3S1.8 8 1.8 8z" /><circle cx="8" cy="8" r="1.9" />',
+};
+
+function uiIcon(key: keyof typeof UI_ICONS, size = 14) {
+  return `<svg class="ui-icon" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${UI_ICONS[key]}</svg>`;
+}
+
 const TAG_COLORS: Record<TagColorKey, { dot: string; soft: string; ink: string }> = {
   slate:  { dot: 'oklch(0.55 0.02 256)', soft: 'oklch(0.93 0.01 256)', ink: 'oklch(0.35 0.02 256)' },
   blue:   { dot: 'oklch(0.6 0.16 256)',  soft: 'oklch(0.94 0.04 256)', ink: 'oklch(0.4 0.15 256)' },
@@ -73,6 +99,9 @@ const TAG_COLOR_KEYS: TagColorKey[] = ['slate', 'blue', 'teal', 'green', 'amber'
 let notes: Note[] = [];
 let folders: Folder[] = [];
 let allNotesCount = 0;
+// Every non-archived note, independent of the folder/tag/filter being viewed.
+// Sidebar counts read from this so they don't change with the current list.
+let libraryNotes: Note[] = [];
 let tags: Tag[] = [];
 let selectedNote: Note | null = null;
 let selectedFolder: string | null = null;
@@ -83,7 +112,8 @@ let content = '';
 let viewMode: ViewMode = 'split';
 let saveTimer: number | undefined;
 let savedMessage = 'Ready';
-let searchQuery = '';
+let focusMode = false;
+let markerAnimateUntil = 0;
 let creatingFolderParent: string | null | undefined;
 let expandedFolders: Record<string, boolean> = {};
 let draggingFolderId: string | null = null;
@@ -98,51 +128,45 @@ initializeTheme();
 onThemePreferenceChange(() => {
   const lp = document.querySelector<HTMLDivElement>('#editor-root .preview');
   if (!lp) return;
-  lp.innerHTML = renderPreview(content);
-  void applyExternals(lp, getEffectiveTheme());
+  paintPreview(lp);
 });
 
 app.innerHTML = `
-  <header class="titlebar" data-tauri-drag-region>
-    <div class="app-brand"><strong>Tagdown</strong><span id="document-title">Tagdown Editor</span></div>
-    <label class="search-shell" aria-label="Search notes">
-      <span aria-hidden="true">⌕</span>
-      <input id="search" placeholder="Search notes, tags, content…" autocomplete="off" spellcheck="false" />
-      <kbd>⌘K</kbd>
-    </label>
-    <div class="mode-switch" role="group" aria-label="View mode">
-      <button data-mode="source" type="button">Source</button>
-      <button data-mode="split" type="button">Split</button>
-      <button data-mode="preview" type="button">Preview</button>
+  <aside class="sidebar">
+    <div class="sidebar-top" data-tauri-drag-region>
+      <button id="sidebar-collapse" class="chrome-icon-button" type="button" title="Focus mode (⌘\\)" aria-label="Toggle focus mode">${uiIcon('sidebar', 15)}</button>
     </div>
-    <button id="new-note" class="new-note-button" type="button" aria-label="Create new note">✎ <span>New</span></button>
-    <button id="settings-button" class="chrome-icon-button" type="button" aria-label="Open settings">⚙</button>
-  </header>
-  <main class="shell">
-    <aside class="sidebar">
-      <header>
-        <span class="sidebar-title">Library</span>
-        <span class="sidebar-count" id="library-count">0</span>
-      </header>
+    <div class="sidebar-actions">
+      <button id="open-palette" class="sidebar-search" type="button" title="Search and commands (⌘K)">
+        ${uiIcon('search', 14)}<span>Search</span><kbd>⌘K</kbd>
+      </button>
+      <button id="new-note" class="new-note-button" type="button" title="New note (⌘N)">${uiIcon('compose', 14)}<span>New note</span></button>
+    </div>
+    <nav class="sidebar-scroll" aria-label="Library">
       <section>
-        <h2 class="section-header"><span>Documents</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">+</button></h2>
+        <h2 class="section-header"><span>Library</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">${uiIcon('plus', 12)}</button></h2>
         <div id="folders"></div>
       </section>
       <section>
-        <h2 class="section-header"><span>Tags <span class="section-count" id="tag-count">0</span></span><button id="new-tag" class="section-add" type="button" title="New tag" aria-label="New tag">+</button></h2>
+        <h2 class="section-header"><span>Tags <span class="section-count" id="tag-count">0</span></span><button id="new-tag" class="section-add" type="button" title="New tag" aria-label="New tag">${uiIcon('plus', 12)}</button></h2>
         <div id="tags"></div>
       </section>
-    </aside>
+    </nav>
+    <footer class="sidebar-foot">
+      <button id="settings-button" class="sidebar-foot-button" type="button" title="Settings (⌘,)">${uiIcon('sliders', 14)}<span>Settings</span></button>
+      <button id="theme-toggle" class="chrome-icon-button" type="button" title="Switch theme (⌘⇧D)" aria-label="Switch theme"></button>
+    </footer>
+  </aside>
+  <main class="sheet">
     <section class="note-list">
-      <header>
-        <p class="pane-eyebrow">Notes</p>
-        <div class="note-list-heading">
-          <span class="scope-icon" aria-hidden="true">▤</span>
+      <header data-tauri-drag-region>
+        <div class="note-list-heading" data-tauri-drag-region>
+          <span class="scope-icon" aria-hidden="true"></span>
           <h1 id="note-list-title">All Notes</h1>
           <span id="note-list-count">0</span>
-          <button id="note-list-new" class="mini-icon-button" type="button" title="New note">+</button>
+          <button id="note-list-new" class="mini-icon-button" type="button" title="New note (⌘N)" aria-label="New note">${uiIcon('plus', 14)}</button>
         </div>
-        <div class="filter-pills" aria-label="Quick filters">
+        <div class="filter-pills" role="group" aria-label="Quick filters">
           <button data-filter="all" type="button">All</button><button data-filter="pinned" type="button">Pinned</button><button data-filter="untagged" type="button">Untagged</button><button data-filter="recent" type="button">Recent</button>
         </div>
       </header>
@@ -150,19 +174,14 @@ app.innerHTML = `
     </section>
     <section class="editor-pane"><div id="editor-root"></div></section>
   </main>
-  <footer class="status"><span id="counts"></span><span id="saved"></span></footer>
 `;
 
 const folderEl = document.querySelector<HTMLDivElement>('#folders')!;
 const noteEl = document.querySelector<HTMLDivElement>('#notes')!;
 const tagEl = document.querySelector<HTMLDivElement>('#tags')!;
 const editorRoot = document.querySelector<HTMLDivElement>('#editor-root')!;
-const countsEl = document.querySelector<HTMLSpanElement>('#counts')!;
-const savedEl = document.querySelector<HTMLSpanElement>('#saved')!;
-const documentTitleEl = document.querySelector<HTMLSpanElement>('#document-title')!;
 const noteListTitleEl = document.querySelector<HTMLHeadingElement>('#note-list-title')!;
 const noteListCountEl = document.querySelector<HTMLSpanElement>('#note-list-count')!;
-const libraryCountEl = document.querySelector<HTMLSpanElement>('#library-count')!;
 const scopeIconEl = document.querySelector<HTMLSpanElement>('.scope-icon')!;
 const tagCountEl = document.querySelector<HTMLSpanElement>('#tag-count')!;
 
@@ -178,7 +197,12 @@ async function boot() {
 }
 
 function bindChrome() {
-  document.querySelector('#settings-button')?.addEventListener('click', () => openSettings());
+  document.querySelector('#settings-button')?.addEventListener('click', () => openSettings('general'));
+  document.querySelector('#open-palette')?.addEventListener('click', () => openPalette());
+  document.querySelector('#sidebar-collapse')?.addEventListener('click', toggleFocusMode);
+  document.querySelector('#theme-toggle')?.addEventListener('click', toggleTheme);
+  onThemePreferenceChange(renderThemeToggle);
+  renderThemeToggle();
   document.querySelector('#new-note')?.addEventListener('click', createNote);
   document.querySelector('#note-list-new')?.addEventListener('click', createNote);
   document.querySelector('#new-folder')?.addEventListener('click', () => {
@@ -191,13 +215,6 @@ function bindChrome() {
     renderTags();
   });
 
-  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
-    button.addEventListener('click', () => {
-      viewMode = button.dataset.mode as ViewMode;
-      renderEditor();
-    });
-  });
-
   document.querySelectorAll<HTMLButtonElement>('.filter-pills button').forEach((btn) => {
     btn.addEventListener('click', () => {
       activeFilter = (btn.dataset.filter as QuickFilter) ?? 'all';
@@ -206,20 +223,12 @@ function bindChrome() {
     });
   });
 
-  document.querySelector<HTMLInputElement>('#search')?.addEventListener('input', async (event) => {
-    searchQuery = (event.target as HTMLInputElement).value;
-    activeFilter = 'all';
-    renderFilterPills();
-    if (!searchQuery.trim()) return reloadNotes();
-    const results = await invoke<Array<{ note: Note }>>('search', { query: searchQuery });
-    notes = results.map((r) => r.note);
-    renderFolders();
-    renderNotes();
-  });
-
   window.addEventListener('keydown', async (event) => {
+    if (event.metaKey && event.key.toLowerCase() === 'k') { event.preventDefault(); openPalette(); return; }
+    if (isPaletteOpen()) return;
+    if (event.metaKey && event.key === '\\') { event.preventDefault(); toggleFocusMode(); return; }
     if (event.metaKey && event.key === ',') { event.preventDefault(); openSettings(); }
-    if (event.metaKey && event.shiftKey && event.key === 'd') { event.preventDefault(); openSettings('appearance'); }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); toggleTheme(); }
     if (event.metaKey && event.key === 's') { event.preventDefault(); await flushSave(); }
     if (event.metaKey && event.key.toLowerCase() === 'n') { event.preventDefault(); await createNote(); }
     if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
@@ -228,6 +237,87 @@ function bindChrome() {
       renderEditor();
     }
   });
+}
+
+function setViewMode(mode: ViewMode) {
+  viewMode = mode;
+  renderEditor();
+}
+
+function toggleFocusMode() {
+  focusMode = !focusMode;
+  app.classList.toggle('is-focus', focusMode);
+  const collapse = document.querySelector<HTMLButtonElement>('#sidebar-collapse');
+  collapse?.setAttribute('aria-pressed', String(focusMode));
+  renderEditor();
+}
+
+function toggleTheme() {
+  setThemePreference(getEffectiveTheme() === 'dark' ? 'light' : 'dark');
+}
+
+function renderThemeToggle() {
+  const button = document.querySelector<HTMLButtonElement>('#theme-toggle');
+  if (!button) return;
+  const dark = getEffectiveTheme() === 'dark';
+  button.innerHTML = uiIcon(dark ? 'sun' : 'moon', 15);
+  button.title = dark ? 'Switch to light theme (⌘⇧D)' : 'Switch to dark theme (⌘⇧D)';
+}
+
+function paletteActions(): PaletteAction[] {
+  const dark = getEffectiveTheme() === 'dark';
+  return [
+    { id: 'new', label: 'New note', hint: selectedFolder && selectedFolder !== 'archive' ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
+    { id: 'source', label: 'Show source', shortcut: '⌘1', icon: uiIcon('source', 15), run: () => setViewMode('source') },
+    { id: 'split', label: 'Show source and preview', shortcut: '⌘2', icon: uiIcon('split', 15), run: () => setViewMode('split') },
+    { id: 'preview', label: 'Show preview', shortcut: '⌘3', icon: uiIcon('eye', 15), run: () => setViewMode('preview') },
+    { id: 'focus', label: focusMode ? 'Exit focus mode' : 'Enter focus mode', hint: 'Hide the sidebar and note list', shortcut: '⌘\\', icon: uiIcon('focus', 15), run: toggleFocusMode },
+    { id: 'theme', label: dark ? 'Switch to light theme' : 'Switch to dark theme', shortcut: '⌘⇧D', icon: uiIcon(dark ? 'sun' : 'moon', 15), run: toggleTheme },
+    { id: 'reference', label: 'Open Tagdown reference', hint: 'Syntax for callouts, tabs, math and more', icon: uiIcon('book', 15), run: () => openSettings('tagdown-reference') },
+    { id: 'settings', label: 'Open settings', shortcut: '⌘,', icon: uiIcon('sliders', 15), run: () => openSettings('general') },
+  ];
+}
+
+function openPalette() {
+  void openCommandPalette({
+    noteIcon: iconSvg('notes', 15),
+    notes: async () => {
+      const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
+      return all.filter((note) => note.folderId !== 'archive').map((note) => ({
+        id: note.id,
+        title: note.title,
+        preview: note.preview,
+        tags: note.tags,
+        folderName: folders.find((f) => f.id === note.folderId)?.name ?? null,
+        updatedLabel: formatDate(note.updatedAt),
+      }));
+    },
+    searchContent: async (query) => (await invoke<Array<{ note: Note }>>('search', { query })).map((r) => r.note.id),
+    actions: paletteActions,
+    openNote: async (id) => {
+      const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
+      const note = all.find((candidate) => candidate.id === id);
+      if (!note) return;
+      if (!notes.some((candidate) => candidate.id === id)) {
+        selectedFolder = null;
+        selectedTag = null;
+        activeFilter = 'all';
+        renderFilterPills();
+        await reloadNotes();
+      }
+      await openNote(note);
+      document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
+    },
+  });
+}
+
+function markerClass(selected: boolean) {
+  if (!selected) return '';
+  return performance.now() < markerAnimateUntil ? 'marker-swash is-new' : 'marker-swash';
+}
+
+function noteMarkerChange() {
+  markerAnimateUntil = performance.now() + 400;
 }
 
 async function createNote() {
@@ -280,7 +370,8 @@ async function deleteTag(id: string) {
 async function reloadFolders() {
   folders = await invoke<Folder[]>('list_folders');
   const allNotes = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
-  allNotesCount = allNotes.filter((note) => note.folderId !== 'archive').length;
+  libraryNotes = allNotes.filter((note) => note.folderId !== 'archive');
+  allNotesCount = libraryNotes.length;
   renderFolders();
 }
 
@@ -289,7 +380,7 @@ async function reloadNotes() {
   if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {
     selectedNote = null;
     content = '';
-    documentTitleEl.textContent = 'Tagdown Editor';
+    setDocumentTitle('Tagdown Editor');
     renderEditor();
   }
   renderFolders();
@@ -326,10 +417,10 @@ function renderFolders() {
         <button class="folder ${selected ? 'selected' : ''}" data-folder="${folder.id}" style="padding-left: ${rowInset(depth)}px" type="button" draggable="true">
           <span class="folder-disclosure ${isExpanded ? 'open' : ''} ${children.length ? '' : 'is-empty'}" data-toggle-folder="${folder.id}" aria-hidden="true">${iconSvg('chevron', 10)}</span>
           <span class="folder-icon" aria-hidden="true">${iconSvg('folder', 13)}</span>
-          <span class="folder-name">${escapeHtml(folder.name)}</span>
+          <span class="folder-name"><span class="${markerClass(selected)}">${escapeHtml(folder.name)}</span></span>
           <span class="folder-count">${folder.noteCount ?? 0}</span>
-          <span class="folder-child-add" data-new-child="${folder.id}" role="button" tabindex="-1" title="New nested folder" aria-label="New nested folder">+</span>
-          <span class="folder-delete" data-delete-folder="${folder.id}" role="button" tabindex="-1" title="Delete folder" aria-label="Delete folder">×</span>
+          <span class="folder-child-add" data-new-child="${folder.id}" role="button" tabindex="-1" title="New nested folder" aria-label="New nested folder">${uiIcon('plus', 12)}</span>
+          <span class="folder-delete" data-delete-folder="${folder.id}" role="button" tabindex="-1" title="Delete folder" aria-label="Delete folder">${uiIcon('trash', 12)}</span>
         </button>
         ${isExpanded ? (createRow(folder.id, depth + 1) + children.map((child) => renderFolderRow(child, depth + 1)).join('')) : ''}
       </div>
@@ -337,16 +428,16 @@ function renderFolders() {
   };
 
   folderEl.innerHTML = `
-    <button class="folder system-folder ${selectedFolder === null ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
+    <button class="folder system-folder ${selectedFolder === null && !selectedTag ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
       <span class="folder-disclosure is-empty" aria-hidden="true"></span>
       <span class="folder-icon" aria-hidden="true">${iconSvg('notes', 13)}</span>
-      <span class="folder-name">All Notes</span>
+      <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag)}">All Notes</span></span>
       <span class="folder-count">${allNotesCount}</span>
     </button>
     <button class="folder system-folder ${selectedFolder === 'archive' ? 'selected' : ''}" data-folder="archive" style="padding-left: ${rowInset(0)}px" type="button">
       <span class="folder-disclosure is-empty" aria-hidden="true"></span>
       <span class="folder-icon" aria-hidden="true">${iconSvg('archive', 13)}</span>
-      <span class="folder-name">Archive</span>
+      <span class="folder-name"><span class="${markerClass(selectedFolder === 'archive')}">Archive</span></span>
       <span class="folder-count">${archive?.noteCount ?? 0}</span>
     </button>
     ${createRow(null, 0)}
@@ -355,6 +446,7 @@ function renderFolders() {
 
   folderEl.querySelectorAll<HTMLButtonElement>('.folder').forEach((button) => {
     button.addEventListener('click', async () => {
+      noteMarkerChange();
       selectedFolder = button.dataset.folder || null;
       selectedTag = null;
       activeFilter = 'all';
@@ -429,7 +521,6 @@ function renderFolders() {
   const currentFolder = selectedFolder ? folders.find((folder) => folder.id === selectedFolder) : null;
   noteListTitleEl.textContent = currentFolder?.name ?? 'All Notes';
   scopeIconEl.innerHTML = currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : 'notes');
-  libraryCountEl.textContent = String(notes.length);
 }
 
 function iconSvg(key: string | null | undefined, size = 16) {
@@ -581,20 +672,29 @@ function renderNotes() {
   const visible = applyQuickFilter(notes);
   noteListCountEl.textContent = `${visible.length}`;
   if (!visible.length) {
-    noteEl.innerHTML = '<div class="empty"><div class="empty-icon">▥</div><strong>No notes here</strong><span>Nothing matches this filter yet.</span></div>';
+    const filtered = activeFilter !== 'all';
+    noteEl.innerHTML = `<div class="empty"><div class="empty-icon">${iconSvg('notes', 22)}</div><strong>${filtered ? 'Nothing matches this filter' : 'This list is empty'}</strong><span>${filtered ? 'Switch back to All to see every note here.' : 'Write the first note here. It saves as plain text in your vault.'}</span>${filtered ? '' : `<button type="button" class="empty-action" data-empty-list-new>${uiIcon('plus', 13)}New note</button>`}</div>`;
+    noteEl.querySelector('[data-empty-list-new]')?.addEventListener('click', createNote);
     renderTags();
     return;
   }
+  let lastGroup = '';
   noteEl.innerHTML = visible.map((note) => {
-    const date = formatDate(note.updatedAt);
-    const tagMarkup = note.tags.slice(0, 3).map((tag) => `<span><i></i>${escapeHtml(tag)}</span>`).join('');
-    return `
-      <article class="note-card ${selectedNote?.id === note.id ? 'selected' : ''}" data-note="${note.id}" tabindex="0">
-        <div class="note-card-topline"><time>${date}</time>${note.starred ? '<span class="starred" aria-label="Pinned">⌖</span>' : ''}</div>
-        <h3>${escapeHtml(note.title || 'Untitled')}</h3>
-        <p>${escapeHtml(note.preview || 'No additional text')}</p>
-        <small>${tagMarkup || '<span>untagged</span>'}<em>${note.wordCount || 0} ${(note.wordCount || 0) === 1 ? 'word' : 'words'}</em></small>
-        <button class="note-delete" data-delete-note="${note.id}" type="button" title="Delete note" aria-label="Delete note">×</button>
+    const group = dateGroup(note.updatedAt);
+    const heading = group !== lastGroup ? `<h2 class="note-group">${group}</h2>` : '';
+    lastGroup = group;
+    const tagMarkup = note.tags.slice(0, 3).map((tag) => `<span style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag.split('/').pop() ?? tag)}</span>`).join('');
+    const extraTags = note.tags.length > 3 ? `<span class="more">+${note.tags.length - 3}</span>` : '';
+    const archived = note.folderId === 'archive';
+    return `${heading}
+      <article class="note-card ${selectedNote?.id === note.id ? 'selected' : ''}" data-note="${note.id}" tabindex="0" aria-current="${selectedNote?.id === note.id}">
+        <div class="note-card-head">
+          <h3>${escapeHtml(note.title || 'Untitled')}</h3>
+          <time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>
+        </div>
+        <p>${escapeHtml(note.preview || 'Empty note')}</p>
+        ${tagMarkup || note.starred ? `<footer>${note.starred ? `<span class="starred" title="Pinned" aria-label="Pinned">${uiIcon('pin', 11)}</span>` : ''}${tagMarkup}${extraTags}</footer>` : ''}
+        <button class="note-delete" data-delete-note="${note.id}" type="button" title="${archived ? 'Delete permanently' : 'Move to Archive'}" aria-label="${archived ? 'Delete permanently' : 'Move to Archive'}">${archived ? uiIcon('trash', 13) : iconSvg('archive', 13)}</button>
       </article>
     `;
   }).join('');
@@ -638,7 +738,7 @@ type TagNode = { path: string; name: string; children: TagNode[]; hasRecord: boo
 
 function noteTagPaths(): string[] {
   const set = new Set<string>();
-  for (const note of notes) {
+  for (const note of libraryNotes) {
     if (note.folderId === 'archive') continue;
     for (const t of note.tags) set.add(t);
   }
@@ -672,7 +772,7 @@ function buildTagTree(): TagNode[] {
 }
 
 function tagCount(path: string): number {
-  return notes.filter(
+  return libraryNotes.filter(
     (note) =>
       note.folderId !== 'archive' &&
       note.tags.some((t) => t === path || t.startsWith(`${path}/`)),
@@ -690,6 +790,7 @@ function colorForTag(path: string) {
 }
 
 async function selectTag(path: string) {
+  noteMarkerChange();
   selectedTag = path;
   selectedFolder = null;
   activeFilter = 'all';
@@ -703,13 +804,13 @@ async function selectTag(path: string) {
   if (selectedNote && !notes.some((n) => n.id === selectedNote!.id)) {
     selectedNote = null;
     content = '';
-    documentTitleEl.textContent = 'Tagdown Editor';
+    setDocumentTitle('Tagdown Editor');
     renderEditor();
   }
   renderFolders();
   renderNotes();
   noteListTitleEl.textContent = `#${path}`;
-  scopeIconEl.textContent = '#';
+  scopeIconEl.innerHTML = uiIcon('hash', 16);
 }
 
 function renderTags() {
@@ -748,12 +849,12 @@ function renderTags() {
     const deletable = node.hasRecord && count === 0;
     return `
       <div class="tag-tree-item">
-        <div class="tag-row ${selected ? 'selected' : ''}" data-tag-path="${escapeHtml(node.path)}" style="padding-left: ${rowInset(depth)}px">
+        <div class="tag-row ${selected ? 'selected' : ''}" data-tag-path="${escapeHtml(node.path)}" role="button" tabindex="0" aria-pressed="${selected}" style="padding-left: ${rowInset(depth)}px">
           <span class="tag-disclosure ${isExpanded ? 'open' : ''} ${node.children.length ? '' : 'is-empty'}" data-toggle-tag="${escapeHtml(node.path)}" aria-hidden="true">${iconSvg('chevron', 10)}</span>
           <span class="tag-dot" style="background:${c.dot}"></span>
-          <span class="tag-name">${escapeHtml(node.name)}</span>
+          <span class="tag-name"><span class="${markerClass(selected)}">${escapeHtml(node.name)}</span></span>
           <span class="tag-count">${count}</span>
-          ${deletable ? `<button class="tag-delete" data-delete-tag-name="${escapeHtml(node.path)}" type="button" title="Delete tag" aria-label="Delete tag">×</button>` : ''}
+          ${deletable ? `<button class="tag-delete" data-delete-tag-name="${escapeHtml(node.path)}" type="button" title="Delete tag" aria-label="Delete tag">${uiIcon('close', 11)}</button>` : ''}
         </div>
         ${isExpanded ? node.children.map((child) => renderTagRow(child, depth + 1)).join('') : ''}
       </div>
@@ -770,6 +871,10 @@ function renderTags() {
 
   tagEl.querySelectorAll<HTMLElement>('.tag-row').forEach((row) => {
     row.addEventListener('click', () => selectTag(row.dataset.tagPath!));
+    row.addEventListener('keydown', (event) => {
+      if (event.target !== row) return;
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTag(row.dataset.tagPath!); }
+    });
   });
   tagEl.querySelectorAll<HTMLElement>('[data-toggle-tag]').forEach((toggle) => {
     toggle.addEventListener('click', (event) => {
@@ -827,9 +932,22 @@ async function openNote(note: Note) {
   selectedNote = note;
   const noteContent = await invoke<NoteContent>('get_note_content', { id: note.id });
   content = noteContent.content;
-  documentTitleEl.textContent = note.title || 'Untitled';
+  setDocumentTitle(note.title || 'Untitled');
   renderNotes();
   renderEditor();
+}
+
+function paintPreview(el: HTMLElement) {
+  el.innerHTML = renderPreview(content);
+  markDocTitle(el);
+  void applyExternals(el, getEffectiveTheme());
+}
+
+// The document header already shows the note title in large type; hide the
+// preview's leading H1 when it repeats that title.
+function markDocTitle(el: HTMLElement) {
+  const first = el.firstElementChild;
+  if (first?.tagName === 'H1' && first.textContent?.trim() === (selectedNote?.title || '').trim()) first.classList.add('is-doc-title');
 }
 
 function renderEditor() {
@@ -837,23 +955,58 @@ function renderEditor() {
   const preview = `<div class="preview td-note-root">${renderPreview(content)}</div>`;
   const textarea = `<textarea id="source" spellcheck="true" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
   editorRoot.className = `editor-root mode-${viewMode}`;
+  const folder = selectedNote ? folders.find((f) => f.id === selectedNote!.folderId) : null;
+  const modeButton = (mode: ViewMode, icon: string, label: string, key: string) =>
+    `<button data-mode="${mode}" type="button" title="${label} (⌘${key})" aria-label="${label}" class="${viewMode === mode ? 'selected' : ''}" aria-pressed="${viewMode === mode}">${uiIcon(icon, 14)}<span>${label}</span></button>`;
   editorRoot.innerHTML = selectedNote ? `
-    <header class="editor-header">
-      <div class="editor-title-block">
-        <input id="title-input" value="${escapeHtml(title)}" aria-label="Note title" readonly />
-        <div class="editor-meta"><span>${wordCount(content)} words</span><span>·</span><span>${stripText(content).length} chars</span><span>·</span><span>${formatDate(selectedNote.updatedAt)}</span>${selectedNote.starred ? '<span>·</span><span class="pinned-label">⌖ Pinned</span>' : ''}</div>
+    <header class="editor-topbar" data-tauri-drag-region>
+      ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
+      <nav class="crumbs" aria-label="Location" data-tauri-drag-region>
+        <span class="crumb">${folder ? folderIconSvg(folder.icon) : iconSvg('notes', 14)}${escapeHtml(folder?.name ?? 'Notes')}</span>
+        <span class="crumb-sep" aria-hidden="true">/</span>
+        <span class="crumb is-current">${escapeHtml(title)}</span>
+      </nav>
+      <div class="topbar-right">
+        <span id="saved"></span>
+        <div class="mode-switch" role="group" aria-label="View mode">
+          ${modeButton('source', 'source', 'Source', '1')}${modeButton('split', 'split', 'Split', '2')}${modeButton('preview', 'eye', 'Preview', '3')}
+        </div>
+        <button id="pin-note" class="chrome-icon-button pin-button ${selectedNote.starred ? 'active' : ''}" type="button" aria-pressed="${selectedNote.starred}" title="${selectedNote.starred ? 'Unpin note' : 'Pin note'}" aria-label="${selectedNote.starred ? 'Unpin note' : 'Pin note'}">${uiIcon('pin', 15)}</button>
       </div>
-      <button id="pin-note" class="mini-icon-button ${selectedNote.starred ? 'active' : ''}" type="button" title="Pin note">⌖</button>
     </header>
-    ${renderEditorToolbar()}
+    <div class="doc-header">
+      <h1 class="doc-title">${escapeHtml(title)}</h1>
+      <div class="doc-meta">
+        <span>Edited ${formatDate(selectedNote.updatedAt)}</span>
+        <span id="counts"></span>
+        ${selectedNote.tags.length ? `<span class="doc-tags">${selectedNote.tags.map((tag) => `<button type="button" class="doc-tag" data-doc-tag="${escapeHtml(tag)}" style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag)}</button>`).join('')}</span>` : ''}
+      </div>
+    </div>
     <div class="editor-body">${viewMode === 'source' ? textarea : viewMode === 'preview' ? preview : `<div class="split">${textarea}${preview}</div>`}</div>
-  ` : '<div class="empty-editor"><div>✎</div><strong>No note selected</strong><span>Pick a note from the list, or press ⌘N to start a new one.</span></div>';
+    ${viewMode === 'preview' ? '' : `<div class="format-dock">${renderEditorToolbar()}</div>`}
+  ` : `
+    <header class="editor-topbar is-empty" data-tauri-drag-region>
+      ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
+    </header>
+    <div class="empty-editor">
+      <h2>Pick a note, or start a fresh page.</h2>
+      <p>Everything you write is saved as plain text in your vault.</p>
+      <div class="empty-editor-actions">
+        <button type="button" class="empty-editor-action is-primary" data-empty-new>${uiIcon('compose', 14)}New note<kbd>⌘N</kbd></button>
+        <button type="button" class="empty-editor-action" data-empty-search>${uiIcon('search', 14)}Search<kbd>⌘K</kbd></button>
+      </div>
+    </div>`;
 
-  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
-    const selected = button.dataset.mode === viewMode;
-    button.classList.toggle('selected', selected);
-    button.setAttribute('aria-pressed', String(selected));
+  editorRoot.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
+    button.addEventListener('click', () => setViewMode(button.dataset.mode as ViewMode));
   });
+  editorRoot.querySelector('[data-exit-focus]')?.addEventListener('click', toggleFocusMode);
+  editorRoot.querySelector('[data-empty-search]')?.addEventListener('click', () => openPalette());
+  editorRoot.querySelectorAll<HTMLButtonElement>('[data-doc-tag]').forEach((button) => {
+    button.addEventListener('click', () => selectTag(button.dataset.docTag!));
+  });
+
+  editorRoot.querySelector('[data-empty-new]')?.addEventListener('click', createNote);
 
   document.querySelector('#pin-note')?.addEventListener('click', async () => {
     if (!selectedNote) return;
@@ -888,9 +1041,17 @@ function renderEditor() {
     };
     const open = () => {
       const rect = trigger.getBoundingClientRect();
-      menu.style.top = `${rect.bottom + 4}px`;
-      menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
       menu.hidden = false;
+      const width = menu.offsetWidth;
+      menu.style.left = `${Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 8)}px`;
+      menu.style.right = 'auto';
+      if (rect.top > window.innerHeight / 2) {
+        menu.style.top = 'auto';
+        menu.style.bottom = `${window.innerHeight - rect.top + 10}px`;
+      } else {
+        menu.style.bottom = 'auto';
+        menu.style.top = `${rect.bottom + 10}px`;
+      }
       trigger.setAttribute('aria-expanded', 'true');
       menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
       docClick = (e) => {
@@ -929,7 +1090,7 @@ function renderEditor() {
   }
 
   const livePreviewInit = editorRoot.querySelector<HTMLDivElement>('.preview');
-  if (livePreviewInit) void applyExternals(livePreviewInit, getEffectiveTheme());
+  if (livePreviewInit) { markDocTitle(livePreviewInit); void applyExternals(livePreviewInit, getEffectiveTheme()); }
 
   editorRoot.querySelector<HTMLDivElement>('.preview')?.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
@@ -961,8 +1122,7 @@ function renderEditor() {
     saveTimer = window.setTimeout(flushSave, 500);
     const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
     if (livePreview) {
-      livePreview.innerHTML = renderPreview(content);
-      void applyExternals(livePreview, getEffectiveTheme());
+      paintPreview(livePreview);
     }
     renderStatus();
   });
@@ -1015,8 +1175,7 @@ function toggleTaskAt(taskIndex: number) {
       if (source) source.value = content;
       const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
       if (livePreview) {
-        livePreview.innerHTML = renderPreview(content);
-        void applyExternals(livePreview, getEffectiveTheme());
+        paintPreview(livePreview);
       }
       savedMessage = 'Saving…';
       window.clearTimeout(saveTimer);
@@ -1031,15 +1190,25 @@ function toggleTaskAt(taskIndex: number) {
 async function flushSave() {
   if (!selectedNote) return;
   selectedNote = await invoke<Note>('save_note', { id: selectedNote.id, content });
+  const saved = selectedNote;
+  libraryNotes = libraryNotes.map((note) => (note.id === saved.id ? saved : note));
   await reloadNotes();
   savedMessage = 'Saved';
-  documentTitleEl.textContent = selectedNote.title || 'Untitled';
+  setDocumentTitle(selectedNote.title || 'Untitled');
+  const titleText = selectedNote.title || 'Untitled';
+  editorRoot.querySelectorAll('.doc-title, .crumb.is-current').forEach((el) => { el.textContent = titleText; });
   renderStatus();
 }
 
 function renderStatus() {
-  countsEl.textContent = selectedNote ? `${wordCount(content)} words · ${content.length} characters` : 'No note';
-  savedEl.textContent = `${savedMessage} · ${viewMode}`;
+  const countsEl = document.querySelector<HTMLSpanElement>('#counts');
+  const savedEl = document.querySelector<HTMLSpanElement>('#saved');
+  const words = wordCount(content);
+  if (countsEl) countsEl.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
+  if (!savedEl) return;
+  const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Saved' ? 'saved' : 'idle';
+  savedEl.className = `save-state is-${state}`;
+  savedEl.innerHTML = `<i aria-hidden="true"></i><span>${state === 'idle' ? 'Saved to vault' : escapeHtml(savedMessage)}</span>`;
 }
 
 function wordCount(value: string) {
@@ -1058,6 +1227,36 @@ function formatDate(value: string) {
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: date.getFullYear() === now.getFullYear() ? undefined : '2-digit' });
+}
+
+function setDocumentTitle(title: string) {
+  document.title = title === 'Tagdown Editor' ? title : `${title} — Tagdown`;
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function daysAgo(value: string) {
+  return Math.round((startOfDay(new Date()) - startOfDay(new Date(value))) / 86_400_000);
+}
+
+function dateGroup(value: string) {
+  const days = daysAgo(value);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return 'Previous 7 days';
+  if (days < 30) return 'Previous 30 days';
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, { month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+}
+
+function formatCardDate(value: string) {
+  const date = new Date(value);
+  const days = daysAgo(value);
+  if (days <= 0) return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  if (days < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: date.getFullYear() === new Date().getFullYear() ? undefined : '2-digit' });
 }
 
 function escapeHtml(value: string) {

@@ -1,12 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { save, message } from '@tauri-apps/plugin-dialog';
 import { initSettings, openSettings } from './settings/settings';
 import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
 import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
 import { renderEditablePreview, applyExternals } from './tagdown/renderer';
 import type { SourceBlock } from './tagdown/blocks';
 import { renderEditorToolbar } from './editorToolbar';
+import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -79,6 +81,9 @@ const UI_ICONS: Record<string, string> = {
   source: '<path d="M5.5 4.5L2.5 8l3 3.5M10.5 4.5l3 3.5-3 3.5" />',
   split: '<rect x="2.5" y="3" width="11" height="10" rx="1.6" /><path d="M8 3v10" />',
   eye: '<path d="M1.8 8s2.3-4.3 6.2-4.3S14.2 8 14.2 8s-2.3 4.3-6.2 4.3S1.8 8 1.8 8z" /><circle cx="8" cy="8" r="1.9" />',
+  share: '<path d="M8 2.5v7.5M5.2 5.2L8 2.5l2.8 2.7" /><path d="M5 7.5H4.2c-.7 0-1.2.5-1.2 1.2v3.6c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V8.7c0-.7-.5-1.2-1.2-1.2H11" />',
+  globe: '<circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.5 1.6 2.2 3.4 2.2 5.5S9.5 11.9 8 13.5C6.5 11.9 5.8 10.1 5.8 8S6.5 4.1 8 2.5z" />',
+  printer: '<path d="M4.5 6V2.8h7V6" /><rect x="2.5" y="6" width="11" height="5" rx="1.1" /><path d="M4.5 9.5h7v3.7h-7z" />',
 };
 
 function uiIcon(key: keyof typeof UI_ICONS, size = 14) {
@@ -236,6 +241,8 @@ function bindChrome() {
     if (event.metaKey && event.key === ',') { event.preventDefault(); openSettings(); }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); toggleTheme(); }
     if (event.metaKey && event.key === 's') { event.preventDefault(); await flushSave(); }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') { event.preventDefault(); await exportNoteHtml(); return; }
+    if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
     if (event.metaKey && event.key.toLowerCase() === 'n') { event.preventDefault(); await createNote(); }
     if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
       event.preventDefault();
@@ -279,6 +286,10 @@ function paletteActions(): PaletteAction[] {
     { id: 'preview', label: 'Show preview', shortcut: '⌘3', icon: uiIcon('eye', 15), run: () => setViewMode('preview') },
     { id: 'focus', label: focusMode ? 'Exit focus mode' : 'Enter focus mode', hint: 'Hide the sidebar and note list', shortcut: '⌘\\', icon: uiIcon('focus', 15), run: toggleFocusMode },
     { id: 'theme', label: dark ? 'Switch to light theme' : 'Switch to dark theme', shortcut: '⌘⇧D', icon: uiIcon(dark ? 'sun' : 'moon', 15), run: toggleTheme },
+    ...(selectedNote ? [
+      { id: 'export-html', label: 'Export as HTML…', hint: 'A standalone page that opens anywhere', shortcut: '⌘⇧E', icon: uiIcon('globe', 15), run: exportNoteHtml },
+      { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
+    ] : []),
     { id: 'reference', label: 'Open Tagdown reference', hint: 'Syntax for callouts, tabs, math and more', icon: uiIcon('book', 15), run: () => openSettings('tagdown-reference') },
     { id: 'settings', label: 'Open settings', shortcut: '⌘,', icon: uiIcon('sliders', 15), run: () => openSettings('general') },
   ];
@@ -1139,6 +1150,13 @@ function renderEditor() {
         <div class="mode-switch" role="group" aria-label="View mode">
           ${modeButton('source', 'source', 'Source', '1')}${modeButton('split', 'split', 'Split', '2')}${modeButton('preview', 'eye', 'Preview', '3')}
         </div>
+        <div class="export-dropdown">
+          <button id="export-note" class="chrome-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="Export" aria-label="Export">${uiIcon('share', 15)}</button>
+          <div class="export-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-export="html">${uiIcon('globe', 14)}<span>Export as HTML…</span><kbd>⌘⇧E</kbd></button>
+            <button type="button" role="menuitem" data-export="pdf">${uiIcon('printer', 14)}<span>Print or save as PDF…</span><kbd>⌘P</kbd></button>
+          </div>
+        </div>
         <button id="pin-note" class="chrome-icon-button pin-button ${selectedNote.starred ? 'active' : ''}" type="button" aria-pressed="${selectedNote.starred}" title="${selectedNote.starred ? 'Unpin note' : 'Pin note'}" aria-label="${selectedNote.starred ? 'Unpin note' : 'Pin note'}">${uiIcon('pin', 15)}</button>
       </div>
     </header>
@@ -1182,6 +1200,8 @@ function renderEditor() {
     await reloadNotes();
     renderEditor();
   });
+
+  bindExportMenu();
 
   // Keep focus in whichever editor is active when using the dock.
   editorRoot.querySelectorAll<HTMLButtonElement>('.format-dock button').forEach((button) => {
@@ -1431,13 +1451,80 @@ async function flushSave() {
   renderStatus();
 }
 
+function bindExportMenu() {
+  const trigger = editorRoot.querySelector<HTMLButtonElement>('#export-note');
+  const menu = editorRoot.querySelector<HTMLElement>('.export-menu');
+  if (!trigger || !menu) return;
+  const onDocClick = (event: MouseEvent) => {
+    if (!(event.target as Element).closest?.('.export-dropdown')) close();
+  };
+  const onDocKey = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') { close(); trigger.focus(); }
+  };
+  function close() {
+    menu!.hidden = true;
+    trigger!.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('keydown', onDocKey);
+  }
+  trigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!menu.hidden) return close();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onDocKey);
+  });
+  menu.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(idx + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+  });
+  menu.querySelectorAll<HTMLButtonElement>('[data-export]').forEach((item) => {
+    item.addEventListener('click', () => {
+      close();
+      void (item.dataset.export === 'pdf' ? exportNotePdf() : exportNoteHtml());
+    });
+  });
+}
+
+async function exportNoteHtml() {
+  if (!selectedNote) return;
+  const title = selectedNote.title || 'Untitled';
+  const destPath = await save({
+    title: 'Export as HTML',
+    defaultPath: exportFileName(title, 'html'),
+    filters: [{ name: 'HTML document', extensions: ['html'] }],
+  });
+  if (!destPath) return;
+  try {
+    await invoke('export_html', { html: await buildStandaloneHtml(title, content), destPath });
+    savedMessage = `Exported ${destPath.split('/').pop()}`;
+    renderStatus();
+  } catch (err) {
+    await message(String(err), { title: 'Export failed', kind: 'error' });
+  }
+}
+
+async function exportNotePdf() {
+  if (!selectedNote) return;
+  try {
+    await printNote(selectedNote.title || 'Untitled', content);
+  } catch (err) {
+    await message(String(err), { title: 'Print failed', kind: 'error' });
+  }
+}
+
 function renderStatus() {
   const countsEl = document.querySelector<HTMLSpanElement>('#counts');
   const savedEl = document.querySelector<HTMLSpanElement>('#saved');
   const words = wordCount(content);
   if (countsEl) countsEl.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
   if (!savedEl) return;
-  const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Saved' ? 'saved' : 'idle';
+  const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Saved' || savedMessage.startsWith('Exported') ? 'saved' : 'idle';
   savedEl.className = `save-state is-${state}`;
   savedEl.innerHTML = `<i aria-hidden="true"></i><span>${state === 'idle' ? 'Saved to vault' : escapeHtml(savedMessage)}</span>`;
 }

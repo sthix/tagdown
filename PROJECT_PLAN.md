@@ -9,7 +9,7 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 - Use `@tauri-apps/plugin-dialog` for folder/save dialogs.
 - Use `@tauri-apps/plugin-opener` for Finder reveal/open actions.
 - Use Tantivy for full search once the command/UI slice is stable; the scaffold currently includes a lightweight search fallback.
-- Defer PDF export until a reliable macOS/Tauri print-to-PDF path is selected.
+- Export PDF through the native print dialog (Tauri's `window.print()` on macOS) with a print-only stylesheet.
 
 ## Phase 1 — MVP vertical slice
 
@@ -35,9 +35,9 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 ## Phase 4 — Import, export, settings
 
 - Add drag-and-drop `.md` import.
-- Implement standalone HTML export using the parser output and bundled CSS/fonts.
+- ~~Implement standalone HTML export using the parser output and bundled CSS/fonts.~~ Done.
 - Add settings persistence and panels.
-- Spike PDF export separately.
+- ~~Spike PDF export separately.~~ Done: print dialog → Save as PDF.
 
 ## Phase 5 — Native polish
 

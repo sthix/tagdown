@@ -208,7 +208,7 @@
 }
 .preview .td-task input[type="checkbox"] {
   margin: 0;
-  accent-color: var(--pv-accent);
+  accent-color: var(--marker-text);
   transform: translateY(2px);
 }
 .preview .td-task input[type="checkbox"]:checked + span {

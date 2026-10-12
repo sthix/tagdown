@@ -12,12 +12,11 @@
   animation: palette-in .18s var(--ease-out) both;
 }
 .palette::backdrop {
-  background: rgba(22,24,29,.22);
+  background: var(--backdrop);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   animation: palette-fade .18s ease both;
 }
-:root[data-theme="dark"] .palette::backdrop { background: rgba(0,0,0,.45); }
 .palette.is-closing { animation: palette-out .11s ease both; }
 @keyframes palette-in { from { opacity: 0; transform: translateY(-6px) scale(.985); } }
 @keyframes palette-out { to { opacity: 0; transform: scale(.985); } }

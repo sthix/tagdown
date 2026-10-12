@@ -85,7 +85,7 @@ function uiIcon(key: keyof typeof UI_ICONS, size = 14) {
 }
 
 const TAG_COLORS: Record<TagColorKey, { dot: string; soft: string; ink: string }> = {
-  slate:  { dot: 'oklch(0.55 0.02 256)', soft: 'oklch(0.93 0.01 256)', ink: 'oklch(0.35 0.02 256)' },
+  slate:  { dot: 'oklch(0.58 0.025 80)', soft: 'oklch(0.94 0.012 80)', ink: 'oklch(0.36 0.025 80)' },
   blue:   { dot: 'oklch(0.6 0.16 256)',  soft: 'oklch(0.94 0.04 256)', ink: 'oklch(0.4 0.15 256)' },
   teal:   { dot: 'oklch(0.62 0.11 195)', soft: 'oklch(0.94 0.03 195)', ink: 'oklch(0.4 0.11 195)' },
   green:  { dot: 'oklch(0.6 0.14 145)',  soft: 'oklch(0.94 0.04 145)', ink: 'oklch(0.4 0.13 145)' },

@@ -10,7 +10,7 @@
 }
 
 .settings-dialog::backdrop {
-  background: rgba(0, 0, 0, .55);
+  background: var(--backdrop);
   backdrop-filter: blur(4px);
 }
 
@@ -90,7 +90,7 @@
 .settings-tabs button[aria-selected="true"] {
   background: var(--selection);
   color: var(--accent-soft);
-  border-color: rgba(184, 57, 14, .45);
+  border-color: var(--marker-strong);
 }
 
 .settings-panels {
@@ -244,7 +244,7 @@
 .tagdown-ref-nav button[aria-pressed="true"] {
   background: var(--selection);
   color: var(--accent-soft);
-  border-color: rgba(184, 57, 14, .45);
+  border-color: var(--marker-strong);
 }
 
 .tagdown-ref-detail {
@@ -507,7 +507,7 @@
 }
 .tagdown-reference-preview .td-code-body { padding: 12px 0; color: var(--pv-pre-fg); overflow-x: auto; }
 .tagdown-reference-preview .td-code-line { display: flex; padding: 0 16px; }
-.tagdown-reference-preview .td-code-line.hl { background: rgba(244, 162, 97, 0.12); border-left: 2px solid var(--pv-accent); padding-left: 14px; }
+.tagdown-reference-preview .td-code-line.hl { background: var(--marker-soft); border-left: 2px solid var(--pv-accent); padding-left: 14px; }
 .tagdown-reference-preview .td-code-num {
   color: var(--pv-pre-num-fg);
   user-select: none;
@@ -831,7 +831,7 @@
 }
 
 .confirm-dialog::backdrop {
-  background: rgba(0, 0, 0, .45);
+  background: var(--backdrop);
   backdrop-filter: blur(4px);
 }
 

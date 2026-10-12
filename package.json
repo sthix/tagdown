@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "gen:syntax": "node scripts/gen-syntax.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

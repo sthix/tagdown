@@ -87,6 +87,17 @@ impl SearchIndex {
                 Index::create_in_dir(dir, schema).map_err(err)?
             }
         };
+        Self::with_index(index, fields)
+    }
+
+    /// An index that lives only in memory, for tools that read the vault while
+    /// the app holds the on-disk index.
+    pub fn in_memory() -> Result<Self, String> {
+        let (schema, fields) = schema();
+        Self::with_index(Index::create_in_ram(schema), fields)
+    }
+
+    fn with_index(index: Index, fields: Fields) -> Result<Self, String> {
         index.tokenizers().register(TOKENIZER, analyzer());
         let writer = index.writer_with_num_threads(1, WRITER_MEMORY).map_err(err)?;
         let reader = index.reader_builder().reload_policy(ReloadPolicy::Manual).try_into().map_err(err)?;
@@ -395,7 +406,7 @@ pub fn plain_text(content: &str) -> String {
         if trimmed.is_empty() || is_markup_only {
             continue;
         }
-        let text = trimmed.trim_start_matches(['#', '>']).trim_start();
+        let text = crate::links::strip_line_marker(trimmed);
         if !out.is_empty() {
             out.push(' ');
         }
@@ -536,7 +547,7 @@ mod tests {
 
     #[test]
     fn plain_text_drops_markup() {
-        let text = plain_text("# Title\n\n::: info\nSee [the docs](https://x.y) and [[Other|label]].\n:::\n\n```js\ncode()\n```\n<tabs>\n**bold** ==mark==");
-        assert_eq!(text, "Title See the docs and Other label. code() bold mark");
+        let text = plain_text("# Title\n\n::: info\nSee [the docs](https://x.y) and [[Other|label]].\n:::\n\n```js\ncode()\n```\n<tabs>\n**bold** ==mark==\n- [ ] Open task\n  - [x] Done task\n1. First");
+        assert_eq!(text, "Title See the docs and Other label. code() bold mark Open task Done task First");
     }
 }

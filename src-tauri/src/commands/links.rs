@@ -28,19 +28,7 @@ fn is_live(note: &Note) -> bool {
 #[tauri::command]
 pub async fn backlinks(id: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<Backlink>, String> {
     let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
-    let Some(title) = notes.iter().find(|(note, _)| note.id == id).map(|(note, _)| note.title.clone()) else {
-        return Ok(Vec::new());
-    };
-    let mut backlinks: Vec<Backlink> = notes
-        .into_iter()
-        .filter(|(note, _)| note.id != id && is_live(note))
-        .filter_map(|(note, content)| {
-            let mentions = links::mentions(&content, &title);
-            (!mentions.is_empty()).then_some(Backlink { note, mentions })
-        })
-        .collect();
-    backlinks.sort_by(|a, b| b.note.updated_at.cmp(&a.note.updated_at));
-    Ok(backlinks)
+    Ok(links::backlinks(notes, &id))
 }
 
 /// Point links at a note's new title after it was renamed.

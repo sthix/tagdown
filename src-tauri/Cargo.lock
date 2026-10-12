@@ -3638,21 +3638,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "tagdown-editor"
+name = "tagdown-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "notify",
- "open",
  "serde",
  "serde_json",
  "tantivy",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "tagdown-editor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "tagdown-core",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

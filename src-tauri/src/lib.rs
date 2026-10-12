@@ -3,13 +3,9 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 
 mod commands;
-mod frontmatter;
-mod history;
-mod links;
-mod models;
-mod search_index;
-mod vault;
-mod watcher;
+
+// The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
+pub use tagdown_core::{history, links, models, search_index, vault, watcher};
 
 use commands::search::SearchState;
 use search_index::SearchIndex;

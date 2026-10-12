@@ -120,6 +120,24 @@ pub fn rename_links(content: &str, old_title: &str, new_title: &str) -> Option<S
     Some(out)
 }
 
+/// Notes in `notes` that link to the note `id`, most recently edited first.
+/// Archived notes are left out.
+pub fn backlinks(notes: Vec<(Note, String)>, id: &str) -> Vec<Backlink> {
+    let Some(title) = notes.iter().find(|(note, _)| note.id == id).map(|(note, _)| note.title.clone()) else {
+        return Vec::new();
+    };
+    let mut backlinks: Vec<Backlink> = notes
+        .into_iter()
+        .filter(|(note, _)| note.id != id && note.folder_id.as_deref() != Some("archive"))
+        .filter_map(|(note, content)| {
+            let mentions = mentions(&content, &title);
+            (!mentions.is_empty()).then_some(Backlink { note, mentions })
+        })
+        .collect();
+    backlinks.sort_by(|a, b| b.note.updated_at.cmp(&a.note.updated_at));
+    backlinks
+}
+
 /// Source lines of `content` that link to `title`.
 pub fn mentions(content: &str, title: &str) -> Vec<String> {
     let wanted = normalize_title(title);
@@ -141,7 +159,7 @@ pub fn mentions(content: &str, title: &str) -> Vec<String> {
 }
 
 /// A line without its heading, quote, list, or task marker.
-fn strip_line_marker(line: &str) -> &str {
+pub(crate) fn strip_line_marker(line: &str) -> &str {
     let mut rest = line.trim();
     rest = rest.trim_start_matches('#').trim_start_matches('>').trim_start();
     for marker in ["- ", "* ", "+ "] {

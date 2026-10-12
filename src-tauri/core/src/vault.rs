@@ -25,8 +25,20 @@ pub struct Vault {
 
 impl Vault {
     pub fn open_or_create_default() -> Result<Self, String> {
+        Self::open_or_create(Self::default_root()?)
+    }
+
+    /// The vault the app uses: `~/Documents/Tagdown`.
+    pub fn default_root() -> Result<PathBuf, String> {
         let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-        let root = PathBuf::from(home).join("Documents").join("Tagdown");
+        Ok(PathBuf::from(home).join("Documents").join("Tagdown"))
+    }
+
+    /// Open a vault that already exists, without creating or seeding anything.
+    pub fn open_existing(root: PathBuf) -> Result<Self, String> {
+        if !root.join(".tagdown").join("vault.json").is_file() {
+            return Err(format!("no Tagdown vault at {}", root.display()));
+        }
         Self::open_or_create(root)
     }
 
@@ -218,7 +230,8 @@ impl Vault {
         Ok(())
     }
 
-    fn note_paths(&self) -> Vec<PathBuf> {
+    /// Every note file in the vault.
+    pub fn note_paths(&self) -> Vec<PathBuf> {
         WalkDir::new(&self.root)
             .into_iter()
             // Skip app data such as the search index.

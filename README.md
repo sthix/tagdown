@@ -36,6 +36,7 @@ This repository contains the desktop editor for that format.
 - **Linked notes** — `[[wikilinks]]` with autocomplete open (or create) the linked note, follow renames automatically, and show up as “Linked mentions” under the target.
 - **Rich Tagdown renderer** — supports extended components, syntax highlighting-friendly code blocks, KaTeX math, and Mermaid diagrams.
 - **Formatting toolbar** — quick insert actions for common Markdown and Tagdown structures.
+- **AI-ready vault** — a `tagdown` command-line tool and MCP server let assistants like Claude search, read, and write rich Tagdown notes.
 - **Native shell** — built with Tauri v2 for a lightweight desktop app backed by Rust file commands.
 
 ## Tech stack
@@ -82,12 +83,45 @@ npm run build
 npm run tauri:build
 ```
 
+## Command line and AI assistants
+
+The `tagdown` binary works on the same vault as the app (`~/Documents/Tagdown`, or `--vault PATH` / `TAGDOWN_VAULT`). Changes it makes show up in the running app right away, and anything it replaces is kept in the note's version history.
+
+```sh
+cargo install --path src-tauri/core
+
+tagdown search "tag:project budget"
+tagdown new "Meeting notes" "Agenda for [[Project Atlas]]"
+tagdown append "Meeting notes" "- [ ] Send recap"
+tagdown tasks
+```
+
+`tagdown mcp` runs an [MCP](https://modelcontextprotocol.io) server, so AI assistants can work with your notes. It offers tools to search, read, list, create, append to, and replace notes, list tasks, and find backlinks, plus the Tagdown syntax reference so assistants write callouts, tabs, and links rather than plain Markdown.
+
+Claude Code:
+
+```sh
+claude mcp add tagdown -- tagdown mcp
+```
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "tagdown": { "command": "/Users/you/.cargo/bin/tagdown", "args": ["mcp"] }
+  }
+}
+```
+
+The syntax reference the server hands out is generated from the app's own reference; run `npm run gen:syntax` after changing `src/tagdown/documentation.ts`.
+
 ## Validation
 
 ```sh
 npm run build
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo check --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml --workspace
+cargo check --manifest-path src-tauri/Cargo.toml --workspace
 node --test tests/*.mjs
 ```
 
@@ -96,7 +130,8 @@ node --test tests/*.mjs
 ```text
 .
 ├── src/                  # TypeScript UI, editor behavior, parser, renderer, styles
-├── src-tauri/            # Tauri/Rust backend commands and app configuration
+├── src-tauri/            # Tauri app: commands and configuration
+│   └── core/             # The vault (notes, search, links, history), the `tagdown` CLI and MCP server
 ├── tests/                # Node-based rendering tests
 ├── package.json          # Frontend scripts and dependencies
 └── README.md

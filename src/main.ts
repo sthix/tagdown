@@ -214,6 +214,87 @@ async function boot() {
   renderFilterPills();
   if (notes[0]) await openNote(notes[0]);
   await listen('note-saved', () => { savedMessage = 'Saved'; renderStatus(); });
+  await listen<{ note: Note; content: string }>('note-changed-externally', (event) => void onExternalChange(event.payload.note, event.payload.content));
+  await listen<{ id: string }>('note-removed-externally', (event) => onExternalRemoval(event.payload.id));
+}
+
+// ---- Changes made outside the app ----
+
+let listRefreshTimer: number | undefined;
+
+/** Refresh lists and counts once a burst of outside changes (say, a git checkout) settles. */
+function scheduleListRefresh() {
+  window.clearTimeout(listRefreshTimer);
+  listRefreshTimer = window.setTimeout(async () => {
+    await reloadFolders();
+    await reloadNotes();
+  }, 150);
+}
+
+async function onExternalChange(note: Note, diskContent: string) {
+  scheduleListRefresh();
+  if (!selectedNote) return;
+  if (note.id !== selectedNote.id) {
+    // The other note may have gained or lost a link to this one.
+    void loadBacklinks(selectedNote.id);
+    return;
+  }
+  if (diskContent === content) {
+    selectedNote = note;
+    return;
+  }
+  if (savedMessage === 'Saving…') {
+    // Unsaved edits here and a different version on disk: let the user pick.
+    window.clearTimeout(saveTimer);
+    const useDisk = await confirmDialog({
+      title: 'This note changed on disk',
+      message: `“${note.title || 'Untitled'}” was edited outside Tagdown while you had unsaved changes.`,
+      detail: 'Keep your edits to replace the version on disk, or load the version on disk and discard your unsaved edits.',
+      confirmLabel: 'Use version on disk',
+      cancelLabel: 'Keep my edits',
+    });
+    if (selectedNote?.id !== note.id) return;
+    if (!useDisk) {
+      await flushSave();
+      return;
+    }
+  }
+  selectedNote = note;
+  linkTitle = note.title;
+  showDiskContent(diskContent);
+  savedMessage = 'Reloaded from disk';
+  renderStatus();
+}
+
+/** Swap in new content for the open note, keeping scroll and caret where they were. */
+function showDiskContent(next: string) {
+  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const caret = source && document.activeElement === source ? [source.selectionStart, source.selectionEnd] : null;
+  const sourceScroll = source?.scrollTop ?? 0;
+  const previewScroll = editorRoot.querySelector('.preview')?.scrollTop ?? 0;
+  content = next;
+  setDocumentTitle(selectedNote?.title || 'Untitled');
+  renderEditor();
+  const nextSource = document.querySelector<HTMLTextAreaElement>('#source');
+  if (nextSource) {
+    nextSource.scrollTop = sourceScroll;
+    if (caret) {
+      nextSource.focus({ preventScroll: true });
+      nextSource.setSelectionRange(Math.min(caret[0], next.length), Math.min(caret[1], next.length));
+    }
+  }
+  const preview = editorRoot.querySelector('.preview');
+  if (preview) preview.scrollTop = previewScroll;
+  if (selectedNote) void loadBacklinks(selectedNote.id);
+}
+
+function onExternalRemoval(id: string) {
+  if (selectedNote?.id === id) {
+    // Nothing left to save into; the list refresh closes the note.
+    window.clearTimeout(saveTimer);
+    savedMessage = 'Ready';
+  }
+  scheduleListRefresh();
 }
 
 function bindChrome() {

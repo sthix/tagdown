@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs, path::{Path, PathBuf}, sync::Arc};
 
 use chrono::Utc;
 use uuid::Uuid;
@@ -7,6 +7,7 @@ use walkdir::WalkDir;
 use crate::{
     frontmatter::{derive_preview, derive_tags, derive_title, split_frontmatter, word_count, write_frontmatter},
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
+    watcher::FileTracker,
 };
 
 const NOTE_EXT: &str = "md";
@@ -16,6 +17,8 @@ const LEGACY_NOTE_EXT: &str = "td";
 pub struct Vault {
     pub root: PathBuf,
     pub meta: VaultMeta,
+    /// Shared by every clone, so the file watcher can tell the app's own writes apart.
+    pub tracker: Arc<FileTracker>,
 }
 
 impl Vault {
@@ -51,7 +54,7 @@ impl Vault {
             Self::seed_notes(&root)?;
             meta
         };
-        Ok(Self { root, meta })
+        Ok(Self { root, meta, tracker: Arc::default() })
     }
 
     pub fn save_meta(&self) -> Result<(), String> {
@@ -106,7 +109,7 @@ impl Vault {
             created: now,
             updated: now,
         };
-        fs::write(self.path_for_new_note(&meta), write_frontmatter(&meta, content)).map_err(|e| e.to_string())?;
+        self.write_note(&self.path_for_new_note(&meta), &write_frontmatter(&meta, content))?;
         Ok(note_from_meta(meta, content))
     }
 
@@ -117,7 +120,7 @@ impl Vault {
         meta.title = derive_title(&content);
         meta.tags = derive_tags(&content);
         meta.updated = Utc::now();
-        fs::write(path, write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(note_from_meta(meta, &content))
     }
 
@@ -129,7 +132,7 @@ impl Vault {
         let (mut meta, _) = split_frontmatter(&raw)?;
         meta.title = derive_title(content);
         meta.tags = derive_tags(content);
-        fs::write(path, write_frontmatter(&meta, content)).map_err(|e| e.to_string())?;
+        self.write_note(&path, &write_frontmatter(&meta, content))?;
         Ok(note_from_meta(meta, content))
     }
 
@@ -139,7 +142,7 @@ impl Vault {
         let (mut meta, content) = split_frontmatter(&raw)?;
         meta.folder_id = folder_id;
         meta.updated = Utc::now();
-        fs::write(path, write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(note_from_meta(meta, &content))
     }
 
@@ -149,7 +152,7 @@ impl Vault {
         let (mut meta, content) = split_frontmatter(&raw)?;
         meta.starred = starred;
         meta.updated = Utc::now();
-        fs::write(path, write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(note_from_meta(meta, &content))
     }
 
@@ -159,6 +162,12 @@ impl Vault {
 
     pub fn destroy_note(&self, id: &str) -> Result<(), String> {
         fs::remove_file(self.note_path(id)?).map_err(|e| e.to_string())
+    }
+
+    /// Write a note file, recording the content for the file watcher first.
+    fn write_note(&self, path: &Path, text: &str) -> Result<(), String> {
+        self.tracker.record(path, text);
+        fs::write(path, text).map_err(|e| e.to_string())
     }
 
     pub fn note_file_path(&self, id: &str) -> Result<PathBuf, String> {
@@ -220,7 +229,7 @@ impl Vault {
     }
 }
 
-fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
+pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
     Note {
         id: meta.id,
         title: meta.title,

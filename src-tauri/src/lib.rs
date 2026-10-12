@@ -1,11 +1,14 @@
 use std::sync::{Arc, Mutex};
 
+use tauri::{Emitter, Manager};
+
 mod commands;
 mod frontmatter;
 mod links;
 mod models;
 mod search_index;
 mod vault;
+mod watcher;
 
 use commands::search::SearchState;
 use search_index::SearchIndex;
@@ -19,12 +22,22 @@ pub struct AppState {
 pub fn run() {
     let vault = Vault::open_or_create_default().expect("failed to open or create default vault");
     let search = open_search_index(&vault);
+    let (watch_vault, watch_search) = (vault.clone(), search.0.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState { vault }))
         .manage(search)
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let emit = move |event: &'static str, payload: serde_json::Value| { let _ = handle.emit(event, payload); };
+            match watcher::start(watch_vault, watch_search, emit) {
+                Ok(watcher) => { app.manage(watcher); }
+                Err(e) => eprintln!("vault watcher unavailable: {e}"),
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::notes::list_notes,
             commands::notes::get_note_content,

@@ -24,7 +24,7 @@ This plan tracks the current Tauri v2 implementation and remaining product work.
 - Complete note move/star/delete/destroy flows in the UI.
 - Add folder CRUD UI and context menus.
 - Finalize the folder rule: `vault.json` is canonical; directories are synchronized as a backend side effect.
-- Add better conflict handling for external edits.
+- ~~Add better conflict handling for external edits.~~ Done: the vault is watched; outside edits reload the open note, and a prompt resolves them against unsaved edits.
 
 ## Phase 3 — Search and indexing
 

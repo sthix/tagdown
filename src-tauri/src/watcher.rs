@@ -1,0 +1,200 @@
+// Watches the vault for notes changed outside the app (another editor, git,
+// a sync service) and tells the frontend, keeping the search index current.
+//
+// The app's own writes also produce file events. `FileTracker` remembers a
+// fingerprint of every recent write per note file, so those are recognised and
+// skipped; only content the app didn't write is reported.
+
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+    fs,
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
+    sync::{mpsc, Arc, Mutex},
+    thread,
+    time::Duration,
+};
+
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use serde_json::{json, Value};
+
+use crate::{frontmatter::split_frontmatter, search_index::SearchIndex, vault::{note_from_meta, Vault}};
+
+/// Own writes remembered per file. Autosave can write several times before
+/// the first event is handled, so one fingerprint is not enough.
+const RECENT_WRITES: usize = 16;
+/// Events closer together than this are handled as one batch.
+const SETTLE: Duration = Duration::from_millis(200);
+
+#[derive(Debug, Default)]
+pub struct FileTracker {
+    seen: Mutex<HashMap<String, VecDeque<u64>>>,
+}
+
+fn fingerprint(text: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn file_key(path: &Path) -> Option<String> {
+    path.file_name().and_then(|n| n.to_str()).map(str::to_string)
+}
+
+impl FileTracker {
+    /// Remember content the app is about to write to `path`.
+    pub fn record(&self, path: &Path, text: &str) {
+        let (Some(key), Ok(mut seen)) = (file_key(path), self.seen.lock()) else { return };
+        let recent = seen.entry(key).or_default();
+        recent.push_back(fingerprint(text));
+        if recent.len() > RECENT_WRITES {
+            recent.pop_front();
+        }
+    }
+
+    /// True when `text` is new for `path`: neither written by the app nor
+    /// already reported. It is remembered either way.
+    pub fn is_new(&self, path: &Path, text: &str) -> bool {
+        let print = fingerprint(text);
+        let (Some(key), Ok(seen)) = (file_key(path), self.seen.lock()) else { return true };
+        let known = seen.get(&key).is_some_and(|recent| recent.contains(&print));
+        drop(seen);
+        if !known {
+            self.record(path, text);
+        }
+        !known
+    }
+
+    pub fn forget(&self, path: &Path) {
+        if let (Some(key), Ok(mut seen)) = (file_key(path), self.seen.lock()) {
+            seen.remove(&key);
+        }
+    }
+}
+
+/// Keeps the watcher alive for as long as the app runs.
+pub struct VaultWatcher(#[allow(dead_code)] RecommendedWatcher);
+
+/// Watch `vault`, calling `emit(event, payload)` for each note changed or
+/// removed outside the app.
+pub fn start(
+    vault: Vault,
+    search: Option<Arc<SearchIndex>>,
+    emit: impl Fn(&'static str, Value) + Send + 'static,
+) -> Result<VaultWatcher, String> {
+    let (tx, rx) = mpsc::channel::<PathBuf>();
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+        let Ok(event) = result else { return };
+        for path in event.paths.into_iter().filter(|p| is_note_file(p)) {
+            let _ = tx.send(path);
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    watcher.watch(&vault.root, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+
+    thread::spawn(move || {
+        while let Ok(first) = rx.recv() {
+            // Editors and git touch files in bursts; collect until it settles.
+            let mut batch = HashSet::from([first]);
+            while let Ok(path) = rx.recv_timeout(SETTLE) {
+                batch.insert(path);
+            }
+            for path in batch {
+                handle_change(&emit, &vault, search.as_deref(), &path);
+            }
+        }
+    });
+    Ok(VaultWatcher(watcher))
+}
+
+fn is_note_file(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()) == Some("md") && !path.components().any(|c| c.as_os_str() == ".tagdown")
+}
+
+fn note_id(path: &Path) -> Option<String> {
+    path.file_stem()?.to_str()?.strip_prefix("note-").map(str::to_string)
+}
+
+fn handle_change(emit: &impl Fn(&'static str, Value), vault: &Vault, search: Option<&SearchIndex>, path: &Path) {
+    match fs::read_to_string(path) {
+        Ok(raw) => {
+            if !vault.tracker.is_new(path, &raw) {
+                return;
+            }
+            // Markdown files that aren't notes (no Tagdown frontmatter) are ignored.
+            let Ok((meta, content)) = split_frontmatter(&raw) else { return };
+            let note = note_from_meta(meta, &content);
+            if let Some(index) = search {
+                let result = if note.folder_id.as_deref() == Some("archive") { index.remove(&note.id) } else { index.upsert(&note, &content) };
+                if let Err(e) = result {
+                    eprintln!("search index: failed to update {}: {e}", note.id);
+                }
+            }
+            emit("note-changed-externally", json!({ "note": note, "content": content }));
+        }
+        Err(_) if !path.exists() => {
+            vault.tracker.forget(path);
+            let Some(id) = note_id(path) else { return };
+            if let Some(index) = search {
+                let _ = index.remove(&id);
+            }
+            emit("note-removed-externally", json!({ "id": id }));
+        }
+        Err(e) => eprintln!("watcher: could not read {}: {e}", path.display()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tracker_skips_own_writes_and_repeated_reports() {
+        let tracker = FileTracker::default();
+        let path = Path::new("/vault/note-a.md");
+        tracker.record(path, "first save");
+        tracker.record(path, "second save");
+        assert!(!tracker.is_new(path, "first save"), "an older own write is still recognised");
+        assert!(!tracker.is_new(path, "second save"));
+        assert!(tracker.is_new(path, "edited elsewhere"));
+        assert!(!tracker.is_new(path, "edited elsewhere"), "reported once");
+        tracker.forget(path);
+        assert!(tracker.is_new(path, "second save"));
+    }
+
+    #[test]
+    fn reports_outside_edits_and_removals_but_not_own_saves() {
+        let dir = std::env::temp_dir().join(format!("tagdown-watch-{}", uuid::Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.create_note(None).unwrap();
+        let path = vault.note_file_path(&note.id).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let _watcher = start(vault.clone(), None, move |event, payload| { let _ = tx.send((event, payload)); }).unwrap();
+        thread::sleep(Duration::from_millis(500)); // let the watcher settle
+        while rx.try_recv().is_ok() {}
+
+        vault.save_note(&note.id, "# Mine\n\nSaved by the app.".into()).unwrap();
+        assert!(rx.recv_timeout(Duration::from_secs(2)).is_err(), "own saves are not reported");
+
+        let raw = fs::read_to_string(&path).unwrap().replace("Saved by the app.", "Edited elsewhere.");
+        fs::write(&path, raw).unwrap();
+        let (event, payload) = rx.recv_timeout(Duration::from_secs(5)).expect("outside edit reported");
+        assert_eq!(event, "note-changed-externally");
+        assert_eq!(payload["content"], "# Mine\n\nEdited elsewhere.");
+        assert_eq!(payload["note"]["id"], note.id.as_str());
+
+        fs::remove_file(&path).unwrap();
+        let (event, payload) = rx.recv_timeout(Duration::from_secs(5)).expect("removal reported");
+        assert_eq!(event, "note-removed-externally");
+        assert_eq!(payload["id"], note.id.as_str());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn recognises_note_files() {
+        assert!(is_note_file(Path::new("/v/note-1.md")));
+        assert!(!is_note_file(Path::new("/v/.tagdown/search.idx/meta.json")));
+        assert!(!is_note_file(Path::new("/v/.tagdown/x.md")));
+        assert_eq!(note_id(Path::new("/v/note-abc.md")).as_deref(), Some("abc"));
+    }
+}

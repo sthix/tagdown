@@ -6,6 +6,7 @@
 | --- | --- |
 | ⌘K | Command palette: jump to a note, search, or run an action |
 | ⌘N | New note (in the selected folder) |
+| ⌘⇧J | Today's journal page |
 | ⌘S | Save now |
 | ⌘, | Settings |
 | ⌘\\ | Focus mode (hide the sidebar and note list) |
@@ -28,12 +29,14 @@
 | ⌘⇧E | Export as HTML |
 | ⌘P | Print or save as PDF |
 | ⌥⌘P | Present as slides |
+| ⌥⌘← / ⌥⌘→ | Previous / next day, on a journal page |
 
 ## Editing
 
 | Shortcut | Action |
 | --- | --- |
 | `[[` | Wikilink autocomplete (↑ ↓ to choose, ↩ or Tab to insert, Esc to close) |
+| `[[today` | Link to today's journal page (also `[[yesterday`, `[[tomorrow`) |
 | Esc or ⌘↩ | Finish editing a block in the preview |
 
 ## Slides

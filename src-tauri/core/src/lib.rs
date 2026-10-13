@@ -2,6 +2,7 @@
 
 pub mod frontmatter;
 pub mod history;
+pub mod journal;
 pub mod links;
 pub mod models;
 pub mod search_index;

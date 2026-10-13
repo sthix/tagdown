@@ -459,3 +459,33 @@ textarea#source,
 }
 .wikilink-suggest-row.active { background: var(--marker-soft); }
 .wikilink-suggest-brackets { color: var(--ink-4); font-family: var(--font-mono); font-size: 11px; }
+
+/* ---- Journal pages ---- */
+.journal-day-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.journal-day-head .doc-title { min-width: 0; }
+.journal-day-nav {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.journal-today-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-segment);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.journal-today-button:hover:not(:disabled) { color: var(--ink); background: var(--pressed-overlay); }
+.journal-today-button:disabled { opacity: .45; cursor: default; }
+.journal-day-key { font-variant-numeric: tabular-nums; }
+.wikilink-suggest-hint { margin-left: 8px; color: var(--ink-3); font-size: 11.5px; }

@@ -7,7 +7,7 @@ use std::{
 };
 
 use tagdown_core::{
-    library::{Library, TaskFilter, SYNTAX},
+    library::{day_title, resolve_day, Library, TaskFilter, SYNTAX},
     mcp,
     vault::Vault,
 };
@@ -24,6 +24,8 @@ Commands:
   show <note>                 Print a note (by title or id)
   new <title> [text | -]      Create a note; `-` reads the body from stdin
   append <note> <text | ->    Add text to the end of a note
+  journal [day] [text | -]    Print a day's journal page, or add text to it
+                              (day: YYYY-MM-DD, today, yesterday, tomorrow)
   tasks [--done | --all] [--tag TAG]
                               Checklist items across notes (open ones by default)
   backlinks <note>            Notes that link to a note
@@ -144,6 +146,24 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             }
             let note_ref = args.remove(0);
             let note = lib.append(&note_ref, &text_arg(&args)?)?;
+            println!("Appended to \"{}\"", note.title);
+            Ok(())
+        }
+        "journal" => {
+            let named_day = args.first().filter(|a| resolve_day(Some(a)).is_ok()).cloned();
+            if named_day.is_some() {
+                args.remove(0);
+            }
+            let day = resolve_day(named_day.as_deref())?;
+            if args.is_empty() && io::stdin().is_terminal() {
+                match lib.journal(day)? {
+                    Some((_, content)) => print!("{content}"),
+                    None => eprintln!("No journal page for {} yet.", day_title(day)),
+                }
+                return Ok(());
+            }
+            let text = if args.is_empty() { text_arg(&["-".into()])? } else { text_arg(&args)? };
+            let note = lib.append_to_journal(day, &text)?;
             println!("Appended to \"{}\"", note.title);
             Ok(())
         }

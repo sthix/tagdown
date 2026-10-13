@@ -1,7 +1,10 @@
 // Wikilinks in the editor: resolving `[[Title#Heading|label]]` targets to notes
 // and the `[[` autocomplete for note titles.
 
-export type LinkableNote = { id: string; title: string; folderId: string | null };
+import { formatDay, shiftDay, todayKey } from './journal';
+
+export type LinkableNote = { id: string; title: string; folderId: string | null; journal?: string | null };
+type Suggestion = LinkableNote & { hint?: string };
 
 export function normalizeTitle(title: string) {
   return title.trim().toLowerCase();
@@ -39,7 +42,7 @@ let popup: HTMLDivElement | null = null;
  * `[[Title]]` and fires an `input` event, so the editor saves as usual.
  */
 export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, options: AutocompleteOptions) {
-  let matches: LinkableNote[] = [];
+  let matches: Suggestion[] = [];
   let active = 0;
   let openAt = -1; // index of the `[[`
 
@@ -50,7 +53,7 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
     popup = null;
   };
 
-  const accept = (note: LinkableNote | undefined) => {
+  const accept = (note: Suggestion | undefined) => {
     if (!note || openAt < 0) return;
     const caret = textarea.selectionStart;
     const after = textarea.value.slice(caret);
@@ -73,7 +76,7 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
     const list = popup;
     list.innerHTML = matches.map((note, i) => `
       <div class="wikilink-suggest-row ${i === active ? 'active' : ''}" role="option" aria-selected="${i === active}" data-index="${i}">
-        <span class="wikilink-suggest-brackets" aria-hidden="true">[[</span>${escapeHtml(note.title || 'Untitled')}
+        <span class="wikilink-suggest-brackets" aria-hidden="true">[[</span>${escapeHtml(note.title || 'Untitled')}${note.hint ? `<span class="wikilink-suggest-hint">${escapeHtml(note.hint)}</span>` : ''}
       </div>`).join('');
     list.querySelectorAll<HTMLElement>('.wikilink-suggest-row').forEach((row) => {
       row.addEventListener('click', () => accept(matches[Number(row.dataset.index)]));
@@ -122,22 +125,31 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
   });
 }
 
-function suggest(query: string, notes: LinkableNote[], currentId: string | null): LinkableNote[] {
+function suggest(query: string, notes: LinkableNote[], currentId: string | null): Suggestion[] {
   const q = normalizeTitle(query);
   const candidates = notes.filter((note) => note.id !== currentId && note.folderId !== 'archive');
   if (!q) return candidates.slice(0, MAX_SUGGESTIONS);
+  // `[[tod` offers today's journal page by its date, whether or not it exists yet.
+  const days: Suggestion[] = q.length < 2 ? [] : ([['today', 0], ['yesterday', -1], ['tomorrow', 1]] as const)
+    .filter(([word]) => word.startsWith(q))
+    .map(([word, offset]) => {
+      const day = shiftDay(todayKey(), offset);
+      return { id: `journal:${day}`, title: day, folderId: null, journal: day, hint: `${word[0].toUpperCase()}${word.slice(1)} · ${formatDay(day, 'short')}` };
+    });
   const rank = (title: string) => {
     const t = normalizeTitle(title);
     if (t.startsWith(q)) return 3;
     if (t.split(/[\s/–-]+/).some((word) => word.startsWith(q))) return 2;
     return t.includes(q) ? 1 : 0;
   };
-  return candidates
+  const ranked = candidates
     .map((note, order) => ({ note, order, score: rank(note.title) }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.order - b.order)
-    .slice(0, MAX_SUGGESTIONS)
-    .map((entry) => entry.note);
+    .filter((entry) => !days.some((day) => day.title === entry.note.title))
+    .slice(0, MAX_SUGGESTIONS - days.length)
+    .map((entry): Suggestion => entry.note.journal ? { ...entry.note, hint: formatDay(entry.note.journal, 'short') } : entry.note);
+  return [...days, ...ranked];
 }
 
 /** Viewport position of the character at `index` in a textarea. */

@@ -1,6 +1,6 @@
 use std::{fs, path::{Path, PathBuf}, sync::Arc};
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -82,10 +82,14 @@ impl Vault {
         for path in self.note_paths() {
             let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let Ok((meta, content)) = split_frontmatter(&raw) else { continue; };
-            if folder_id.as_deref() == Some("starred") && !meta.starred { continue; }
-            if let Some(ref folder) = folder_id {
-                if folder != "starred" && meta.folder_id.as_ref() != Some(folder) { continue; }
-            }
+            // `starred` and `journal` are views across folders rather than folders.
+            let wanted = match folder_id.as_deref() {
+                None => true,
+                Some("starred") => meta.starred,
+                Some("journal") => meta.journal.is_some() && meta.folder_id.as_deref() != Some("archive"),
+                Some(folder) => meta.folder_id.as_deref() == Some(folder),
+            };
+            if !wanted { continue; }
             notes.push(note_from_meta(meta, &content));
         }
         sort_notes(&mut notes, sort);
@@ -112,20 +116,34 @@ impl Vault {
     }
 
     pub fn create_note(&self, folder_id: Option<String>) -> Result<Note, String> {
+        self.create_note_with(folder_id, "# Untitled\n", None)
+    }
+
+    /// Create a note with `content` as its body, optionally as the journal page for a day.
+    pub(crate) fn create_note_with(&self, folder_id: Option<String>, content: &str, journal: Option<NaiveDate>) -> Result<Note, String> {
         let now = Utc::now();
-        let id = Uuid::new_v4().to_string();
-        let content = "# Untitled\n";
         let meta = NoteFrontmatter {
-            id: id.clone(),
-            title: "Untitled".into(),
+            id: Uuid::new_v4().to_string(),
+            title: derive_title(content),
             tags: derive_tags(content),
             starred: false,
             folder_id,
             created: now,
             updated: now,
+            journal,
         };
         self.write_note(&self.path_for_new_note(&meta), &write_frontmatter(&meta, content))?;
         Ok(note_from_meta(meta, content))
+    }
+
+    /// Mark a note as the journal page for `day`, or as no journal page.
+    pub(crate) fn set_journal(&self, id: &str, journal: Option<NaiveDate>) -> Result<Note, String> {
+        let path = self.note_path(id)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let (mut meta, content) = split_frontmatter(&raw)?;
+        meta.journal = journal;
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        Ok(note_from_meta(meta, &content))
     }
 
     pub fn save_note(&self, id: &str, content: String) -> Result<Note, String> {
@@ -203,7 +221,7 @@ impl Vault {
         for title in ["Welcome to Tagdown", "Tagdown Cheat Sheet", "Your First Note"] {
             let now = Utc::now();
             let id = Uuid::new_v4().to_string();
-            let meta = NoteFrontmatter { id: id.clone(), title: title.into(), tags: Vec::new(), starred: false, folder_id: None, created: now, updated: now };
+            let meta = NoteFrontmatter { id: id.clone(), title: title.into(), tags: Vec::new(), starred: false, folder_id: None, created: now, updated: now, journal: None };
             let content = format!("# {}\n\nStart writing in Tagdown.", title);
             fs::write(root.join(format!("note-{id}.{NOTE_EXT}")), write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
         }
@@ -266,6 +284,7 @@ pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
         created_at: meta.created,
         updated_at: meta.updated,
         word_count: word_count(content),
+        journal: meta.journal,
     }
 }
 

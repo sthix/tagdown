@@ -8,12 +8,13 @@ use std::{
     time::SystemTime,
 };
 
-use chrono::Utc;
+use chrono::{Days, Local, NaiveDate, Utc};
 use serde::Serialize;
 
 pub use crate::tasks::{Task, TaskFilter};
 use crate::{
     frontmatter::derive_tags,
+    journal::{journal_title, parse_day},
     tasks::parse_tasks,
     links::{self, normalize_title, Backlink},
     models::{Note, SearchResult, SortOrder},
@@ -180,6 +181,19 @@ impl Library {
         self.vault.save_note(&note.id, format!("{}\n", content.trim_end()))
     }
 
+    /// A day's journal page and its body, if it has one.
+    pub fn journal(&self, day: NaiveDate) -> Result<Option<(Note, String)>, String> {
+        let Some(note) = self.vault.find_journal(day)? else { return Ok(None) };
+        let content = self.vault.get_note_content(&note.id)?.content;
+        Ok(Some((note, content)))
+    }
+
+    /// Add text to the end of a day's journal page, creating the page first if needed.
+    pub fn append_to_journal(&self, day: NaiveDate, text: &str) -> Result<Note, String> {
+        let (note, _) = self.vault.open_journal(day)?;
+        self.append(&note.id, text)
+    }
+
     /// Run a query-block query (see `query.rs`) over the whole vault.
     pub fn query(&mut self, raw: &str) -> Result<crate::query::QueryOutput, String> {
         self.refresh_index()?;
@@ -205,6 +219,23 @@ impl Library {
         }
         Ok(tasks)
     }
+}
+
+/// A day as people name it: `YYYY-MM-DD`, `today`, `yesterday` or `tomorrow`
+/// (in local time). Nothing means today.
+pub fn resolve_day(value: Option<&str>) -> Result<NaiveDate, String> {
+    let today = Local::now().date_naive();
+    match value.map(|v| v.trim().to_lowercase()).as_deref() {
+        None | Some("") | Some("today") => Ok(today),
+        Some("yesterday") => today.checked_sub_days(Days::new(1)).ok_or_else(|| "date out of range".into()),
+        Some("tomorrow") => today.checked_add_days(Days::new(1)).ok_or_else(|| "date out of range".into()),
+        Some(other) => parse_day(other).ok_or_else(|| format!("{other:?} is not a day; use YYYY-MM-DD, today, yesterday or tomorrow")),
+    }
+}
+
+/// The title of a day's journal page, for messages.
+pub fn day_title(day: NaiveDate) -> String {
+    journal_title(day)
 }
 
 #[cfg(test)]
@@ -257,6 +288,20 @@ mod tests {
         assert!(lib.search("zeppelin", 10).unwrap().is_empty());
         lib.create("Airships", "A zeppelin floats.", None, &[]).unwrap();
         assert_eq!(lib.search("zeppelin", 10).unwrap()[0].note.title, "Airships");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn appends_to_a_journal_day() {
+        let (lib, root) = library();
+        let day = resolve_day(Some("2026-10-13")).unwrap();
+        assert!(lib.journal(day).unwrap().is_none());
+        lib.append_to_journal(day, "- Met [[Trip plan]] people").unwrap();
+        lib.append_to_journal(day, "- Lunch").unwrap();
+        let (note, content) = lib.journal(day).unwrap().unwrap();
+        assert_eq!(note.title, "2026-10-13");
+        assert_eq!(content, "# 2026-10-13\n\n- Met [[Trip plan]] people\n\n- Lunch\n");
+        assert!(resolve_day(Some("someday")).is_err());
         std::fs::remove_dir_all(root).ok();
     }
 

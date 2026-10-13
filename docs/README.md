@@ -15,6 +15,7 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 | [Writing notes](writing-notes.md) | The workspace, view modes, the toolbar, editing in the preview, themes |
 | [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
 | [Organizing your vault](organizing.md) | Folders, tags, pinning, the archive, search, and wikilinks |
+| [Journal](journal.md) | A page for every day, date links, and a template for new days |
 | [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks and the open-tasks view |
 | [Version history](version-history.md) | How snapshots are kept and how to restore one |
 | [Sharing your notes](sharing.md) | HTML and PDF export, slides, and publishing a static website |

@@ -69,6 +69,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Local-first vault** of plain `.md` files in `~/Documents/Tagdown`, with nested folders and an archive.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
 - **Wikilinks** with autocomplete. Links follow renames automatically and show up as *Linked mentions* under the target note.
+- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Live queries** such as `<query tag:project show:tasks />`; tick tasks right in the list. ⌘⇧T shows every open task.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
@@ -135,6 +136,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
 | [Organizing your vault](docs/organizing.md) | Folders, tags, pinning, archive, search, wikilinks |
+| [Journal](docs/journal.md) | Daily pages, date links, journal template |
 | [Queries and tasks](docs/queries-and-tasks.md) | Live queries and the open-tasks view |
 | [Version history](docs/version-history.md) | Snapshots and restoring |
 | [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
@@ -165,7 +167,7 @@ node --test tests/*.mjs
 
 ## Current status
 
-Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace, vault, full-text search, wikilinks and backlinks, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
+Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace, vault, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
 See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
 

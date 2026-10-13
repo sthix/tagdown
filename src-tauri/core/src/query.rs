@@ -193,7 +193,7 @@ mod tests {
 
     fn note(id: &str, title: &str, tags: &[&str], folder: Option<&str>, age_minutes: i64) -> Note {
         let at = Utc::now() - TimeDelta::minutes(age_minutes);
-        Note { id: id.into(), title: title.into(), preview: String::new(), tags: tags.iter().map(|t| t.to_string()).collect(), starred: false, folder_id: folder.map(Into::into), created_at: at, updated_at: at, word_count: 0 }
+        Note { id: id.into(), title: title.into(), preview: String::new(), tags: tags.iter().map(|t| t.to_string()).collect(), starred: false, folder_id: folder.map(Into::into), created_at: at, updated_at: at, word_count: 0, journal: None }
     }
 
     fn vault() -> (Vec<(Note, String)>, SearchIndex, Vec<FolderRecord>) {

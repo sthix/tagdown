@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::models::NoteFrontmatter;
 
@@ -21,6 +21,7 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
     let mut folder_id = None;
     let mut created = None;
     let mut updated = None;
+    let mut journal = None;
 
     for line in meta.lines() {
         let Some((key, value)) = line.split_once(':') else { continue; };
@@ -34,6 +35,7 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
             "folder_id" => if value != "null" && !value.is_empty() { folder_id = Some(value.to_string()); },
             "created" => created = Some(parse_date(value)?),
             "updated" => updated = Some(parse_date(value)?),
+            "journal" => journal = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok(),
             _ => {}
         }
     }
@@ -46,6 +48,7 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
         folder_id,
         created: created.ok_or("frontmatter missing created")?,
         updated: updated.ok_or("frontmatter missing updated")?,
+        journal,
     }, content))
 }
 
@@ -55,8 +58,10 @@ pub fn write_frontmatter(meta: &NoteFrontmatter, content: &str) -> String {
     } else {
         format!("[{}]", meta.tags.join(", "))
     };
+    // Only journal pages carry a `journal:` line, so other notes stay as they were.
+    let journal = meta.journal.map(|day| format!("journal: {}\n", day.format("%Y-%m-%d"))).unwrap_or_default();
     format!(
-        "---\nid: {}\ntitle: {}\ntags: {}\nstarred: {}\nfolder_id: {}\ncreated: {}\nupdated: {}\n---\n\n{}",
+        "---\nid: {}\ntitle: {}\ntags: {}\nstarred: {}\nfolder_id: {}\ncreated: {}\nupdated: {}\n{journal}---\n\n{}",
         meta.id,
         meta.title.replace('\n', " "),
         tags,
@@ -161,6 +166,15 @@ mod tests {
         assert_eq!(meta.tags, vec!["one", "two"]);
         assert_eq!(content, "# Test\nBody");
         assert!(write_frontmatter(&meta, &content).contains("starred: true"));
+        assert!(!write_frontmatter(&meta, &content).contains("journal:"));
+    }
+
+    #[test]
+    fn journal_day_round_trips() {
+        let raw = "---\nid: abc\ntitle: 2026-10-13\ntags: []\nstarred: false\nfolder_id: null\ncreated: 2026-10-13T09:14:22+00:00\nupdated: 2026-10-13T10:14:22+00:00\njournal: 2026-10-13\n---\n\n# 2026-10-13\n";
+        let (meta, content) = split_frontmatter(raw).unwrap();
+        assert_eq!(meta.journal, NaiveDate::from_ymd_opt(2026, 10, 13));
+        assert_eq!(write_frontmatter(&meta, &content), raw);
     }
 
     #[test]

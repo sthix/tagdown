@@ -64,3 +64,16 @@ pub async fn destroy_note(id: String, state: State<'_, Mutex<AppState>>, search:
     search.forget(&id);
     Ok(())
 }
+
+/// The journal page for `day` (YYYY-MM-DD), created from the template when it doesn't exist yet.
+#[tauri::command]
+pub async fn open_journal(day: String, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let day = crate::journal::parse_day(&day).ok_or_else(|| format!("not a day: {day}"))?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let (note, created) = state.vault.open_journal(day)?;
+    if created {
+        search.index(&note, &state.vault.get_note_content(&note.id)?.content);
+        let _ = app.emit("note-saved", &note);
+    }
+    Ok(note)
+}

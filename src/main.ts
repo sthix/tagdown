@@ -14,6 +14,7 @@ import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
 import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
+import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -36,6 +37,8 @@ type Note = {
   folderId: string | null;
   updatedAt: string;
   wordCount: number;
+  /** The day (YYYY-MM-DD) this note is the journal page for. */
+  journal?: string | null;
 };
 
 type Folder = {
@@ -94,6 +97,9 @@ const UI_ICONS: Record<string, string> = {
   play: '<path d="M5 3.4v9.2c0 .5.5.8.9.5l7-4.6c.4-.3.4-.8 0-1.1l-7-4.6c-.4-.2-.9 0-.9.6z" />',
   clock: '<circle cx="8" cy="8" r="5.6" /><path d="M8 4.8V8l2.2 1.4" />',
   printer: '<path d="M4.5 6V2.8h7V6" /><rect x="2.5" y="6" width="11" height="5" rx="1.1" /><path d="M4.5 9.5h7v3.7h-7z" />',
+  calendar: '<rect x="3" y="3.8" width="10" height="9" rx="1.1" /><path d="M5.5 2.5v2.2M10.5 2.5v2.2M3.3 6.4h9.4" />',
+  chevronLeft: '<path d="M10 3.5L5.5 8l4.5 4.5" />',
+  chevronRight: '<path d="M6 3.5L10.5 8 6 12.5" />',
 };
 
 function uiIcon(key: keyof typeof UI_ICONS, size = 14) {
@@ -150,6 +156,8 @@ let linkSyncTimer: number | undefined;
 let backlinks: { id: string; items: Backlink[] } | null = null;
 const TAG_PREVIEW_LIMIT = 6;
 let tagDraftColor: TagColorKey = 'blue';
+// The month the journal calendar shows.
+let journalMonth: CalendarMonth = monthOf(todayKey());
 
 initializeTheme();
 
@@ -315,7 +323,7 @@ function bindChrome() {
   document.querySelector('#new-note')?.addEventListener('click', createNote);
   document.querySelector('#note-list-new')?.addEventListener('click', createNote);
   document.querySelector('#new-folder')?.addEventListener('click', () => {
-    const parent = selectedFolder && selectedFolder !== 'archive' ? selectedFolder : null;
+    const parent = isUserFolder(selectedFolder) ? selectedFolder : null;
     startFolderCreate(parent);
   });
   document.querySelector('#new-tag')?.addEventListener('click', () => {
@@ -344,6 +352,12 @@ function bindChrome() {
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'j') { event.preventDefault(); await openJournal(todayKey()); return; }
+    if (event.metaKey && event.altKey && selectedNote?.journal && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.preventDefault();
+      await openJournal(shiftDay(selectedNote.journal, event.key === 'ArrowLeft' ? -1 : 1));
+      return;
+    }
     if (event.metaKey && event.key.toLowerCase() === 'n') { event.preventDefault(); await createNote(); }
     if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
       event.preventDefault();
@@ -381,7 +395,13 @@ function renderThemeToggle() {
 function paletteActions(): PaletteAction[] {
   const dark = getEffectiveTheme() === 'dark';
   return [
-    { id: 'new', label: 'New note', hint: selectedFolder && selectedFolder !== 'archive' ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
+    { id: 'new', label: 'New note', hint: isUserFolder(selectedFolder) ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
+    { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
+    { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
+    ...(selectedNote?.journal ? [
+      { id: 'journal-previous', label: 'Previous day', hint: formatDay(shiftDay(selectedNote.journal, -1)), shortcut: '⌥⌘←', icon: uiIcon('chevronLeft', 15), run: () => openJournal(shiftDay(selectedNote!.journal!, -1)) },
+      { id: 'journal-next', label: 'Next day', hint: formatDay(shiftDay(selectedNote.journal, 1)), shortcut: '⌥⌘→', icon: uiIcon('chevronRight', 15), run: () => openJournal(shiftDay(selectedNote!.journal!, 1)) },
+    ] : []),
     { id: 'source', label: 'Show source', shortcut: '⌘1', icon: uiIcon('source', 15), run: () => setViewMode('source') },
     { id: 'split', label: 'Show source and preview', shortcut: '⌘2', icon: uiIcon('split', 15), run: () => setViewMode('split') },
     { id: 'preview', label: 'Show preview', shortcut: '⌘3', icon: uiIcon('eye', 15), run: () => setViewMode('preview') },
@@ -427,7 +447,7 @@ async function revealNote(id: string) {
   const note = all.find((candidate) => candidate.id === id);
   if (!note) return;
   if (!notes.some((candidate) => candidate.id === id)) {
-    selectedFolder = note.folderId === 'archive' ? 'archive' : null;
+    selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : null;
     selectedTag = null;
     activeFilter = 'all';
     renderFilterPills();
@@ -447,10 +467,58 @@ function noteMarkerChange() {
 }
 
 async function createNote() {
-  const note = await invoke<Note>('create_note', { folderId: selectedFolder });
+  const folderId = selectedFolder === 'journal' ? null : selectedFolder;
+  const note = await invoke<Note>('create_note', { folderId });
+  if (selectedFolder === 'journal') {
+    // A page from the journal list lands in All Notes, which shows it.
+    selectedFolder = null;
+    renderFilterPills();
+  }
   await reloadFolders();
   await reloadNotes();
   await openNote(note);
+}
+
+/** Folders the user made, as opposed to All Notes, the Journal and the Archive. */
+function isUserFolder(id: string | null): id is string {
+  return !!id && id !== 'archive' && id !== 'journal';
+}
+
+// ---- Journal ----
+
+/** Open a day's journal page, creating it (from the "Journal Template" note, if any) the first time. */
+async function openJournal(day: string) {
+  await settlePendingWork();
+  const note = await invoke<Note>('open_journal', { day });
+  journalMonth = monthOf(day);
+  if (selectedFolder !== 'journal' || selectedTag) {
+    noteMarkerChange();
+    selectedFolder = 'journal';
+    selectedTag = null;
+    activeFilter = 'all';
+    renderFilterPills();
+  }
+  await reloadFolders();
+  await reloadNotes();
+  await openNote(notes.find((candidate) => candidate.id === note.id) ?? note);
+  document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(note.id)}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
+function journalCalendarHtml() {
+  const withPages = new Set(libraryNotes.flatMap((note) => note.journal ? [note.journal] : []));
+  return calendarHtml(journalMonth, withPages, selectedNote?.journal ?? null);
+}
+
+function bindJournalCalendar(root: HTMLElement) {
+  root.querySelectorAll<HTMLButtonElement>('[data-day]').forEach((button) => {
+    button.addEventListener('click', () => void openJournal(button.dataset.day!));
+  });
+  root.querySelectorAll<HTMLButtonElement>('[data-month-shift]').forEach((button) => {
+    button.addEventListener('click', () => {
+      journalMonth = shiftMonth(journalMonth, Number(button.dataset.monthShift));
+      renderNotes();
+    });
+  });
 }
 
 function startFolderCreate(parentId: string | null) {
@@ -497,7 +565,8 @@ async function reloadFolders() {
   folders = await invoke<Folder[]>('list_folders');
   const allNotes = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
   libraryNotes = allNotes.filter((note) => note.folderId !== 'archive');
-  allNotesCount = libraryNotes.length;
+  // Journal pages have their own place, like the Archive, so All Notes leaves them out.
+  allNotesCount = libraryNotes.filter((note) => !note.journal).length;
   renderFolders();
 }
 
@@ -505,8 +574,10 @@ async function reloadNotes() {
   // Any change to the notes can change what query blocks list.
   invalidateQueries();
   notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
-  // Archived notes only show up in the Archive itself, not in All.
-  if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
+  // Archived notes only show up in the Archive itself, and journal pages in the Journal.
+  if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive' && !note.journal);
+  // The newest day first.
+  if (selectedFolder === 'journal') notes.sort((a, b) => (b.journal ?? '').localeCompare(a.journal ?? ''));
   if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {
     selectedNote = null;
     content = '';
@@ -564,6 +635,12 @@ function renderFolders() {
       <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag)}">All Notes</span></span>
       <span class="folder-count">${allNotesCount}</span>
     </button>
+    <button class="folder system-folder ${selectedFolder === 'journal' ? 'selected' : ''}" data-folder="journal" style="padding-left: ${rowInset(0)}px" type="button" title="Journal (⌘⇧J for today)">
+      <span class="folder-disclosure is-empty" aria-hidden="true"></span>
+      <span class="folder-icon" aria-hidden="true">${iconSvg('calendar', 13)}</span>
+      <span class="folder-name"><span class="${markerClass(selectedFolder === 'journal')}">Journal</span></span>
+      <span class="folder-count">${libraryNotes.filter((note) => note.journal).length}</span>
+    </button>
     <button class="folder system-folder ${selectedFolder === 'archive' ? 'selected' : ''}" data-folder="archive" style="padding-left: ${rowInset(0)}px" type="button">
       <span class="folder-disclosure is-empty" aria-hidden="true"></span>
       <span class="folder-icon" aria-hidden="true">${iconSvg('archive', 13)}</span>
@@ -576,6 +653,8 @@ function renderFolders() {
 
   folderEl.querySelectorAll<HTMLButtonElement>('.folder').forEach((button) => {
     button.addEventListener('click', async () => {
+      // The Journal opens on today's page, the way a diary falls open.
+      if (button.dataset.folder === 'journal') { await openJournal(todayKey()); return; }
       noteMarkerChange();
       selectedFolder = button.dataset.folder || null;
       selectedTag = null;
@@ -649,8 +728,8 @@ function renderFolders() {
     });
   }
   const currentFolder = selectedFolder ? folders.find((folder) => folder.id === selectedFolder) : null;
-  noteListTitleEl.textContent = currentFolder?.name ?? 'All Notes';
-  scopeIconEl.innerHTML = currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : 'notes');
+  noteListTitleEl.textContent = currentFolder?.name ?? (selectedFolder === 'journal' ? 'Journal' : 'All Notes');
+  scopeIconEl.innerHTML = currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : selectedFolder === 'journal' ? 'calendar' : 'notes');
 }
 
 function iconSvg(key: string | null | undefined, size = 16) {
@@ -691,7 +770,7 @@ function bindFolderDragHandlers(button: HTMLButtonElement) {
   const id = button.dataset.folder ?? '';
   const isArchive = id === 'archive';
   const isAllNotes = id === '';
-  const isUserFolder = !isArchive && !isAllNotes;
+  const isUserFolder = !isArchive && !isAllNotes && id !== 'journal';
 
   if (isUserFolder) {
     button.addEventListener('dragstart', (event) => {
@@ -710,7 +789,8 @@ function bindFolderDragHandlers(button: HTMLButtonElement) {
     });
   }
 
-  if (isArchive) return;
+  // Folders can't be dropped into the Archive or the Journal.
+  if (!isUserFolder && !isAllNotes) return;
 
   button.addEventListener('dragover', (event) => {
     if (!draggingFolderId || draggingFolderId === id) return;
@@ -801,16 +881,20 @@ function applyQuickFilter(list: Note[]): Note[] {
 function renderNotes() {
   const visible = applyQuickFilter(notes);
   noteListCountEl.textContent = `${visible.length}`;
+  const inJournal = selectedFolder === 'journal';
+  const calendar = inJournal ? journalCalendarHtml() : '';
   if (!visible.length) {
     const filtered = activeFilter !== 'all';
-    noteEl.innerHTML = `<div class="empty"><div class="empty-icon">${iconSvg('notes', 22)}</div><strong>${filtered ? 'Nothing matches this filter' : 'This list is empty'}</strong><span>${filtered ? 'Switch back to All to see every note here.' : 'Write the first note here. It saves as plain text in your vault.'}</span>${filtered ? '' : `<button type="button" class="empty-action" data-empty-list-new>${uiIcon('plus', 13)}New note</button>`}</div>`;
+    noteEl.innerHTML = `${calendar}<div class="empty"><div class="empty-icon">${iconSvg('notes', 22)}</div><strong>${filtered ? 'Nothing matches this filter' : 'This list is empty'}</strong><span>${filtered ? 'Switch back to All to see every note here.' : 'Write the first note here. It saves as plain text in your vault.'}</span>${filtered ? '' : `<button type="button" class="empty-action" data-empty-list-new>${uiIcon('plus', 13)}New note</button>`}</div>`;
     noteEl.querySelector('[data-empty-list-new]')?.addEventListener('click', createNote);
+    bindJournalCalendar(noteEl);
     renderTags();
     return;
   }
   let lastGroup = '';
-  noteEl.innerHTML = visible.map((note) => {
-    const group = dateGroup(note.updatedAt);
+  noteEl.innerHTML = calendar + visible.map((note) => {
+    const day = inJournal ? note.journal ?? null : null;
+    const group = day ? monthGroup(day) : dateGroup(note.updatedAt);
     const heading = group !== lastGroup ? `<h2 class="note-group">${group}</h2>` : '';
     lastGroup = group;
     const tagMarkup = note.tags.slice(0, 3).map((tag) => `<span style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag.split('/').pop() ?? tag)}</span>`).join('');
@@ -819,10 +903,10 @@ function renderNotes() {
     return `${heading}
       <article class="note-card ${selectedNote?.id === note.id ? 'selected' : ''}" data-note="${note.id}" tabindex="0" aria-current="${selectedNote?.id === note.id}">
         <div class="note-card-head">
-          <h3>${escapeHtml(note.title || 'Untitled')}</h3>
-          <time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>
+          <h3>${escapeHtml(day ? formatDay(day, 'short') : note.title || 'Untitled')}</h3>
+          ${day ? `<time datetime="${escapeHtml(day)}">${relativeDay(day) ?? ''}</time>` : `<time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>`}
         </div>
-        <p>${escapeHtml(note.preview || 'Empty note')}</p>
+        <p>${escapeHtml(note.preview || (day ? 'Nothing written yet' : 'Empty note'))}</p>
         ${tagMarkup || note.starred ? `<footer>${note.starred ? `<span class="starred" title="Pinned" aria-label="Pinned">${uiIcon('pin', 11)}</span>` : ''}${tagMarkup}${extraTags}</footer>` : ''}
         <button class="note-delete" data-delete-note="${note.id}" type="button" title="${archived ? 'Delete permanently' : 'Move to Archive'}" aria-label="${archived ? 'Delete permanently' : 'Move to Archive'}">${archived ? uiIcon('trash', 13) : iconSvg('archive', 13)}</button>
       </article>
@@ -838,6 +922,7 @@ function renderNotes() {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); await choose(); }
     });
   });
+  bindJournalCalendar(noteEl);
   noteEl.querySelectorAll<HTMLButtonElement>('.note-delete').forEach((button) => {
     button.addEventListener('click', async (event) => {
       event.stopPropagation();
@@ -1127,6 +1212,12 @@ async function followWikilink(target: string) {
   const { title, anchor } = splitTarget(target);
   if (!title) return;
   let note = resolveTarget(target, libraryNotes);
+  // A link to a date is a link to that day's journal page.
+  if (!note && isDayKey(title)) {
+    await openJournal(title);
+    if (anchor) scrollToHeading(anchor);
+    return;
+  }
   if (!note) note = await createNoteTitled(title);
   if (note.id !== selectedNote?.id) await revealNote(note.id);
   if (anchor) scrollToHeading(anchor);
@@ -1135,7 +1226,7 @@ async function followWikilink(target: string) {
 /** A link to a note that doesn't exist yet creates it, next to the current one. */
 async function createNoteTitled(title: string) {
   await settlePendingWork();
-  const folderId = selectedNote?.folderId && selectedNote.folderId !== 'archive' ? selectedNote.folderId : null;
+  const folderId = isUserFolder(selectedNote?.folderId ?? null) ? selectedNote!.folderId : null;
   const created = await invoke<Note>('create_note', { folderId });
   const note = await invoke<Note>('save_note', { id: created.id, content: `# ${title}\n\n` });
   await reloadFolders();
@@ -1195,7 +1286,8 @@ function markWikilinks(el: HTMLElement) {
     const target = link.dataset.target || '';
     const note = resolveTarget(target, libraryNotes);
     link.classList.toggle('is-missing', !note);
-    link.title = note ? `Open “${note.title}”` : `Create note “${splitTarget(target).title}”`;
+    const title = splitTarget(target).title;
+    link.title = note ? `Open “${note.title}”` : isDayKey(title) ? `Start the journal page for ${formatDay(title)}` : `Create note “${title}”`;
   });
 }
 
@@ -1370,15 +1462,25 @@ function renderEditor() {
   const textarea = `<textarea id="source" spellcheck="true" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
   editorRoot.className = `editor-root mode-${viewMode}`;
   const folder = selectedNote ? folders.find((f) => f.id === selectedNote!.folderId) : null;
+  const day = selectedNote?.journal ?? null;
+  const crumbHome = day && !folder
+    ? `<span class="crumb">${iconSvg('calendar', 14)}Journal</span>`
+    : `<span class="crumb">${folder ? folderIconSvg(folder.icon) : iconSvg('notes', 14)}${escapeHtml(folder?.name ?? 'Notes')}</span>`;
+  const dayNav = day ? `
+    <div class="journal-day-nav" role="group" aria-label="Journal days">
+      <button type="button" class="chrome-icon-button" data-journal-day="${shiftDay(day, -1)}" title="Previous day (⌥⌘←)" aria-label="Previous day">${uiIcon('chevronLeft', 14)}</button>
+      <button type="button" class="journal-today-button" data-journal-day="${todayKey()}" title="Today’s journal (⌘⇧J)" ${day === todayKey() ? 'disabled' : ''}>Today</button>
+      <button type="button" class="chrome-icon-button" data-journal-day="${shiftDay(day, 1)}" title="Next day (⌥⌘→)" aria-label="Next day">${uiIcon('chevronRight', 14)}</button>
+    </div>` : '';
   const modeButton = (mode: ViewMode, icon: string, label: string, key: string) =>
     `<button data-mode="${mode}" type="button" title="${label} (⌘${key})" aria-label="${label}" class="${viewMode === mode ? 'selected' : ''}" aria-pressed="${viewMode === mode}">${uiIcon(icon, 14)}<span>${label}</span></button>`;
   editorRoot.innerHTML = selectedNote ? `
     <header class="editor-topbar" data-tauri-drag-region>
       ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
       <nav class="crumbs" aria-label="Location" data-tauri-drag-region>
-        <span class="crumb">${folder ? folderIconSvg(folder.icon) : iconSvg('notes', 14)}${escapeHtml(folder?.name ?? 'Notes')}</span>
+        ${crumbHome}
         <span class="crumb-sep" aria-hidden="true">/</span>
-        <span class="crumb is-current">${escapeHtml(title)}</span>
+        <span class="crumb is-current">${escapeHtml(day ? formatDay(day, 'short') : title)}</span>
       </nav>
       <div class="topbar-right">
         <span id="saved"></span>
@@ -1398,9 +1500,10 @@ function renderEditor() {
         <button id="pin-note" class="chrome-icon-button pin-button ${selectedNote.starred ? 'active' : ''}" type="button" aria-pressed="${selectedNote.starred}" title="${selectedNote.starred ? 'Unpin note' : 'Pin note'}" aria-label="${selectedNote.starred ? 'Unpin note' : 'Pin note'}">${uiIcon('pin', 15)}</button>
       </div>
     </header>
-    <div class="doc-header">
-      <h1 class="doc-title">${escapeHtml(title)}</h1>
+    <div class="doc-header ${day ? 'is-journal' : ''}">
+      ${day ? `<div class="journal-day-head"><h1 class="doc-title">${escapeHtml(formatDay(day))}</h1>${dayNav}</div>` : `<h1 class="doc-title">${escapeHtml(title)}</h1>`}
       <div class="doc-meta">
+        ${day ? `<span class="journal-day-key">${relativeDay(day) ? `${relativeDay(day)} · ` : ''}${escapeHtml(title)}</span>` : ''}
         <span>Edited ${formatDate(selectedNote.updatedAt)}</span>
         <span id="counts"></span>
         ${selectedNote.tags.length ? `<span class="doc-tags">${selectedNote.tags.map((tag) => `<button type="button" class="doc-tag" data-doc-tag="${escapeHtml(tag)}" style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag)}</button>`).join('')}</span>` : ''}
@@ -1431,6 +1534,9 @@ function renderEditor() {
   });
 
   editorRoot.querySelector('[data-empty-new]')?.addEventListener('click', createNote);
+  editorRoot.querySelectorAll<HTMLButtonElement>('[data-journal-day]').forEach((button) => {
+    button.addEventListener('click', () => void openJournal(button.dataset.journalDay!));
+  });
 
   document.querySelector('#pin-note')?.addEventListener('click', async () => {
     if (!selectedNote) return;
@@ -1728,8 +1834,11 @@ async function flushSave() {
   await reloadNotes();
   savedMessage = 'Saved';
   setDocumentTitle(selectedNote.title || 'Untitled');
-  const titleText = selectedNote.title || 'Untitled';
-  editorRoot.querySelectorAll('.doc-title, .crumb.is-current').forEach((el) => { el.textContent = titleText; });
+  // Journal pages are headed by their day, whatever their title says.
+  if (!selectedNote.journal) {
+    const titleText = selectedNote.title || 'Untitled';
+    editorRoot.querySelectorAll('.doc-title, .crumb.is-current').forEach((el) => { el.textContent = titleText; });
+  }
   renderStatus();
 }
 
@@ -1916,6 +2025,11 @@ function dateGroup(value: string) {
   if (days < 7) return 'Previous 7 days';
   if (days < 30) return 'Previous 30 days';
   const date = new Date(value);
+  return date.toLocaleDateString(undefined, { month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+}
+
+function monthGroup(day: string) {
+  const date = new Date(`${day}T00:00:00`);
   return date.toLocaleDateString(undefined, { month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 }
 

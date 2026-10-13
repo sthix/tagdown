@@ -7,14 +7,14 @@ use std::io::{BufRead, Write};
 use serde_json::{json, Value};
 
 use crate::{
-    library::{Library, TaskFilter, SYNTAX},
+    library::{day_title, resolve_day, Library, TaskFilter, SYNTAX},
     models::Note,
 };
 
 const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SYNTAX_URI: &str = "tagdown://syntax";
 
-const INSTRUCTIONS: &str = "Tagdown is a local notes vault. Notes are Tagdown: Markdown plus callouts, tabs, columns, cards, math, Mermaid diagrams, #tags and [[wikilinks]] to other notes by title. A note's title is its first `# ` heading. Before writing notes with anything beyond plain Markdown, call get_tagdown_syntax once. Refer to notes by title (case-insensitive) or id. Search supports tag:name, title:word, \"exact phrases\" and -exclusions.";
+const INSTRUCTIONS: &str = "Tagdown is a local notes vault. Notes are Tagdown: Markdown plus callouts, tabs, columns, cards, math, Mermaid diagrams, #tags and [[wikilinks]] to other notes by title. A note's title is its first `# ` heading. Before writing notes with anything beyond plain Markdown, call get_tagdown_syntax once. Refer to notes by title (case-insensitive) or id. Search supports tag:name, title:word, \"exact phrases\" and -exclusions. The journal has one note per day, titled YYYY-MM-DD; use append_to_journal for logs and quick captures.";
 
 pub struct Server {
     library: Library,
@@ -204,6 +204,18 @@ impl Server {
                 }
                 Ok(text)
             }
+            "read_journal" => {
+                let day = resolve_day(str_arg("day").as_deref())?;
+                match lib.journal(day)? {
+                    Some((note, content)) => Ok(format!("{}\n\n---\n\n{content}", describe(&note, lib.folder_name(note.folder_id.as_deref())))),
+                    None => Ok(format!("No journal page for {} yet. append_to_journal starts one.", day_title(day))),
+                }
+            }
+            "append_to_journal" => {
+                let day = resolve_day(str_arg("day").as_deref())?;
+                let note = lib.append_to_journal(day, &required("content")?)?;
+                Ok(format!("Appended to the journal page \"{}\" (id: {}).", note.title, note.id))
+            }
             "get_tagdown_syntax" => Ok(SYNTAX.to_string()),
             _ => Err(format!("unknown tool: {name}")),
         }
@@ -224,6 +236,7 @@ fn describe(note: &Note, folder: Option<String>) -> String {
 fn tools() -> Value {
     let note = json!({ "type": "string", "description": "The note's title (case-insensitive) or id." });
     let content = json!({ "type": "string", "description": "Tagdown text. Use get_tagdown_syntax for callouts, tabs, layout, math and diagrams." });
+    let day = json!({ "type": "string", "description": "YYYY-MM-DD, today, yesterday or tomorrow (local time). Defaults to today." });
     let read_only = json!({ "readOnlyHint": true, "openWorldHint": false });
     json!([
         {
@@ -305,6 +318,20 @@ fn tools() -> Value {
             "annotations": read_only,
         },
         {
+            "name": "read_journal",
+            "title": "Read journal",
+            "description": "A day's journal page: one note per day, titled with its date (YYYY-MM-DD), so [[2026-10-13]] links to it.",
+            "inputSchema": { "type": "object", "properties": { "day": day } },
+            "annotations": read_only,
+        },
+        {
+            "name": "append_to_journal",
+            "title": "Append to journal",
+            "description": "Add Tagdown text to the end of a day's journal page, creating the page (from the \"Journal Template\" note, if there is one) when needed. Good for logs, meeting notes and quick captures.",
+            "inputSchema": { "type": "object", "properties": { "day": day, "content": content }, "required": ["content"] },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+        },
+        {
             "name": "get_tagdown_syntax",
             "title": "Tagdown syntax",
             "description": "The Tagdown syntax reference. Read it before writing notes that use more than plain Markdown.",
@@ -339,7 +366,7 @@ mod tests {
         assert_eq!(init["result"]["serverInfo"]["name"], "tagdown");
         assert!(s.handle(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
         let tools = s.handle(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 10);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 12);
         let syntax = s.handle(json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": { "uri": SYNTAX_URI } })).unwrap();
         assert!(syntax["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Tagdown syntax"));
         let unknown = s.handle(json!({ "jsonrpc": "2.0", "id": 4, "method": "nope" })).unwrap();
@@ -364,6 +391,20 @@ mod tests {
         assert!(text.contains("- [ ] Draft brief — \"Atlas\"") && text.contains("- [x] Pick name"), "{text}");
         let (text, _) = call(&mut s, "get_backlinks", json!({ "note": "Your First Note" }));
         assert!(text.contains("- Atlas") && text.contains("> Kickoff [[Your First Note]]."), "{text}");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn journal_tools_write_and_read_a_day() {
+        let (mut s, root) = server();
+        let (text, _) = call(&mut s, "read_journal", json!({ "day": "2026-10-13" }));
+        assert!(text.starts_with("No journal page for 2026-10-13"), "{text}");
+        let (text, err) = call(&mut s, "append_to_journal", json!({ "day": "2026-10-13", "content": "- Called [[Atlas]] team" }));
+        assert!(!err && text.contains("\"2026-10-13\""), "{text}");
+        let (text, _) = call(&mut s, "read_journal", json!({ "day": "2026-10-13" }));
+        assert!(text.ends_with("# 2026-10-13\n\n- Called [[Atlas]] team\n"), "{text}");
+        let (text, err) = call(&mut s, "append_to_journal", json!({ "day": "soon", "content": "x" }));
+        assert!(err && text.contains("not a day"), "{text}");
         std::fs::remove_dir_all(root).ok();
     }
 

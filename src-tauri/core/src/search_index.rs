@@ -483,6 +483,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             word_count: 0,
+            journal: None,
         }
     }
 

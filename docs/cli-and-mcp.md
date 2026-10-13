@@ -34,6 +34,7 @@ Notes are addressed by title (case-insensitive) or id.
 | `tagdown show <note>` | Print a note |
 | `tagdown new <title> [text \| -]` | Create a note; `-` reads the body from stdin |
 | `tagdown append <note> <text \| ->` | Add text to the end of a note |
+| `tagdown journal [day] [text \| -]` | Print a day's [journal](journal.md) page, or add text to it; `day` is `YYYY-MM-DD`, `today` (the default), `yesterday` or `tomorrow` |
 | `tagdown tasks [--done \| --all] [--tag TAG]` | Checklist items across notes (open ones by default) |
 | `tagdown backlinks <note>` | Notes that link to a note |
 | `tagdown query <query>` | What a `<query />` block would list, e.g. `tag:project show:tasks` |
@@ -47,6 +48,8 @@ tagdown search "tag:project budget"
 tagdown new "Meeting notes" "Agenda for [[Project Atlas]]"
 tagdown append "Meeting notes" "- [ ] Send recap"
 git log --oneline -5 | tagdown append "Release log" -
+tagdown journal "- Shipped the beta 🎉"
+tagdown journal yesterday
 tagdown tasks --tag project
 ```
 
@@ -87,6 +90,8 @@ To point an assistant at a different vault, add `"--vault", "/path/to/vault"` be
 | `list_tasks` | Checklist items across notes, grouped by note |
 | `get_backlinks` | Notes that link to a note, with the linking lines |
 | `run_query` | What a `<query />` block would list |
+| `read_journal` | A day's journal page (today by default) |
+| `append_to_journal` | Add text to a day's journal page, creating the page if needed |
 | `get_tagdown_syntax` | The Tagdown syntax reference |
 
 The syntax reference is also offered as an MCP resource, so assistants write callouts, tabs, and wikilinks rather than plain Markdown.
@@ -95,4 +100,5 @@ The syntax reference is also offered as an MCP resource, so assistants write cal
 
 - "What's still open for Project Atlas?"
 - "Summarize this week's meeting notes into a new note called Weekly recap, and link each meeting."
+- "Log in my journal that I finished the quarterly report."
 - "Add a task to my Reading list to finish *The Pragmatic Programmer*."

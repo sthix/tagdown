@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +23,9 @@ pub struct Note {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub word_count: u32,
+    /// The day this note is the journal page for, if it is one.
+    #[serde(default)]
+    pub journal: Option<NaiveDate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,4 +102,5 @@ pub struct NoteFrontmatter {
     pub folder_id: Option<String>,
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
+    pub journal: Option<NaiveDate>,
 }

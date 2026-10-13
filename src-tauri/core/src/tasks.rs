@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn ticks_the_right_line_only_while_it_matches() {
         let content = "# T\n\n- [ ] One\n  * [x] Two\n```\n- [ ] Code\n```\n";
-        let note = Note { id: "n".into(), title: "T".into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0 };
+        let note = Note { id: "n".into(), title: "T".into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0, journal: None };
         let tasks = parse_tasks(&note, content);
         assert_eq!(tasks.iter().map(|t| (t.line, t.text.as_str(), t.done)).collect::<Vec<_>>(), vec![(3, "One", false), (4, "Two", true)]);
         assert_eq!(set_task_done(content, 3, "One", true).unwrap(), content.replace("- [ ] One", "- [x] One"));

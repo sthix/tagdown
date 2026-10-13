@@ -565,8 +565,7 @@ async function reloadFolders() {
   folders = await invoke<Folder[]>('list_folders');
   const allNotes = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
   libraryNotes = allNotes.filter((note) => note.folderId !== 'archive');
-  // Journal pages have their own place, like the Archive, so All Notes leaves them out.
-  allNotesCount = libraryNotes.filter((note) => !note.journal).length;
+  allNotesCount = libraryNotes.length;
   renderFolders();
 }
 
@@ -574,8 +573,8 @@ async function reloadNotes() {
   // Any change to the notes can change what query blocks list.
   invalidateQueries();
   notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
-  // Archived notes only show up in the Archive itself, and journal pages in the Journal.
-  if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive' && !note.journal);
+  // Archived notes only show up in the Archive itself, not in All.
+  if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
   // The newest day first.
   if (selectedFolder === 'journal') notes.sort((a, b) => (b.journal ?? '').localeCompare(a.journal ?? ''));
   if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {

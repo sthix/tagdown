@@ -25,7 +25,7 @@ Folders and tag colours are recorded in `.tagdown/vault.json`. Because notes are
 - Create a folder from the sidebar's **Library** section. Folders can be nested.
 - Drag a folder onto another to nest it, or between two folders to reorder.
 - New notes are created in the selected folder.
-- **All Notes** shows every note that isn't archived or a [journal](journal.md) page.
+- **All Notes** shows every note that isn't archived, [journal](journal.md) pages included.
 
 ## Tags
 

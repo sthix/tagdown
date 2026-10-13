@@ -8,7 +8,7 @@ The journal gives every day its own page, in the spirit of Logseq's journals. Op
 - The note list shows a month calendar above your days, newest first. Days with a page have a dot. Click any day, past or future, to open or start its page.
 - On a journal page, **‹** and **›** next to the date step to the previous and next day (**⌥⌘←** / **⌥⌘→**). **Today** jumps back.
 
-Journal pages are left out of **All Notes**, the same way the Archive is. They're still ordinary notes: search, tags, tasks, queries, backlinks, version history and export all work on them.
+Journal pages are ordinary notes: they show up in **All Notes**, and search, tags, tasks, queries, backlinks, version history and export all work on them. The Journal is a view of just the days, ordered by date.
 
 ## Linking to a day
 

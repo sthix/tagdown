@@ -50,7 +50,9 @@
 .td-block-editor::placeholder { color: var(--ink-4); }
 /* The open block gets a hairline outline with a soft highlight that slowly
    travels around it, so it reads as active without a heavy focus ring. The
-   ring is a conic gradient masked down to a 1px border, laid over the editor. */
+   ring is a conic gradient masked down to a 1px border, laid over the editor.
+   The editor's vertical margins collapse through the block, so the block's box
+   is exactly the editor's height; only the side bleed needs matching. */
 @property --td-orbit {
   syntax: '<angle>';
   initial-value: 0deg;
@@ -59,7 +61,7 @@
 .preview .td-block.is-editing::after {
   content: "";
   position: absolute;
-  inset: 2px -12px 12px;
+  inset: 0 -12px;
   padding: 1px;
   border-radius: 8px;
   pointer-events: none;

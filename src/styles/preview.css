@@ -39,7 +39,6 @@
   resize: none;
   overflow: hidden;
   background: var(--bg-field);
-  box-shadow: inset 0 0 0 1px var(--marker-strong), 0 0 0 3px var(--focus-ring);
   color: var(--source-fg);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -48,6 +47,34 @@
   tab-size: 2;
 }
 .td-block-editor::selection { background: var(--accent-tint-strong); }
+.td-block-editor::placeholder { color: var(--ink-4); }
+/* The open block gets a hairline outline with a soft highlight that slowly
+   travels around it, so it reads as active without a heavy focus ring. The
+   ring is a conic gradient masked down to a 1px border, laid over the editor. */
+@property --td-orbit {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.preview .td-block.is-editing::after {
+  content: "";
+  position: absolute;
+  inset: 2px -12px 12px;
+  padding: 1px;
+  border-radius: 8px;
+  pointer-events: none;
+  background:
+    conic-gradient(from var(--td-orbit), transparent 0deg, var(--accent-soft) 45deg, transparent 100deg, transparent 360deg),
+    linear-gradient(var(--line-strong), var(--line-strong));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: td-orbit 7s linear infinite;
+}
+@keyframes td-orbit { to { --td-orbit: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .preview .td-block.is-editing::after { animation: none; background: var(--marker-strong); opacity: .7; }
+}
 .td-block-append {
   margin-top: 6px;
   padding: 8px 0;
@@ -86,6 +113,13 @@
 .preview ul,
 .preview ol { margin: 0 0 12px 20px; padding: 0; }
 .preview li { margin-bottom: 4px; }
+/* Nested items hang off a thin thread under their parent's bullet, like an outliner. */
+.preview li > ul,
+.preview li > ol {
+  margin: 4px 0 0 -13px;
+  padding-left: 31px;
+  border-left: 1px solid var(--pv-rule);
+}
 .preview hr {
   border: 0;
   height: 1px;
@@ -251,9 +285,25 @@
 }
 .preview .td-task {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   margin-bottom: 4px;
+}
+/* A plain item in a list with tasks keeps a bullet, in the checkbox's column. */
+.preview ul.td-tasklist > li:not(.td-task)::before {
+  content: "•";
+  display: inline-block;
+  width: 13px;
+  margin-right: 8px;
+  color: var(--pv-ink-soft);
+  text-align: center;
+}
+.preview ul.td-tasklist > li > ul,
+.preview ul.td-tasklist > li > ol {
+  flex-basis: 100%;
+  margin: 4px 0 0 6px;
+  padding-left: 20px;
 }
 .preview .td-task input[type="checkbox"] {
   margin: 0;

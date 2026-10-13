@@ -108,7 +108,7 @@ Tagdown supports common block markdown plus explicit tags for richer structures.
 
 ### Unordered and ordered lists
 
-Every line in the block should use the same list style.
+Start lines with - or 1. Numbered lists can start at any number.
 
 ```tagdown
 - one
@@ -127,6 +127,20 @@ Mix - [x] and - [ ] entries inside a normal bullet list.
 - [x] Done item
 - [ ] Pending item
 - Regular bullet
+```
+
+### Nested lists
+
+Indent an item under the one above it to make it a child; in the editor, Tab and Shift+Tab nest and un-nest. Bullets, numbers and tasks mix at any depth, and an indented line without a marker continues the item above.
+
+```tagdown
+- Project
+  - Research
+    - [x] Read the docs
+    - [ ] Try it out
+  - Write-up
+    continues on a second line
+- Next project
 ```
 
 ### Fenced code

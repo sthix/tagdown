@@ -35,9 +35,21 @@
 
 | Shortcut | Action |
 | --- | --- |
+| `/` | Command menu: type to filter, ↑ ↓ to choose, ↩ or Tab to apply, Esc to close |
 | `[[` | Wikilink autocomplete (↑ ↓ to choose, ↩ or Tab to insert, Esc to close) |
 | `[[today` | Link to today's journal page (also `[[yesterday`, `[[tomorrow`) |
 | Esc or ⌘↩ | Finish editing a block in the preview |
+
+## Lists
+
+| Shortcut | Action |
+| --- | --- |
+| ↩ | Next item of the same kind (bullet, next number, or an empty task) |
+| ↩ on an empty item | Move it out a level; at the top level, end the list |
+| ⇧↩ | New line inside the same item |
+| Tab | Nest the item, with its children, under the item above |
+| ⇧Tab | Move the item, with its children, out a level |
+| ⌫ right after a marker | Turn a task into a bullet, and a bullet into plain text |
 
 ## Slides
 

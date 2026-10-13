@@ -78,13 +78,18 @@ export const tagdownDocumentation: DocumentationSection[] = [
     examples: [
       {
         title: 'Unordered and ordered lists',
-        description: 'Every line in the block should use the same list style.',
+        description: 'Start lines with - or 1. Numbered lists can start at any number.',
         syntax: '- one\n- two\n- three\n\n1. first\n2. second'
       },
       {
         title: 'Task lists',
         description: 'Mix - [x] and - [ ] entries inside a normal bullet list.',
         syntax: '- [x] Done item\n- [ ] Pending item\n- Regular bullet'
+      },
+      {
+        title: 'Nested lists',
+        description: 'Indent an item under the one above it to make it a child; in the editor, Tab and Shift+Tab nest and un-nest. Bullets, numbers and tasks mix at any depth, and an indented line without a marker continues the item above.',
+        syntax: '- Project\n  - Research\n    - [x] Read the docs\n    - [ ] Try it out\n  - Write-up\n    continues on a second line\n- Next project'
       },
       {
         title: 'Fenced code',

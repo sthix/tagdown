@@ -153,7 +153,7 @@ function suggest(query: string, notes: LinkableNote[], currentId: string | null)
 }
 
 /** Viewport position of the character at `index` in a textarea. */
-function caretPosition(textarea: HTMLTextAreaElement, index: number) {
+export function caretPosition(textarea: HTMLTextAreaElement, index: number) {
   const style = getComputedStyle(textarea);
   const mirror = document.createElement('div');
   for (const prop of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'textTransform', 'wordSpacing', 'tabSize'] as const) {

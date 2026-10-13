@@ -611,24 +611,69 @@ function tryBlockText(text) {
     return renderCodeBlock(f[2], { lang });
   }
 
-  // Task list / unordered list — every line is `- text`, `* text`, `- [ ] text`, or `- [x] text`
+  // Lists: every line is `- text`, `* text`, `1. text`, `- [ ] task` or an
+  // indented continuation of the item above. Indentation nests items.
   const lines = t.split('\n');
-  if (lines.length >= 1 && lines.every(l => /^\s*[-*]\s+/.test(l))) {
-    const hasAnyTask = lines.some(l => /^\s*[-*]\s+\[[ xX]\]/.test(l));
-    const items = lines.map(l => {
-      const taskM = l.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+)$/);
-      if (taskM) {
-        const checked = taskM[1] !== ' ' ? ' checked' : '';
-        return `<li class="td-task"><input type="checkbox"${checked}><span>${inline(taskM[2])}</span></li>`;
-      }
-      return `<li>${inline(l.replace(/^\s*[-*]\s+/, ''))}</li>`;
-    }).join('');
-    return `<ul${hasAnyTask ? ' class="td-tasklist"' : ''}>${items}</ul>`;
-  }
-  if (lines.length >= 1 && lines.every(l => /^\s*\d+\.\s+/.test(l))) {
-    return '<ol>' + lines.map(l => `<li>${inline(l.replace(/^\s*\d+\.\s+/, ''))}</li>`).join('') + '</ol>';
+  if (LIST_ITEM_RE.test(lines[0]) && lines.every(l => LIST_ITEM_RE.test(l) || LIST_CONTINUATION_RE.test(l))) {
+    return renderList(lines);
   }
   return null;
+}
+
+const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s+/;
+const LIST_CONTINUATION_RE = /^(?: {2,}|\t)\S/;
+
+/* Build nested <ul>/<ol> from list lines. An item indented deeper than the one
+   above it becomes that item's child; a change of marker style at the same
+   depth starts a new list. Task items stay checkboxes at any depth. */
+function renderList(lines) {
+  const root = { children: [] };
+  const stack = [];
+  for (const line of lines) {
+    const m = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    if (!m) {
+      if (stack.length) stack[stack.length - 1].node.text += '\n' + line.trim();
+      continue;
+    }
+    const indent = m[1].replace(/\t/g, '  ').length;
+    const ordered = /\d/.test(m[2]);
+    const task = m[3].match(/^\[([ xX])\](?:\s+(.*))?$/);
+    const node = {
+      ordered,
+      number: ordered ? parseInt(m[2], 10) : 0,
+      task: task ? task[1] !== ' ' : null,
+      text: task ? (task[2] || '') : m[3],
+      children: [],
+    };
+    while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
+    (stack.length ? stack[stack.length - 1].node : root).children.push(node);
+    stack.push({ indent, node });
+  }
+  return renderListItems(root.children);
+}
+
+function renderListItems(items) {
+  let out = '';
+  for (let i = 0; i < items.length;) {
+    let j = i;
+    while (j < items.length && items[j].ordered === items[i].ordered) j++;
+    const group = items.slice(i, j);
+    const lis = group.map(item => {
+      const nested = item.children.length ? renderListItems(item.children) : '';
+      if (item.task !== null) {
+        return `<li class="td-task"><input type="checkbox"${item.task ? ' checked' : ''}><span>${inline(item.text)}</span>${nested}</li>`;
+      }
+      return `<li>${inline(item.text)}${nested}</li>`;
+    }).join('');
+    if (group[0].ordered) {
+      const start = group[0].number !== 1 ? ` start="${group[0].number}"` : '';
+      out += `<ol${start}>${lis}</ol>`;
+    } else {
+      out += `<ul${group.some(item => item.task !== null) ? ' class="td-tasklist"' : ''}>${lis}</ul>`;
+    }
+    i = j;
+  }
+  return out;
 }
 
 function passThrough(node, blockCtx) {

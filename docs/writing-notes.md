@@ -22,13 +22,27 @@ A note's title is its first `# ` heading. Rename a note by editing that heading.
 | Split | ⌘2 | Source and rendered preview side by side |
 | Preview | ⌘3 | Only the rendered document |
 
-In **Preview**, you can still edit: click a block to edit its source in place. Press **Esc** or **⌘↩** to finish. Ticking a checkbox in the preview updates the task in the source.
+In **Preview**, you can still edit: click a block to edit its source in place. The open block gets a thin outline with a slowly moving highlight. Press **Esc** or **⌘↩** to finish. Ticking a checkbox in the preview updates the task in the source.
 
 ## Saving
 
 Notes autosave shortly after you stop typing. **⌘S** saves immediately. The status next to the view switcher shows **Saved to vault** once the note is on disk.
 
 If a note changes on disk while it is open (another editor, a `git pull`, a sync service, or the `tagdown` CLI), Tagdown reloads it. If you also have unsaved edits, it asks which version to keep. Either way, the version that gets replaced is kept in [version history](version-history.md).
+
+## The command menu
+
+Type **/** at the start of a line, or after a space, to open the command menu. Keep typing to filter it (`/h2`, `/todo`, `/callout`, `/table`), then press **↩** or **Tab** to apply the highlighted command, or **Esc** to close the menu and keep the text.
+
+- **Basic blocks** turn the current line into a heading, bullet, numbered item, or task, and keep what you already wrote on it. Toggles, quotes, dividers, and tables are inserted too.
+- **Components** (callouts, columns, tabs, images, code, math, diagrams, queries) replace an empty line, or go below the current one. The placeholder text is selected, so you can type straight over it.
+- **Links and dates** insert a `[[` link (with the note autocomplete), a link to today's, tomorrow's, or yesterday's journal page, the current time, or a tag.
+
+## Lists and outlines
+
+Lists continue as you type. Press **↩** at the end of a bullet, a numbered item, or a task to start the next one; numbers count up, and new tasks start unticked. Press **↩** again on the empty item to end the list and go back to ordinary text.
+
+Lists nest like an outliner. **Tab** makes the current item a child of the item above it, and takes its own children along. **⇧Tab** moves it back out. Nested items show a thin guide line in the preview, and numbered lists renumber themselves as items move. **⇧↩** adds a line inside an item without starting a new one.
 
 ## The formatting toolbar
 

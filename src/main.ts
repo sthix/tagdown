@@ -14,6 +14,8 @@ import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
 import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
+import { attachSlashCommands, SLASH_HINT } from './slashCommands';
+import { attachListEditing } from './listEditing';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -1296,7 +1298,7 @@ function paintPreview(el: HTMLElement) {
   const empty = !content.trim();
   // Only offer in-place editing when the source could be mapped to blocks.
   const append = blocks.length || empty
-    ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing…' : 'Click to add a block'}</div>`
+    ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing, or type / for commands' : 'Click to add a block'}</div>`
     : '';
   el.innerHTML = html + append + backlinksHtml();
   markDocTitle(el);
@@ -1390,6 +1392,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
   textarea.className = 'td-block-editor';
   textarea.value = text;
   textarea.spellcheck = true;
+  textarea.placeholder = SLASH_HINT;
   textarea.setAttribute('aria-label', 'Edit block. Press Escape to finish.');
   wrap.classList.remove('is-doc-title');
   wrap.classList.add('is-editing');
@@ -1401,7 +1404,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
   const caret = caretOffset(text, hint);
   textarea.setSelectionRange(caret, caret);
 
-  attachWikilinkAutocomplete(textarea, wikilinkOptions);
+  attachEditingAids(textarea);
   textarea.addEventListener('input', () => {
     if (blockEdit?.el !== textarea) return;
     const lines = content.split('\n');
@@ -1458,7 +1461,7 @@ function renderEditor() {
   blockEdit = null;
   const title = selectedNote?.title || 'Untitled';
   const preview = '<div class="preview td-note-root"></div>';
-  const textarea = `<textarea id="source" spellcheck="true" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
+  const textarea = `<textarea id="source" spellcheck="true" placeholder="${SLASH_HINT}" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
   editorRoot.className = `editor-root mode-${viewMode}`;
   const folder = selectedNote ? folders.find((f) => f.id === selectedNote!.folderId) : null;
   const day = selectedNote?.journal ?? null;
@@ -1723,7 +1726,7 @@ function renderEditor() {
   });
 
   const source = document.querySelector<HTMLTextAreaElement>('#source');
-  if (source) attachWikilinkAutocomplete(source, wikilinkOptions);
+  if (source) attachEditingAids(source);
   source?.addEventListener('input', () => {
     content = source.value;
     savedMessage = 'Saving…';
@@ -1746,6 +1749,14 @@ const wikilinkOptions = {
   notes: () => libraryNotes,
   currentId: () => selectedNote?.id ?? null,
 };
+
+// Popups first: while `[[` suggestions or the `/` menu are open they take
+// ↩ and Tab before list editing (and the block editor's own keys) see them.
+function attachEditingAids(textarea: HTMLTextAreaElement) {
+  attachWikilinkAutocomplete(textarea, wikilinkOptions);
+  attachSlashCommands(textarea);
+  attachListEditing(textarea);
+}
 
 function insertText(text: string, atLineStart = false) {
   if (blockEdit) {

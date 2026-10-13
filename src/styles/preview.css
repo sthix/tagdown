@@ -287,7 +287,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 0 8px;
   margin-bottom: 4px;
 }
 /* A plain item in a list with tasks keeps a bullet, in the checkbox's column. */

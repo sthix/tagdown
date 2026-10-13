@@ -18,7 +18,7 @@ Tagdown Editor is a macOS-focused Tauri app for writing structured notes without
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/tagdown-editor-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/images/tagdown-editor-light.png" />
-  <img width="1440" alt="Tagdown Editor in split view: the sidebar with library folders and a tag tree, a note list grouped by date, and a launch-plan note shown as Tagdown source beside its rendered preview with a callout, task list, table, and math" src="docs/images/tagdown-editor-light.png" />
+  <img width="1440" alt="Tagdown Editor in split view: the sidebar with All Notes, the Journal, library folders and a tag tree, a note list grouped by date, and a launch-plan note shown as Tagdown source beside its rendered preview with a callout, task list, table, and math" src="docs/images/tagdown-editor-light.png" />
 </picture>
 
 <details>

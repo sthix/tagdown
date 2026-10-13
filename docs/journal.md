@@ -2,6 +2,11 @@
 
 The journal gives every day its own page, in the spirit of Logseq's journals. Open it, and today's page is ready to write in. Use it for a running log, meeting notes, or quick thoughts you'll sort out later.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/journal-dark.png" />
+  <img width="1440" alt="The Journal: a month calendar with dots on days that have a page, the days listed newest first, and today's page open with tasks, standup notes, and a linked mention from Weekly planning" src="images/journal-light.png" />
+</picture>
+
 ## Today's page
 
 - Click **Journal** in the sidebar, or press **⌘⇧J** from anywhere. Today's page opens, and is created if it doesn't exist yet.

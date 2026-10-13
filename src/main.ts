@@ -6,7 +6,8 @@ import { initSettings, openSettings } from './settings/settings';
 import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
 import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
 import { renderEditablePreview, renderPreview, applyExternals } from './tagdown/renderer';
-import { firstMovableBlock, moveBlock, type SourceBlock } from './tagdown/blocks';
+import { firstMovableBlock, headingLevel, moveBlock, sectionSpan, type SourceBlock } from './tagdown/blocks';
+import { getPreference } from './settings/preferences';
 import { attachBlockDrag } from './blockDrag';
 import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
@@ -1383,9 +1384,14 @@ function startBlockEdit(blockEl: HTMLElement, hint: { before: string; after: str
   openBlockEditor(fresh, block.start, block.end - block.start, hint, null);
 }
 
-/** Move block `from` to sit before block `to`; returns the moved block's new index, or -1. */
-function moveBlockTo(from: number, to: number): number {
-  const moved = moveBlock(content, previewBlocks, from, to);
+/** How many blocks move with block `index`: its section, for a heading, when that's turned on. */
+function moveSpan(index: number) {
+  return getPreference('dragHeadingSections') ? sectionSpan(content, previewBlocks, index) : 1;
+}
+
+/** Move `count` blocks from `from` to sit before block `to`; returns the first moved block's new index, or -1. */
+function moveBlockTo(from: number, to: number, count = 1): number {
+  const moved = moveBlock(content, previewBlocks, from, to, count);
   if (!moved) return -1;
   content = moved.source;
   syncSourceTextarea();
@@ -1402,6 +1408,29 @@ function moveBlockTo(from: number, to: number): number {
   return index;
 }
 
+// With sections on, a heading steps past a whole sibling section instead of
+// a single block.
+function stepUpTarget(index: number) {
+  const level = getPreference('dragHeadingSections') ? headingLevel(content, previewBlocks, index) : 0;
+  if (level) {
+    for (let i = index - 1; i >= 0; i--) {
+      const other = headingLevel(content, previewBlocks, i);
+      if (other && other <= level) return other === level ? i : index - 1;
+    }
+  }
+  return index - 1;
+}
+
+function stepDownTarget(index: number, count: number) {
+  const next = index + count;
+  // Nothing below: an out-of-range target, which the caller ignores.
+  if (next >= previewBlocks.length) return next + 1;
+  const level = getPreference('dragHeadingSections') ? headingLevel(content, previewBlocks, index) : 0;
+  // Past a whole sibling section; past just the heading of a bigger one, so
+  // this section becomes its first subsection.
+  return next + (level && headingLevel(content, previewBlocks, next) === level ? moveSpan(next) : 1);
+}
+
 /** ⌘⇧↑ / ⌘⇧↓ while editing a block: move it past its neighbour and keep editing. */
 function moveOpenBlock(direction: -1 | 1) {
   if (!blockEdit) return;
@@ -1410,9 +1439,11 @@ function moveOpenBlock(direction: -1 | 1) {
   commitBlockEdit();
   let index = previewBlocks.findIndex((block) => block.start === start);
   if (index < 0) return;
-  const to = direction < 0 ? index - 1 : index + 2;
-  if (to >= firstMovableBlock(content, previewBlocks) && index >= firstMovableBlock(content, previewBlocks) && to <= previewBlocks.length) {
-    const moved = moveBlockTo(index, to);
+  const count = moveSpan(index);
+  const to = direction < 0 ? stepUpTarget(index) : stepDownTarget(index, count);
+  const first = firstMovableBlock(content, previewBlocks);
+  if (index >= first && to >= first && to <= previewBlocks.length) {
+    const moved = moveBlockTo(index, to, count);
     if (moved >= 0) index = moved;
   }
   const fresh = previewBlockEl(index);
@@ -1691,6 +1722,7 @@ function renderEditor() {
       count: () => previewBlocks.length,
       firstMovable: () => firstMovableBlock(content, previewBlocks),
       prepare: closeBlockEditFor,
+      span: moveSpan,
       move: moveBlockTo,
     });
   }

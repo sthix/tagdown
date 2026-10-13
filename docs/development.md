@@ -30,7 +30,7 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   ├── presentation.ts     # slides
 │   ├── export.ts           # HTML export and print
 │   ├── publish.ts          # static website publishing
-│   ├── settings/           # settings dialog and theme
+│   ├── settings/           # settings dialog, theme, and editor preferences
 │   ├── styles/             # CSS (tokens.css holds the light and dark palettes)
 │   └── tagdown/            # parser, renderer, blocks, slides, syntax reference data
 ├── src-tauri/

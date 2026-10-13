@@ -13,8 +13,10 @@ type Options = {
   firstMovable: () => number;
   /** Called on press, before the drag starts; returns the block's index afterwards (-1 to cancel). */
   prepare: (index: number) => number;
-  /** Move block `from` so it sits before block `to` (`to` may equal the block count). */
-  move: (from: number, to: number) => void;
+  /** How many blocks, starting at `index`, move together (a heading's section). */
+  span: (index: number) => number;
+  /** Move `count` blocks from `from` so they sit before block `to` (`to` may equal the block count). */
+  move: (from: number, to: number, count: number) => void;
 };
 
 const EDGE = 56; // px from the preview's edge where dragging scrolls it
@@ -86,26 +88,33 @@ export function attachBlockDrag(preview: HTMLElement, host: HTMLElement, options
     const from = options.prepare(indexOf(hovered));
     if (from < 0) { placeHandle(null); return; }
     // `prepare` may have repainted the preview; find the block again.
-    const source = blocks().find((el) => indexOf(el) === from);
-    if (!source) { placeHandle(null); return; }
-    startDrag(source, from, event);
+    const count = Math.max(1, options.span(from));
+    const sources = blocks().filter((el) => indexOf(el) >= from && indexOf(el) < from + count);
+    if (!sources.length || indexOf(sources[0]) !== from) { placeHandle(null); return; }
+    startDrag(sources, from, count, event);
   });
 
-  function startDrag(source: HTMLElement, from: number, down: PointerEvent) {
+  function startDrag(sources: HTMLElement[], from: number, count: number, down: PointerEvent) {
     dragging = true;
-    const rect = source.getBoundingClientRect();
+    const first = sources[0].getBoundingClientRect();
+    const last = sources[sources.length - 1].getBoundingClientRect();
+    const rect = { left: first.left, top: first.top, width: first.width, height: last.bottom - first.top };
     const offsetY = down.clientY - rect.top;
+    // Dropping inside the blocks being moved changes nothing.
+    const isNoop = (to: number) => to >= from && to <= from + count;
 
     // The lifted copy is a small preview of its own, so the block keeps its
     // type styles. It lives on <body>, away from the editor's view-mode rules
     // for its real preview (backgrounds, padding, masks).
-    const copy = source.cloneNode(true) as HTMLElement;
-    copy.removeAttribute('data-block');
-    copy.classList.remove('is-drag-source', 'is-just-moved');
     const ghost = document.createElement('div');
     ghost.className = 'preview td-note-root block-drag-ghost';
     ghost.classList.toggle('is-tall', rect.height > 320);
-    ghost.append(copy);
+    for (const source of sources) {
+      const copy = source.cloneNode(true) as HTMLElement;
+      copy.removeAttribute('data-block');
+      copy.classList.remove('is-drag-source', 'is-just-moved');
+      ghost.append(copy);
+    }
     ghost.style.width = `${rect.width + 24}px`;
     ghost.style.left = `${rect.left - 12}px`;
     ghost.style.top = `${rect.top - GHOST_PAD}px`;
@@ -116,7 +125,7 @@ export function attachBlockDrag(preview: HTMLElement, host: HTMLElement, options
     line.hidden = true;
     host.append(line);
 
-    source.classList.add('is-drag-source');
+    sources.forEach((source) => source.classList.add('is-drag-source'));
     handle.hidden = true;
     document.body.classList.add('is-block-dragging');
 
@@ -127,8 +136,8 @@ export function attachBlockDrag(preview: HTMLElement, host: HTMLElement, options
     const update = () => {
       ghost.style.top = `${pointerY - offsetY - GHOST_PAD}px`;
       const area = preview.getBoundingClientRect();
-      const first = options.firstMovable();
-      const candidates = blocks().filter((el) => indexOf(el) >= first);
+      const firstMovable = options.firstMovable();
+      const candidates = blocks().filter((el) => indexOf(el) >= firstMovable);
       // Before the first block whose middle is below the pointer; else last.
       let before: HTMLElement | null = null;
       for (const el of candidates) {
@@ -136,8 +145,7 @@ export function attachBlockDrag(preview: HTMLElement, host: HTMLElement, options
         if (pointerY < box.top + box.height / 2) { before = el; break; }
       }
       target = before ? indexOf(before) : options.count();
-      const noop = target === from || target === from + 1;
-      line.hidden = noop || !candidates.length;
+      line.hidden = isNoop(target) || !candidates.length;
       if (!line.hidden) {
         let y: number;
         if (before) {
@@ -176,10 +184,10 @@ export function attachBlockDrag(preview: HTMLElement, host: HTMLElement, options
       document.removeEventListener('keydown', onKey, true);
       ghost.remove();
       line.remove();
-      source.classList.remove('is-drag-source');
+      sources.forEach((source) => source.classList.remove('is-drag-source'));
       document.body.classList.remove('is-block-dragging');
       placeHandle(null);
-      if (commit && target >= 0 && target !== from && target !== from + 1) options.move(from, target);
+      if (commit && target >= 0 && !isNoop(target)) options.move(from, target, count);
     };
     const onMove = (event: PointerEvent) => { pointerY = event.clientY; update(); };
     const onUp = () => finish(true);

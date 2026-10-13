@@ -90,3 +90,24 @@ test('frontmatter and the title stay at the top', () => {
   assert.equal(firstMovableBlock('Intro\n\n# Title\n\nBody', splitBlocks('Intro\n\n# Title\n\nBody')), 2);
   assert.equal(firstMovableBlock('No title\n\nBody', splitBlocks('No title\n\nBody')), 0);
 });
+
+const { sectionSpan } = await import(moduleUrl.href);
+
+test('a heading section runs to the next heading of the same or a higher level', () => {
+  const source = '# T\n\n## A\n\nText\n\n### A.1\n\nMore\n\n## B\n\nEnd';
+  const blocks = splitBlocks(source);
+  assert.equal(sectionSpan(source, blocks, 1), 4); // ## A, Text, ### A.1, More
+  assert.equal(sectionSpan(source, blocks, 3), 2); // ### A.1, More
+  assert.equal(sectionSpan(source, blocks, 5), 2); // ## B, End
+  assert.equal(sectionSpan(source, blocks, 2), 1); // a paragraph
+});
+
+test('a whole section moves together', () => {
+  const source = '# T\n\n## A\n\nText\n\n## B\n\nEnd';
+  const blocks = splitBlocks(source);
+  assert.deepEqual(moveBlock(source, blocks, 3, 1, 2), { source: '# T\n\n## B\n\nEnd\n\n## A\n\nText', start: 2 });
+  assert.equal(moveBlock(source, blocks, 1, 5, 2).source, '# T\n\n## B\n\nEnd\n\n## A\n\nText');
+  // Dropping inside the moving section does nothing.
+  assert.equal(moveBlock(source, blocks, 1, 2, 2), null);
+  assert.equal(moveBlock(source, blocks, 1, 3, 2), null);
+});

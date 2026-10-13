@@ -39,7 +39,7 @@
 | `[[` | Wikilink autocomplete (↑ ↓ to choose, ↩ or Tab to insert, Esc to close) |
 | `[[today` | Link to today's journal page (also `[[yesterday`, `[[tomorrow`) |
 | Esc or ⌘↩ | Finish editing a block in the preview |
-| ⌘⇧↑ / ⌘⇧↓ | Move the block you're editing up or down |
+| ⌘⇧↑ / ⌘⇧↓ | Move the block you're editing up or down (a heading takes its section along) |
 
 ## Lists
 

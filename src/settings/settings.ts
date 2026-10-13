@@ -1,10 +1,11 @@
 import { renderPreview } from '../tagdown/renderer';
 import { tagdownDocumentation } from '../tagdown/documentation';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
+import { getPreference, setPreference, type Preferences } from './preferences';
 
 const SETTINGS_PANELS = [
   { id: 'general', title: 'General', body: 'Vault location, default view mode, autosave delay, and delete confirmations will appear here.' },
-  { id: 'editor', title: 'Editor', body: 'Editor font size, line height, line numbers, tab size, spell check, and soft wrap will appear here.' },
+  { id: 'editor', title: 'Editor', body: 'Editing behaviour.' },
   { id: 'appearance', title: 'Appearance', body: 'Theme and display controls.' },
   { id: 'export', title: 'Export', body: 'Default export folder and standalone HTML options will appear here.' },
 ] as const;
@@ -21,6 +22,7 @@ export function initSettings() {
   dialog.querySelector<HTMLButtonElement>('[data-settings-close]')?.addEventListener('click', () => dialog?.close());
 
   bindAppearanceControls();
+  bindEditorControls();
   onThemePreferenceChange(updateThemeControls);
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
@@ -152,6 +154,7 @@ function renderSettingsDialog() {
 
 function renderPlaceholderPanel(panel: (typeof SETTINGS_PANELS)[number]) {
   if (panel.id === 'appearance') return renderAppearancePanel();
+  if (panel.id === 'editor') return renderEditorPanel();
 
   return `
     <article
@@ -204,6 +207,50 @@ function renderAppearancePanel() {
       <p id="theme-summary" class="theme-summary">Current effective theme: <strong data-theme-summary>${getEffectiveTheme(currentTheme)}</strong>.</p>
     </article>
   `;
+}
+
+const EDITOR_TOGGLES: Array<{ name: keyof Preferences; title: string; description: string }> = [
+  {
+    name: 'dragHeadingSections',
+    title: 'Headings move their section',
+    description: 'Dragging a heading in the preview (or moving it with ⌘⇧↑ / ⌘⇧↓) takes everything under it along, up to the next heading of the same or a higher level.',
+  },
+];
+
+function renderEditorPanel() {
+  return `
+    <article
+      id="settings-panel-editor"
+      role="tabpanel"
+      tabindex="0"
+      aria-labelledby="settings-tab-editor"
+      hidden
+      class="settings-panel settings-appearance"
+    >
+      <p class="settings-eyebrow">Writing</p>
+      <h2>Editor</h2>
+      <p class="settings-intro">How editing behaves. Settings are saved locally and apply right away.</p>
+      <fieldset class="theme-options">
+        <legend>Reordering blocks</legend>
+        ${EDITOR_TOGGLES.map((toggle) => `
+          <label class="theme-option">
+            <input type="checkbox" data-preference="${toggle.name}" ${getPreference(toggle.name) ? 'checked' : ''} />
+            <span>
+              <strong>${escapeHtml(toggle.title)}</strong>
+              <small>${escapeHtml(toggle.description)}</small>
+            </span>
+          </label>
+        `).join('')}
+      </fieldset>
+    </article>
+  `;
+}
+
+function bindEditorControls() {
+  dialog?.querySelectorAll<HTMLInputElement>('input[data-preference]').forEach((input) => {
+    const name = input.dataset.preference as keyof Preferences;
+    input.addEventListener('change', () => setPreference(name, input.checked));
+  });
 }
 
 function bindAppearanceControls() {

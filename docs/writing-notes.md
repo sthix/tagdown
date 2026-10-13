@@ -22,9 +22,13 @@ A note's title is its first `# ` heading. Rename a note by editing that heading.
 | Split | ⌘2 | Source and rendered preview side by side |
 | Preview | ⌘3 | Only the rendered document |
 
-In **Preview**, you can still edit: click a block to edit its source in place. The open block gets a thin outline with a slowly moving highlight. Press **Esc** or **⌘↩** to finish.
+In **Preview**, you can still edit: click a block to edit its source in place. The open block gets a thin outline with a slowly moving highlight. Press **Esc** or **⌘↩** to finish. Ticking a checkbox in the preview updates the task in the source.
 
-To reorder blocks, hover one and drag the **⋮⋮** grip that appears in the left margin; a line shows where it will land, and **Esc** cancels. While editing a block, **⌘⇧↑** and **⌘⇧↓** move it past its neighbour. The note's title (and any frontmatter) always stays at the top. Ticking a checkbox in the preview updates the task in the source.
+### Reordering blocks
+
+To reorder blocks, hover one and drag the **⋮⋮** grip that appears in the left margin; a line shows where it will land, and **Esc** cancels. While editing a block, **⌘⇧↑** and **⌘⇧↓** move it past its neighbour. The note's title (and any frontmatter) always stays at the top.
+
+A heading carries its whole section: everything under it, up to the next heading of the same or a higher level. With the keyboard, a heading steps past a whole sibling section at a time. To move headings on their own instead, turn off **Settings → Editor → Headings move their section**.
 
 ## Saving
 
@@ -62,6 +66,10 @@ Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Se
   <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
   <img width="1440" alt="Tagdown Editor in split view" src="images/tagdown-editor-light.png" />
 </picture>
+
+## Editor settings
+
+**Settings → Editor** (⌘,) holds options for how editing behaves. For now that is **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along. Settings are saved on this Mac and apply right away.
 
 ## The built-in reference
 

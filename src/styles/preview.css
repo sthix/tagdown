@@ -944,8 +944,8 @@
   rotate: -.6deg;
   pointer-events: none;
 }
-.preview.block-drag-ghost > .td-block > :first-child { margin-top: 0; }
-.preview.block-drag-ghost > .td-block > :last-child { margin-bottom: 0; }
+.preview.block-drag-ghost > .td-block:first-child > :first-child { margin-top: 0; }
+.preview.block-drag-ghost > .td-block:last-child > :last-child { margin-bottom: 0; }
 .preview.block-drag-ghost .td-block::before { display: none; }
 /* Tall blocks are cut off with a fade. */
 .preview.block-drag-ghost.is-tall { -webkit-mask-image: linear-gradient(#000 calc(100% - 48px), transparent); }

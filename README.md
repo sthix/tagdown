@@ -61,7 +61,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
 - **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
 - **Outliner lists**: ↩ continues bullets, numbers, and tasks; Tab and ⇧Tab nest and un-nest items with their children.
-- **Drag to reorder** blocks in the preview by their grip, or move the block you're editing with ⌘⇧↑ / ⌘⇧↓.
+- **Drag to reorder** blocks in the preview by their grip, or move the block you're editing with ⌘⇧↑ / ⌘⇧↓. Headings bring their whole section along (a setting you can turn off).
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
@@ -170,7 +170,7 @@ node --test tests/*.mjs
 
 ## Current status
 
-Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace, vault, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
+Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), vault, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
 See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
 

@@ -179,19 +179,47 @@ export function firstMovableBlock(source: string, blocks: SourceBlock[]): number
   return first;
 }
 
+/** Heading level (1–6) when block `index` is a heading, else 0. */
+export function headingLevel(source: string, blocks: SourceBlock[], index: number): number {
+  const block = blocks[index];
+  if (!block || block.end - block.start !== 1) return 0;
+  const m = source.split('\n')[block.start].match(/^(#{1,6})\s/);
+  return m ? m[1].length : 0;
+}
+
 /**
- * Move block `from` so it sits before block `to` (or last, when `to` equals the
- * block count). Text between blocks that stay neighbours is kept as it was; a
- * new seam gets one blank line, so moved blocks never run into each other.
- * Returns the new source and the moved block's first line, or null for a no-op.
+ * How many blocks make up the section that starts at block `index`: a heading
+ * and everything after it up to the next heading of the same or a higher level.
+ * Anything that isn't a heading is a section of one.
  */
-export function moveBlock(source: string, blocks: SourceBlock[], from: number, to: number): { source: string; start: number } | null {
-  if (from < 0 || from >= blocks.length || to < 0 || to > blocks.length || to === from || to === from + 1) return null;
+export function sectionSpan(source: string, blocks: SourceBlock[], index: number): number {
+  const level = headingLevel(source, blocks, index);
+  if (!level) return 1;
+  let end = index + 1;
+  while (end < blocks.length) {
+    const next = headingLevel(source, blocks, end);
+    if (next && next <= level) break;
+    end++;
+  }
+  return end - index;
+}
+
+/**
+ * Move `count` blocks starting at `from` so they sit before block `to` (or
+ * last, when `to` equals the block count). Text between blocks that stay
+ * neighbours is kept as it was; a new seam gets one blank line, so moved
+ * blocks never run into each other. Returns the new source and the first moved
+ * block's first line, or null for a no-op.
+ */
+export function moveBlock(source: string, blocks: SourceBlock[], from: number, to: number, count = 1): { source: string; start: number } | null {
+  if (count < 1 || from < 0 || from + count > blocks.length || to < 0 || to > blocks.length) return null;
+  if (to >= from && to <= from + count) return null;
   const lines = source.split('\n');
   const prefix = lines.slice(0, blocks[0].start);
   const suffix = lines.slice(blocks[blocks.length - 1].end);
-  const order = blocks.map((_, index) => index).filter((index) => index !== from);
-  order.splice(to > from ? to - 1 : to, 0, from);
+  const moving = blocks.map((_, index) => index).slice(from, from + count);
+  const order = blocks.map((_, index) => index).filter((index) => index < from || index >= from + count);
+  order.splice(to > from ? to - count : to, 0, ...moving);
   const out = [...prefix];
   let start = 0;
   order.forEach((index, position) => {

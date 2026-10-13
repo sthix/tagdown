@@ -33,6 +33,8 @@ Straight quotes curl, `--` becomes an en dash, `---` an em dash, and `...` an el
 ```tagdown
 - [x] Done
 - [ ] Still to do
+  - [ ] Indented items nest under the one above
+  1. and lists can mix bullets, numbers, and tasks
 
 | Feature | Syntax |
 | --- | --- |
@@ -45,6 +47,8 @@ Tagdown is small[^1].
 
 [^1]: Footnotes are collected at the bottom.
 ```
+
+Indent a list item to make it a child of the item above; in the editor, Tab and ⇧Tab do it for you.
 
 ## Callouts
 

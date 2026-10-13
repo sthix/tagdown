@@ -6,7 +6,8 @@ import { initSettings, openSettings } from './settings/settings';
 import { initializeTheme, getEffectiveTheme, onThemePreferenceChange, setThemePreference } from './settings/theme';
 import { openCommandPalette, isPaletteOpen, type PaletteAction } from './commandPalette';
 import { renderEditablePreview, renderPreview, applyExternals } from './tagdown/renderer';
-import type { SourceBlock } from './tagdown/blocks';
+import { firstMovableBlock, moveBlock, type SourceBlock } from './tagdown/blocks';
+import { attachBlockDrag } from './blockDrag';
 import { renderEditorToolbar } from './editorToolbar';
 import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
@@ -1357,22 +1358,66 @@ function autoGrow(textarea: HTMLTextAreaElement) {
   textarea.style.height = `${textarea.scrollHeight}px`;
 }
 
+/**
+ * Close the open block editor, if any, and return where block `index` (of the
+ * layout painted before it opened) is now; -1 if it is gone.
+ */
+function closeBlockEditFor(index: number): number {
+  const block = previewBlocks[index];
+  if (!block) return -1;
+  if (!blockEdit) return index;
+  // Lines after the open block shift by however much it grew.
+  const delta = blockEdit.lineCount - blockEdit.originalCount;
+  const targetStart = block.start + (block.start > blockEdit.start ? delta : 0);
+  commitBlockEdit();
+  return previewBlocks.findIndex((candidate) => candidate.start === targetStart);
+}
+
+const previewBlockEl = (index: number) => editorRoot.querySelector<HTMLElement>(`.preview .td-block[data-block="${index}"]`);
+
 function startBlockEdit(blockEl: HTMLElement, hint: { before: string; after: string } | null = null) {
-  let index = Number(blockEl.dataset.block);
-  let block = previewBlocks[index];
-  if (!block) return;
-  if (blockEdit) {
-    // Close the open block first; lines after it shift by however much it grew.
-    const delta = blockEdit.lineCount - blockEdit.originalCount;
-    const targetStart = block.start + (block.start > blockEdit.start ? delta : 0);
-    commitBlockEdit();
-    index = previewBlocks.findIndex((candidate) => candidate.start === targetStart);
-    const fresh = editorRoot.querySelector<HTMLElement>(`.preview .td-block[data-block="${index}"]`);
-    if (index < 0 || !fresh) return;
-    blockEl = fresh;
-    block = previewBlocks[index];
+  const index = closeBlockEditFor(Number(blockEl.dataset.block));
+  const fresh = index < 0 ? null : previewBlockEl(index);
+  if (!fresh) return;
+  const block = previewBlocks[index];
+  openBlockEditor(fresh, block.start, block.end - block.start, hint, null);
+}
+
+/** Move block `from` to sit before block `to`; returns the moved block's new index, or -1. */
+function moveBlockTo(from: number, to: number): number {
+  const moved = moveBlock(content, previewBlocks, from, to);
+  if (!moved) return -1;
+  content = moved.source;
+  syncSourceTextarea();
+  scheduleSave();
+  const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (preview) paintPreview(preview);
+  const index = previewBlocks.findIndex((block) => block.start === moved.start);
+  const el = previewBlockEl(index);
+  if (el) {
+    el.classList.add('is-just-moved');
+    el.addEventListener('animationend', () => el.classList.remove('is-just-moved'), { once: true });
+    el.scrollIntoView({ block: 'nearest' });
   }
-  openBlockEditor(blockEl, block.start, block.end - block.start, hint, null);
+  return index;
+}
+
+/** ⌘⇧↑ / ⌘⇧↓ while editing a block: move it past its neighbour and keep editing. */
+function moveOpenBlock(direction: -1 | 1) {
+  if (!blockEdit) return;
+  const { start, el } = blockEdit;
+  const caret = el.selectionStart;
+  commitBlockEdit();
+  let index = previewBlocks.findIndex((block) => block.start === start);
+  if (index < 0) return;
+  const to = direction < 0 ? index - 1 : index + 2;
+  if (to >= firstMovableBlock(content, previewBlocks) && index >= firstMovableBlock(content, previewBlocks) && to <= previewBlocks.length) {
+    const moved = moveBlockTo(index, to);
+    if (moved >= 0) index = moved;
+  }
+  const fresh = previewBlockEl(index);
+  const block = previewBlocks[index];
+  if (fresh && block) openBlockEditor(fresh, block.start, block.end - block.start, null, null, caret);
 }
 
 function startAppendBlock(preview: HTMLElement) {
@@ -1386,7 +1431,7 @@ function startAppendBlock(preview: HTMLElement) {
   openBlockEditor(wrap, content.split('\n').length - 1, 1, null, original);
 }
 
-function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hint: { before: string; after: string } | null, restoreIfEmpty: string | null) {
+function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hint: { before: string; after: string } | null, restoreIfEmpty: string | null, caretAt?: number) {
   const text = content.split('\n').slice(start, start + lineCount).join('\n');
   const textarea = document.createElement('textarea');
   textarea.className = 'td-block-editor';
@@ -1401,7 +1446,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
   editorRoot.classList.add('is-block-editing');
   autoGrow(textarea);
   textarea.focus({ preventScroll: true });
-  const caret = caretOffset(text, hint);
+  const caret = caretAt === undefined ? caretOffset(text, hint) : Math.min(caretAt, text.length);
   textarea.setSelectionRange(caret, caret);
 
   attachEditingAids(textarea);
@@ -1417,6 +1462,11 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
     scheduleSave();
   });
   textarea.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      moveOpenBlock(event.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
     const finish = event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey));
     if (finish || (event.key === 'Backspace' && !textarea.value)) {
       event.preventDefault();
@@ -1635,7 +1685,15 @@ function renderEditor() {
   }
 
   const livePreviewInit = editorRoot.querySelector<HTMLDivElement>('.preview');
-  if (livePreviewInit) paintPreview(livePreviewInit);
+  if (livePreviewInit) {
+    paintPreview(livePreviewInit);
+    attachBlockDrag(livePreviewInit, editorRoot, {
+      count: () => previewBlocks.length,
+      firstMovable: () => firstMovableBlock(content, previewBlocks),
+      prepare: closeBlockEditFor,
+      move: moveBlockTo,
+    });
+  }
 
   editorRoot.querySelector('.doc-title')?.addEventListener('click', () => {
     const titleBlock = editorRoot.querySelector<HTMLElement>('.preview .td-block.is-doc-title');

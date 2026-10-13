@@ -59,6 +59,9 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 ### Writing
 
 - **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
+- **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
+- **Outliner lists**: ↩ continues bullets, numbers, and tasks; Tab and ⇧Tab nest and un-nest items with their children.
+- **Drag to reorder** blocks in the preview by their grip, or move the block you're editing with ⌘⇧↑ / ⌘⇧↓.
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.

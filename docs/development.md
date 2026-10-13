@@ -22,6 +22,9 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   ├── main.ts             # app shell: sidebar, note list, editor, shortcuts
 │   ├── commandPalette.ts   # ⌘K palette
 │   ├── wikilinks.ts        # [[link]] resolution and autocomplete
+│   ├── slashCommands.ts    # the / command menu
+│   ├── listEditing.ts      # ↩, Tab and ⇧Tab in lists (continue, nest, renumber)
+│   ├── blockDrag.ts        # drag-and-drop reordering of preview blocks
 │   ├── queries.ts          # <query /> blocks and the open-tasks view
 │   ├── history.ts          # version history dialog
 │   ├── presentation.ts     # slides
@@ -35,7 +38,7 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   └── core/src/           # vault, frontmatter, search_index, links, history,
 │                           # tasks, query, watcher, site, library, mcp
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data
-├── tests/                  # Node tests for rendering, blocks, slides, syntax
+├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides, syntax
 └── docs/                   # this documentation
 ```
 

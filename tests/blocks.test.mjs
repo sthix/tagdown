@@ -60,3 +60,33 @@ test('marker paragraphs survive rendering at the top level', () => {
   const html = tagdown(markSource(source, blocks));
   for (let i = 1; i < blocks.length; i++) assert.match(html, new RegExp(`<p>TDBLOCKMARK${i}X</p>`));
 });
+
+const { moveBlock, firstMovableBlock } = await import(moduleUrl.href);
+
+const move = (source, from, to) => moveBlock(source, splitBlocks(source), from, to);
+
+test('moving a block keeps the gaps between blocks that stay neighbours', () => {
+  const source = '# T\n\nOne\n\nTwo\n\n\nThree\n';
+  assert.deepEqual(move(source, 3, 1), { source: '# T\n\nThree\n\nOne\n\nTwo\n', start: 2 });
+  assert.deepEqual(move(source, 1, 4), { source: '# T\n\nTwo\n\n\nThree\n\nOne\n', start: 7 });
+  assert.equal(move(source, 1, 1), null);
+  assert.equal(move(source, 1, 2), null);
+});
+
+test('moved blocks get a blank line where they had none', () => {
+  // A heading followed directly by a paragraph.
+  const source = '# T\n## Part\nText\n\nOther';
+  assert.equal(move(source, 3, 1).source, '# T\n\nOther\n\n## Part\nText');
+});
+
+test('multi-line blocks move whole', () => {
+  const source = '# T\n\n- a\n- b\n\n::: tip\nHi\n:::\n\nEnd';
+  assert.equal(move(source, 2, 1).source, '# T\n\n::: tip\nHi\n:::\n\n- a\n- b\n\nEnd');
+});
+
+test('frontmatter and the title stay at the top', () => {
+  const source = '---\ntags: [a]\n---\n# Title\n\nBody';
+  assert.equal(firstMovableBlock(source, splitBlocks(source)), 2);
+  assert.equal(firstMovableBlock('Intro\n\n# Title\n\nBody', splitBlocks('Intro\n\n# Title\n\nBody')), 2);
+  assert.equal(firstMovableBlock('No title\n\nBody', splitBlocks('No title\n\nBody')), 0);
+});

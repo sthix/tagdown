@@ -162,3 +162,46 @@ export function wrapBlocks(html: string, blockCount: number): string | null {
   out.append(...trailing);
   return out.innerHTML;
 }
+
+/**
+ * Index of the first block that may be moved: everything up to and including
+ * the frontmatter and the title (the note's first `# ` heading) stays put, so
+ * reordering never changes a note's metadata or its title.
+ */
+export function firstMovableBlock(source: string, blocks: SourceBlock[]): number {
+  const lines = source.split('\n');
+  const titleLine = lines.findIndex((line) => /^#\s/.test(line));
+  let first = 0;
+  blocks.forEach((block, index) => {
+    const frontmatter = index === 0 && lines[block.start]?.trim() === '---';
+    if (frontmatter || (titleLine >= block.start && titleLine < block.end)) first = index + 1;
+  });
+  return first;
+}
+
+/**
+ * Move block `from` so it sits before block `to` (or last, when `to` equals the
+ * block count). Text between blocks that stay neighbours is kept as it was; a
+ * new seam gets one blank line, so moved blocks never run into each other.
+ * Returns the new source and the moved block's first line, or null for a no-op.
+ */
+export function moveBlock(source: string, blocks: SourceBlock[], from: number, to: number): { source: string; start: number } | null {
+  if (from < 0 || from >= blocks.length || to < 0 || to > blocks.length || to === from || to === from + 1) return null;
+  const lines = source.split('\n');
+  const prefix = lines.slice(0, blocks[0].start);
+  const suffix = lines.slice(blocks[blocks.length - 1].end);
+  const order = blocks.map((_, index) => index).filter((index) => index !== from);
+  order.splice(to > from ? to - 1 : to, 0, from);
+  const out = [...prefix];
+  let start = 0;
+  order.forEach((index, position) => {
+    if (position > 0) {
+      const previous = order[position - 1];
+      out.push(...(index === previous + 1 ? lines.slice(blocks[previous].end, blocks[index].start) : ['']));
+    }
+    if (index === from) start = out.length;
+    out.push(...lines.slice(blocks[index].start, blocks[index].end));
+  });
+  out.push(...suffix);
+  return { source: out.join('\n'), start };
+}

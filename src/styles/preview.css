@@ -907,3 +907,62 @@
 .task-list-head code { font-size: 11px; }
 .task-list-dialog .task-list-body { flex: 1; height: auto; padding: 4px 18px 24px; background: transparent; }
 .task-list-dialog .td-query { margin: 8px 0 0; padding: 0; border: 0; background: transparent; }
+
+/* ---- Reordering blocks by drag ---- */
+.block-drag-handle {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: grab;
+  animation: block-handle-in .12s ease both;
+}
+.block-drag-handle[hidden] { display: none; }
+.block-drag-handle:hover { background: var(--hover-overlay); color: var(--ink-2); }
+.is-block-dragging,
+.is-block-dragging * { cursor: grabbing !important; user-select: none; }
+@keyframes block-handle-in { from { opacity: 0; } }
+
+.preview.block-drag-ghost {
+  position: fixed;
+  z-index: 40;
+  height: auto;
+  max-height: 320px;
+  overflow: hidden;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-preview);
+  box-shadow: var(--shadow-lg), 0 12px 32px rgba(0, 0, 0, .14);
+  opacity: .92;
+  rotate: -.6deg;
+  pointer-events: none;
+}
+.preview.block-drag-ghost > .td-block > :first-child { margin-top: 0; }
+.preview.block-drag-ghost > .td-block > :last-child { margin-bottom: 0; }
+.preview.block-drag-ghost .td-block::before { display: none; }
+/* Tall blocks are cut off with a fade. */
+.preview.block-drag-ghost.is-tall { -webkit-mask-image: linear-gradient(#000 calc(100% - 48px), transparent); }
+.block-drag-line {
+  position: fixed;
+  z-index: 41;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--marker-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--marker-strong) 25%, transparent);
+  pointer-events: none;
+}
+.block-drag-line[hidden] { display: none; }
+.preview .td-block.is-drag-source { opacity: .3; }
+.preview .td-block.is-just-moved::before { animation: block-moved 1.2s ease-out; }
+@keyframes block-moved { from { background: var(--marker-soft); } }
+@media (prefers-reduced-motion: reduce) {
+  .preview.block-drag-ghost { rotate: none; }
+  .preview .td-block.is-just-moved::before { animation: none; }
+}

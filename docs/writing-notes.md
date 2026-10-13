@@ -22,7 +22,9 @@ A note's title is its first `# ` heading. Rename a note by editing that heading.
 | Split | ⌘2 | Source and rendered preview side by side |
 | Preview | ⌘3 | Only the rendered document |
 
-In **Preview**, you can still edit: click a block to edit its source in place. The open block gets a thin outline with a slowly moving highlight. Press **Esc** or **⌘↩** to finish. Ticking a checkbox in the preview updates the task in the source.
+In **Preview**, you can still edit: click a block to edit its source in place. The open block gets a thin outline with a slowly moving highlight. Press **Esc** or **⌘↩** to finish.
+
+To reorder blocks, hover one and drag the **⋮⋮** grip that appears in the left margin; a line shows where it will land, and **Esc** cancels. While editing a block, **⌘⇧↑** and **⌘⇧↓** move it past its neighbour. The note's title (and any frontmatter) always stays at the top. Ticking a checkbox in the preview updates the task in the source.
 
 ## Saving
 

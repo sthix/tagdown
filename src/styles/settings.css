@@ -223,6 +223,7 @@
 .td-select:focus-visible,
 .td-range input:focus-visible,
 .td-segmented button:focus-visible,
+.td-swatches button:focus-visible,
 .td-button:focus-visible,
 .theme-card:has(input:focus-visible) {
   outline: 2px solid var(--focus-ring);
@@ -255,6 +256,27 @@
   box-shadow: var(--shadow-raised);
 }
 :root[data-theme="dark"] .td-segmented button[aria-checked="true"] { background: var(--bg-button-hover); }
+
+.td-swatches {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.td-swatches button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 .5px rgba(48,40,16,.22);
+  cursor: pointer;
+  transition: box-shadow .14s ease, transform .14s var(--ease-out);
+}
+.td-swatches button:hover { transform: scale(1.1); }
+.td-swatches button[aria-checked="true"] {
+  box-shadow: inset 0 0 0 .5px rgba(48,40,16,.22), 0 0 0 2px var(--bg-dialog), 0 0 0 3.5px var(--ink-2);
+}
 
 .td-select {
   height: 28px;
@@ -345,7 +367,7 @@
 }
 .theme-card input { position: absolute; opacity: 0; pointer-events: none; }
 .theme-thumb {
-  --t-desk: #fff6d1; --t-page: #fffefb; --t-line: rgba(48,40,16,.16); --t-ink: rgba(48,40,16,.38);
+  --t-desk: var(--accent-desk); --t-page: #fffefb; --t-line: rgba(48,40,16,.16); --t-ink: rgba(48,40,16,.38);
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
@@ -360,7 +382,7 @@
   transition: box-shadow .14s ease;
 }
 .theme-thumb-dark { --t-desk: #1c1b18; --t-page: #252420; --t-line: rgba(255,248,225,.14); --t-ink: rgba(255,248,225,.4); }
-.theme-thumb-system { background: linear-gradient(115deg, #fff6d1 50%, #1c1b18 50%); }
+.theme-thumb-system { background: linear-gradient(115deg, var(--accent-desk) 50%, #1c1b18 50%); }
 .theme-thumb-system .theme-thumb-page { background: linear-gradient(115deg, #fffefb 46%, #252420 46%); }
 .theme-thumb-side {
   display: block;
@@ -384,7 +406,7 @@
   border-radius: 2px;
   background: var(--t-ink);
 }
-.theme-thumb-page i:first-child { width: 55%; height: 5px; background: #ffd60a; }
+.theme-thumb-page i:first-child { width: 55%; height: 5px; background: var(--marker); }
 .theme-thumb-page i:nth-child(2) { width: 90%; }
 .theme-thumb-page i:nth-child(3) { width: 72%; }
 .theme-thumb-system .theme-thumb-page i:not(:first-child) { background: #918b7e; }

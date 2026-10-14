@@ -17,7 +17,10 @@
   /* Surfaces */
   --bg-window: #fffae6;
   /* The "desk" behind the sheet: pale highlighter yellow fading to near-white. */
-  --bg-desk: linear-gradient(180deg, #fff6d1 0%, #fffdf4 100%);
+  --accent-desk: #fff6d1;
+  --bg-desk: linear-gradient(180deg, var(--accent-desk) 0%, #fffdf4 100%);
+  /* A faint paper grain laid over the desk. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .19 0 0 0 0 .16 0 0 0 0 .06 0 0 0 .2 -.065'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   --bg-sidebar: transparent;
   --bg-sheet: #fffefb;
   --bg-notes: #faf8f2;
@@ -133,7 +136,8 @@
   color-scheme: dark;
   /* Warm charcoal rather than blue graphite. */
   --bg-window: #1c1b18;
-  --bg-desk: var(--bg-window);
+  --bg-desk: none;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .97 0 0 0 0 .88 0 0 0 .13 -.045'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   --bg-sheet: #252420;
   --bg-notes: #21201c;
   --bg-list: #21201c;
@@ -217,6 +221,45 @@
   --pv-note-error-bg: #38211b;
   --pv-note-ok-bg: #1d2d1a;
   --pv-note-tip-bg: #2a2438;
+}
+
+/* Accents. Yellow is the palette above; each other accent names its marker,
+   the readable text shade for light and dark, and the desk tint. The rest of
+   the accent family is mixed from those. */
+:root[data-accent="orange"] { --a-marker: #ffb54d; --a-strong: #f59a1b; --a-text: #8a4b00; --a-text-dark: #ffbe6b; --a-desk: #ffe9d1; }
+:root[data-accent="coral"]  { --a-marker: #ff9a85; --a-strong: #f27a62; --a-text: #9a3020; --a-text-dark: #ffa493; --a-desk: #ffe3dc; }
+:root[data-accent="pink"]   { --a-marker: #ffa3cf; --a-strong: #f57fb6; --a-text: #9c2a62; --a-text-dark: #ffaad2; --a-desk: #ffe2ef; }
+:root[data-accent="purple"] { --a-marker: #c9a8ff; --a-strong: #ad85f5; --a-text: #5b2fa8; --a-text-dark: #c8a9ff; --a-desk: #ece3ff; }
+:root[data-accent="blue"]   { --a-marker: #93c5ff; --a-strong: #6aa8f5; --a-text: #1f4f9c; --a-text-dark: #9cc8ff; --a-desk: #dfecff; }
+:root[data-accent="teal"]   { --a-marker: #7fe0cf; --a-strong: #4fcab5; --a-text: #0f6b5c; --a-text-dark: #84e3d2; --a-desk: #d8f5ee; }
+:root[data-accent="green"]  { --a-marker: #a8e07a; --a-strong: #86c955; --a-text: #3d6b14; --a-text-dark: #b0e485; --a-desk: #e6f5d6; }
+:root[data-accent] {
+  --accent-desk: var(--a-desk);
+  --bg-window: color-mix(in srgb, var(--a-desk) 55%, #fffefb);
+  --bg-desk: linear-gradient(180deg, var(--a-desk) 0%, color-mix(in srgb, var(--a-desk) 18%, #fffefb) 100%);
+  --marker: var(--a-marker);
+  --marker-strong: var(--a-strong);
+  --marker-soft: color-mix(in srgb, var(--a-marker) 32%, #ffffff);
+  --marker-text: var(--a-text);
+  --accent-soft: var(--a-text);
+  --accent-tint: var(--marker-soft);
+  --accent-tint-strong: color-mix(in srgb, var(--a-marker) 58%, #ffffff);
+  --selection: var(--marker-soft);
+  --focus-ring: color-mix(in srgb, var(--a-strong) 65%, transparent);
+  --pv-accent-2: var(--accent-tint-strong);
+}
+:root[data-theme="dark"][data-accent] {
+  --bg-window: #1c1b18;
+  --bg-desk: none;
+  --marker-strong: color-mix(in srgb, var(--a-marker) 75%, #ffffff);
+  --marker-soft: color-mix(in srgb, var(--a-marker) 14%, transparent);
+  --marker-text: var(--a-text-dark);
+  --accent-soft: var(--a-text-dark);
+  --accent-tint: var(--marker-soft);
+  --accent-tint-strong: color-mix(in srgb, var(--a-marker) 30%, transparent);
+  --selection: var(--marker-soft);
+  --focus-ring: color-mix(in srgb, var(--a-marker) 55%, transparent);
+  --pv-accent-2: color-mix(in srgb, var(--a-marker) 32%, transparent);
 }
 
 * { box-sizing: border-box; }

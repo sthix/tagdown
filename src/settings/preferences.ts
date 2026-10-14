@@ -2,6 +2,19 @@
 
 export type ViewMode = 'source' | 'split' | 'preview';
 
+export const ACCENTS = [
+  { value: 'yellow', label: 'Yellow', swatch: '#ffd60a' },
+  { value: 'orange', label: 'Orange', swatch: '#ffb54d' },
+  { value: 'coral', label: 'Coral', swatch: '#ff9a85' },
+  { value: 'pink', label: 'Pink', swatch: '#ffa3cf' },
+  { value: 'purple', label: 'Purple', swatch: '#c9a8ff' },
+  { value: 'blue', label: 'Blue', swatch: '#93c5ff' },
+  { value: 'teal', label: 'Teal', swatch: '#7fe0cf' },
+  { value: 'green', label: 'Green', swatch: '#a8e07a' },
+] as const;
+
+export type Accent = (typeof ACCENTS)[number]['value'];
+
 export type Preferences = {
   /** What to show when the app starts. */
   startupOpen: 'last' | 'journal' | 'first';
@@ -23,6 +36,8 @@ export type Preferences = {
   previewWidth: 'narrow' | 'medium' | 'wide';
   /** Dragging a heading in the preview moves its whole section. */
   dragHeadingSections: boolean;
+  /** The highlighter colour the whole app is tinted with. */
+  accent: Accent;
 };
 
 export const DEFAULTS: Preferences = {
@@ -37,6 +52,7 @@ export const DEFAULTS: Preferences = {
   previewFontSize: 15,
   previewWidth: 'medium',
   dragHeadingSections: true,
+  accent: 'yellow',
 };
 
 const PREVIEW_WIDTHS: Record<Preferences['previewWidth'], string> = { narrow: '640px', medium: '760px', wide: '920px' };
@@ -70,6 +86,10 @@ export function applyPreferences() {
   root.setProperty('--editor-font-size', `${getPreference('editorFontSize')}px`);
   root.setProperty('--preview-font-size', `${getPreference('previewFontSize')}px`);
   root.setProperty('--preview-measure', PREVIEW_WIDTHS[getPreference('previewWidth')] ?? PREVIEW_WIDTHS.medium);
+  // Yellow is the stylesheet's own palette; every other accent is a data attribute.
+  const accent = getPreference('accent');
+  if (accent !== 'yellow' && ACCENTS.some((option) => option.value === accent)) document.documentElement.dataset.accent = accent;
+  else delete document.documentElement.dataset.accent;
 }
 
 export function onPreferenceChange(callback: (name: keyof Preferences) => void) {

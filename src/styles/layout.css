@@ -7,7 +7,7 @@
   grid-template-columns: 236px minmax(0, 1fr);
   overflow: hidden;
   background: var(--bg-window);
-  background-image: var(--bg-desk);
+  background-image: var(--grain), var(--bg-desk);
   transition: grid-template-columns .28s var(--ease-out);
 }
 #app.is-focus { grid-template-columns: 0 minmax(0, 1fr); }

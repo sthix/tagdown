@@ -3,7 +3,7 @@ import { renderPreview } from '../tagdown/renderer';
 import { tagdownDocumentation } from '../tagdown/documentation';
 import { uiIcon, UI_ICONS } from '../icons';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
-import { getPreference, onPreferenceChange, setPreference, type Preferences } from './preferences';
+import { ACCENTS, getPreference, onPreferenceChange, setPreference, type Preferences } from './preferences';
 import { SHORTCUT_GROUPS } from './shortcuts';
 
 // ---- What the pages hold ----
@@ -12,11 +12,12 @@ import { SHORTCUT_GROUPS } from './shortcuts';
 // optional line of explanation) on the left, its control on the right. Controls
 // read and write preferences directly, so a change applies as soon as it's made.
 
-type Option = { value: string; label: string };
+type Option = { value: string; label: string; swatch?: string };
 
 type Control =
   | { kind: 'switch'; name: keyof Preferences }
   | { kind: 'segmented'; name: keyof Preferences; options: Option[] }
+  | { kind: 'swatches'; name: keyof Preferences; options: Option[] }
   | { kind: 'select'; name: keyof Preferences; options: Option[] }
   | { kind: 'range'; name: keyof Preferences; min: number; max: number; unit: string }
   | { kind: 'html'; render: () => string };
@@ -112,7 +113,14 @@ const PAGES: Page[] = [
     groups: [
       {
         title: 'Theme',
-        rows: [{ label: 'Theme', stacked: true, control: { kind: 'html', render: renderThemePicker } }],
+        rows: [
+          { label: 'Theme', stacked: true, control: { kind: 'html', render: renderThemePicker } },
+          {
+            label: 'Accent',
+            description: 'The highlighter colour for selections, markers and the window tint.',
+            control: { kind: 'swatches', name: 'accent', options: [...ACCENTS] },
+          },
+        ],
       },
       {
         title: 'Reading',
@@ -379,7 +387,7 @@ function renderGroup(group: Group) {
 
 function renderRow(row: Row) {
   const id = 'name' in row.control ? `setting-${row.control.name}` : '';
-  const labelTag = id && row.control.kind !== 'segmented' ? `label for="${id}"` : 'span';
+  const labelTag = id && row.control.kind !== 'segmented' && row.control.kind !== 'swatches' ? `label for="${id}"` : 'span';
   return `
     <div class="settings-row ${row.stacked ? 'is-stacked' : ''}">
       <div class="settings-row-text">
@@ -411,6 +419,15 @@ function renderControl(control: Control) {
       <div class="td-segmented" role="radiogroup" aria-labelledby="${id}-label" data-pref="${control.name}" data-kind="segmented">
         ${control.options.map((option) => `
           <button type="button" role="radio" data-value="${option.value}" aria-checked="${option.value === value}" tabindex="${option.value === value ? '0' : '-1'}">${escapeHtml(option.label)}</button>
+        `).join('')}
+      </div>
+    `;
+  }
+  if (control.kind === 'swatches') {
+    return `
+      <div class="td-swatches" role="radiogroup" aria-labelledby="${id}-label" data-pref="${control.name}" data-kind="swatches">
+        ${control.options.map((option) => `
+          <button type="button" role="radio" data-value="${option.value}" aria-checked="${option.value === value}" tabindex="${option.value === value ? '0' : '-1'}" aria-label="${escapeHtml(option.label)}" title="${escapeHtml(option.label)}" style="--swatch: ${option.swatch}"></button>
         `).join('')}
       </div>
     `;
@@ -489,7 +506,7 @@ function bindControls() {
       el.addEventListener('change', () => setPreference(name, (el as HTMLSelectElement).value as never));
     } else if (kind === 'range') {
       el.addEventListener('input', () => setPreference(name, Number((el as HTMLInputElement).value) as never));
-    } else if (kind === 'segmented') {
+    } else if (kind === 'segmented' || kind === 'swatches') {
       const options = [...el.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
       options.forEach((option) => option.addEventListener('click', () => setPreference(name, option.dataset.value as never)));
       el.addEventListener('keydown', (event) => {
@@ -519,7 +536,7 @@ function syncControl(name: keyof Preferences) {
     input.value = String(value);
     input.style.setProperty('--fill', rangeFill(Number(input.min), Number(input.max), Number(value)));
   }
-  else if (kind === 'segmented') {
+  else if (kind === 'segmented' || kind === 'swatches') {
     el.querySelectorAll<HTMLButtonElement>('[role="radio"]').forEach((option) => {
       const checked = option.dataset.value === value;
       option.setAttribute('aria-checked', String(checked));

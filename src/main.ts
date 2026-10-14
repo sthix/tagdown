@@ -17,8 +17,9 @@ import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
 import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
-import { attachSlashCommands, SLASH_HINT } from './slashCommands';
-import { attachListEditing } from './listEditing';
+import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
+import { applyEdit, attachListEditing } from './listEditing';
+import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -132,6 +133,20 @@ let journalMonth: CalendarMonth = monthOf(todayKey());
 
 initializeTheme();
 applyPreferences();
+
+// Images in notes are stored relative to the vault.
+void invoke<string>('vault_path').then((path) => {
+  setVaultRoot(path);
+  const preview = document.querySelector<HTMLDivElement>('#editor-root .preview');
+  if (preview && !blockEdit) paintPreview(preview);
+}).catch(() => {});
+
+// A file dropped outside the editor would otherwise replace the app with it.
+for (const type of ['dragover', 'drop'] as const) {
+  window.addEventListener(type, (event) => {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+  });
+}
 
 onPreferenceChange((name) => {
   if (name !== 'spellcheck') return;
@@ -1243,6 +1258,7 @@ async function loadBacklinks(id: string) {
   holder.innerHTML = backlinksHtml();
   const fresh = holder.firstElementChild as HTMLElement;
   section.replaceWith(fresh);
+  resolveLocalImages(fresh);
   void applyExternals(fresh, getEffectiveTheme());
 }
 
@@ -1256,9 +1272,11 @@ function backlinksHtml() {
     holder.querySelectorAll<HTMLElement>('.td-wikilink').forEach((link) => {
       if (normalizeTitle(splitTarget(link.dataset.target || '').title) === self) link.classList.add('is-self');
     });
+    // Tasks nested under the link show their state; ticking them happens in their note.
+    holder.querySelectorAll('input').forEach((box) => box.setAttribute('disabled', ''));
     // One line of context: unwrap the paragraph the renderer adds.
-    const only = holder.children.length === 1 && holder.firstElementChild?.tagName === 'P' ? holder.firstElementChild : holder;
-    return `<div class="backlink-line">${only.innerHTML}</div>`;
+    const only = holder.children.length === 1 && holder.firstElementChild?.tagName === 'P' ? holder.firstElementChild : null;
+    return only ? `<div class="backlink-line">${only.innerHTML}</div>` : `<div class="backlink-line has-children">${holder.innerHTML}</div>`;
   };
   const list = items.map(({ note, mentions }) => `
     <div class="backlink" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
@@ -1292,6 +1310,7 @@ function paintPreview(el: HTMLElement) {
     ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing, or type / for commands' : 'Click to add a block'}</div>`
     : '';
   el.innerHTML = html + append + backlinksHtml();
+  resolveLocalImages(el);
   markDocTitle(el);
   markWikilinks(el);
   void fillQueries(el, { excludeId: selectedNote?.id ?? null });
@@ -1500,6 +1519,8 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
       // Formatting from the dock or the components menu keeps the block open.
       const active = document.activeElement;
       if (active === textarea || active?.closest('.format-dock, .toolbar-menu')) return;
+      // Choosing images in the file dialog keeps the block open for them.
+      if (pickingImages) return;
       commitBlockEdit();
     }, 0);
   });
@@ -1721,6 +1742,11 @@ function renderEditor() {
     if (titleBlock) startBlockEdit(titleBlock);
   });
 
+  livePreviewInit?.addEventListener('dragover', (event) => {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+  });
+  livePreviewInit?.addEventListener('drop', (event) => void dropImagesOnPreview(event, livePreviewInit));
+
   // While a block is open, a press elsewhere in the preview closes it (and opens
   // the pressed block) before focus moves, so the follow-up click is ignored.
   livePreviewInit?.addEventListener('mousedown', (event) => {
@@ -1835,6 +1861,81 @@ function attachEditingAids(textarea: HTMLTextAreaElement) {
   attachWikilinkAutocomplete(textarea, wikilinkOptions);
   attachSlashCommands(textarea);
   attachListEditing(textarea);
+  attachImageInput(textarea);
+}
+
+let pickingImages = false;
+
+/** Pasting, dropping or picking (`/image`) images adds them as figures below the caret. */
+function attachImageInput(textarea: HTMLTextAreaElement) {
+  const add = async (files: File[]) => insertFigures(textarea, await saveImages(files));
+  textarea.addEventListener('paste', (event) => {
+    const files = imageFiles(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    void add(files);
+  });
+  textarea.addEventListener('dragover', (event) => {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+  });
+  textarea.addEventListener('drop', (event) => {
+    const files = imageFiles(event.dataTransfer);
+    if (!files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void add(files);
+  });
+  textarea.addEventListener('tagdown:pick', () => {
+    pickingImages = true;
+    pickImages()
+      .then((paths) => insertFigures(textarea, paths))
+      .catch((error) => message(String(error), { title: 'Could not add the image', kind: 'warning' }))
+      .finally(() => {
+        pickingImages = false;
+        if (textarea.isConnected) textarea.focus();
+      });
+  });
+}
+
+/** Copy images into the vault; resolves to the paths of those that made it. */
+async function saveImages(files: File[]): Promise<string[]> {
+  const results = await Promise.allSettled(files.map(saveImage));
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed.length) await message(failed.map((r) => String(r.reason)).join('\n'), { title: 'Could not add the image', kind: 'warning' });
+  return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+}
+
+const figureBlock = (paths: string[]): SlashCommand => ({ id: 'figure', label: 'Image', description: '', group: 'Media', icon: '', block: paths.map(figureMarkup).join('\n') });
+
+function insertFigures(textarea: HTMLTextAreaElement, paths: string[]) {
+  if (!paths.length || !textarea.isConnected) return;
+  const caret = textarea.selectionEnd;
+  applyEdit(textarea, applyCommand(textarea.value, caret, caret, figureBlock(paths)));
+}
+
+/** Images dropped on the preview go below the block they land on. */
+async function dropImagesOnPreview(event: DragEvent, preview: HTMLElement) {
+  const files = imageFiles(event.dataTransfer);
+  if (!files.length) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const blockEl = (event.target as HTMLElement).closest<HTMLElement>('.td-block[data-block]');
+  const startLine = blockEl ? previewBlocks[Number(blockEl.dataset.block)]?.start : undefined;
+  const paths = await saveImages(files);
+  if (!paths.length) return;
+  if (blockEdit) commitBlockEdit();
+  const lines = content.split('\n');
+  const block = previewBlocks.find((b) => b.start === startLine);
+  let at = block ? block.end : lines.length;
+  while (!block && at > 0 && !lines[at - 1].trim()) at--;
+  const figures = paths.map(figureMarkup);
+  const before = at > 0 && lines[at - 1].trim() ? [''] : [];
+  const after = at < lines.length && lines[at].trim() ? [''] : [];
+  lines.splice(at, 0, ...before, ...figures, ...after);
+  content = lines.join('\n');
+  syncSourceTextarea();
+  scheduleSave();
+  paintPreview(preview);
 }
 
 function insertText(text: string, atLineStart = false) {

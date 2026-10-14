@@ -640,7 +640,21 @@ function tryBlockText(text) {
   if (LIST_ITEM_RE.test(lines[0]) && lines.every(l => LIST_ITEM_RE.test(l) || LIST_CONTINUATION_RE.test(l))) {
     return renderList(lines);
   }
+
+  // Outline: a line of text with indented lines under it, e.g. a [[link]] with
+  // tasks nested below. The indented lines render as the text's children.
+  const childAt = lines.findIndex((l, i) => i > 0 && LIST_CONTINUATION_RE.test(l));
+  if (childAt > 0 && !LIST_ITEM_RE.test(lines[0]) && lines.slice(childAt).every(l => LIST_CONTINUATION_RE.test(l))) {
+    const children = dedent(lines.slice(childAt)).join('\n');
+    const nested = tryBlockText(children) ?? `<p>${inline(children)}</p>`;
+    return `<p>${inline(lines.slice(0, childAt).join('\n'))}</p><div class="td-children">${nested}</div>`;
+  }
   return null;
+}
+
+function dedent(lines) {
+  const depth = Math.min(...lines.map(l => l.match(/^[ \t]*/)[0].replace(/\t/g, '  ').length));
+  return lines.map(l => l.replace(/\t/g, '  ').slice(depth));
 }
 
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s+/;

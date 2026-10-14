@@ -292,6 +292,12 @@
   gap: 0 8px;
   margin-bottom: 4px;
 }
+/* Long task text wraps beside its checkbox instead of dropping below it. */
+.preview .td-task > span { flex: 1 1 0; min-width: 0; }
+
+/* Lines indented under a line of text: its children, as in an outline. */
+.preview .td-children { margin-left: 22px; }
+.preview p + .td-children { margin-top: -8px; }
 /* A plain item in a list with tasks keeps a bullet, in the checkbox's column. */
 .preview ul.td-tasklist > li:not(.td-task)::before {
   content: "•";
@@ -560,6 +566,19 @@
   color: var(--pv-ink-soft);
   margin-top: 6px;
 }
+/* An image that can't load: a quiet placeholder naming the path. */
+.preview .td-figure.is-missing img { display: none; }
+.preview .td-figure.is-missing::before {
+  content: attr(data-missing);
+  display: block;
+  padding: 22px 16px;
+  border: 1px dashed var(--pv-rule);
+  border-radius: 6px;
+  color: var(--pv-ink-soft);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
 
 /* ---- Video embeds (click-to-play facade) ---- */
 .preview .td-embed {
@@ -800,6 +819,11 @@
   font-size: 13.5px;
   line-height: 1.5;
 }
+/* A linking line with the lines nested under it shows them all. */
+.preview .backlink-line.has-children { display: block; }
+.preview .backlink-line.has-children :is(p, ul, ol, .td-task) { margin-bottom: 2px; }
+.preview .backlink-line.has-children .td-children { margin-top: 0; }
+.preview .backlink-line.has-children input:disabled { opacity: 1; }
 .preview .backlink-line .td-wikilink { pointer-events: none; }
 .preview .backlink-line .td-wikilink.is-self {
   color: var(--ink);

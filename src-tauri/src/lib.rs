@@ -20,6 +20,7 @@ pub fn run() {
     let vault = Vault::open_or_create_default().expect("failed to open or create default vault");
     let search = open_search_index(&vault);
     let (watch_vault, watch_search) = (vault.clone(), search.0.clone());
+    let vault_root = vault.root.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -27,6 +28,8 @@ pub fn run() {
         .manage(Mutex::new(AppState { vault }))
         .manage(search)
         .setup(move |app| {
+            // Images in notes load from the vault through the asset protocol.
+            app.asset_protocol_scope().allow_directory(&vault_root, true)?;
             let handle = app.handle().clone();
             let emit = move |event: &'static str, payload: serde_json::Value| { let _ = handle.emit(event, payload); };
             match watcher::start(watch_vault, watch_search, emit) {
@@ -70,6 +73,8 @@ pub fn run() {
             commands::export::vault_path,
             commands::export::reveal_vault,
             commands::export::reveal_note,
+            commands::attachments::save_attachment,
+            commands::attachments::import_attachment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

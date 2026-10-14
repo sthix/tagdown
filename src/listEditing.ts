@@ -237,47 +237,56 @@ function caretMemo(text: string, start: number, end: number) {
   };
 }
 
-/** Tab: nest the selected items (and their children) under the item above. */
+/** Tab: nest the selected lines (and their children) under the line above. */
 export function indent(text: string, start: number, end: number): Result {
   if (inFence(text, start)) return null;
   const lines = text.split('\n');
   const [first, lastSelected] = selectedLines(text, start, end);
   const item = parseListLine(lines[first]);
-  if (!item) return null;
-  // The item above at the same depth becomes the parent; without one there is
+  const depth = item ? item.indent : indentOf(lines[first]);
+  // The line above at the same depth becomes the parent: an item nests under
+  // its text, plain text (a [[link]], say) two spaces in. Without one there is
   // nothing to nest under.
-  let sibling: ListLine | null = null;
+  let delta = 0;
   for (let i = first - 1; i >= 0 && !isBlank(lines[i]); i--) {
-    const candidate = parseListLine(lines[i]);
-    const depth = indentOf(lines[i]);
-    if (depth < item.indent) break;
-    if (candidate && depth === item.indent) { sibling = candidate; break; }
+    const above = indentOf(lines[i]);
+    if (above < depth) break;
+    if (above > depth) continue;
+    const sibling = parseListLine(lines[i]);
+    delta = sibling ? sibling.markerEnd - sibling.indent : 2;
+    break;
   }
-  if (!sibling) return NOOP;
-  const delta = sibling.markerEnd - sibling.indent;
-  const last = Math.max(lastSelected, subtreeEnd(lines, lastSelected));
-  const next = lines.slice(first, last + 1).map((line) => (isBlank(line) ? line : shiftLine(line, delta)));
-  const memo = caretMemo(text, start, end);
-  return replaceLines(text, lines, first, last, next, memo.caretLine, memo.caretFromEnd, memo.anchor);
+  if (!delta) return NOOP;
+  return shiftLines(text, start, end, lines, first, lastSelected, delta);
 }
 
-/** Shift+Tab: move the selected items (and their children) out one level. */
+/** Shift+Tab: move the selected lines (and their children) out one level. */
 export function outdent(text: string, start: number, end: number): Result {
   if (inFence(text, start)) return null;
   const lines = text.split('\n');
   const [first, lastSelected] = selectedLines(text, start, end);
   const item = parseListLine(lines[first]);
-  if (!item) return null;
-  if (item.indent === 0) return NOOP;
-  // Step back to the parent's depth.
+  const depth = item ? item.indent : indentOf(lines[first]);
+  if (depth === 0) return NOOP;
+  // Step back to the parent's depth: the item above it, or for plain text any
+  // line above it.
   let parentIndent = 0;
   for (let i = first - 1; i >= 0 && !isBlank(lines[i]); i--) {
-    const depth = indentOf(lines[i]);
-    if (parseListLine(lines[i]) && depth < item.indent) { parentIndent = depth; break; }
+    const above = indentOf(lines[i]);
+    if (above < depth && (!item || parseListLine(lines[i]))) { parentIndent = above; break; }
   }
-  const delta = parentIndent - item.indent;
-  const last = Math.max(lastSelected, subtreeEnd(lines, lastSelected));
-  const next = lines.slice(first, last + 1).map((line) => (isBlank(line) ? line : shiftLine(line, delta)));
+  return shiftLines(text, start, end, lines, first, lastSelected, parentIndent - depth);
+}
+
+/**
+ * Shift lines[first..lastSelected] and the subtree under them by `delta`
+ * columns. Blank lines stay as they are, except an empty line being indented
+ * on its own, which gets the indentation to type into.
+ */
+function shiftLines(text: string, start: number, end: number, lines: string[], first: number, lastSelected: number, delta: number): Edit {
+  const lone = first === lastSelected && isBlank(lines[first]);
+  const last = lone ? first : Math.max(lastSelected, subtreeEnd(lines, lastSelected));
+  const next = lines.slice(first, last + 1).map((line) => (isBlank(line) && !lone ? line : shiftLine(line, delta)));
   const memo = caretMemo(text, start, end);
   return replaceLines(text, lines, first, last, next, memo.caretLine, memo.caretFromEnd, memo.anchor);
 }

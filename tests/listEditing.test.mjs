@@ -85,7 +85,20 @@ test('Tab nests an item and its children under the item above', () => {
   assert.equal(run(indent, '- a\n- b|\n  - c\n- d'), '- a\n  - b|\n    - c\n- d');
   assert.equal(run(indent, '1. a\n2. b|\n3. c'), '1. a\n   1. b|\n2. c');
   assert.equal(run(indent, '- a|'), NOOP);
-  assert.equal(run(indent, 'text|'), null);
+  assert.equal(run(indent, 'text|'), NOOP);
+  assert.equal(run(indent, '```\ncode|\n```'), null);
+});
+
+// `[[` marks a selection in these tests, so the link line is plain text here.
+test('Tab nests lines under plain text, like tasks under a linked page', () => {
+  assert.equal(run(indent, 'Page link\n- [ ] task|'), 'Page link\n  - [ ] task|');
+  assert.equal(run(indent, 'Page link\n|'), 'Page link\n  |');
+  assert.equal(run(indent, 'Page link\nmore |text'), 'Page link\n  more |text');
+  assert.equal(run(indent, 'Page link\n  - [ ] a\n  - [ ] b|'), 'Page link\n  - [ ] a\n    - [ ] b|');
+  assert.equal(run(indent, 'Page link\n\ntext|'), NOOP);
+  assert.equal(run(outdent, 'Page link\n  - [ ] task|'), 'Page link\n- [ ] task|');
+  assert.equal(run(outdent, 'Page link\n  more |text'), 'Page link\nmore |text');
+  assert.equal(run(outdent, 'text|'), NOOP);
 });
 
 test('Tab and Shift+Tab move every selected item', () => {

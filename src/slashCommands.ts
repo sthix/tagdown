@@ -10,6 +10,9 @@
 //
 // In templates, `{{text}}` marks what gets selected after inserting, so typing
 // replaces it; `{{}}` marks where the caret goes.
+//
+// A `pick` command only removes the `/query` and asks the editor to do the
+// rest (choose image files, say) with a `tagdown:pick` event.
 
 import { applyEdit, type Edit } from './listEditing';
 import { caretPosition } from './wikilinks';
@@ -27,7 +30,7 @@ export type SlashCommand = {
   keywords?: string[];
   /** The Markdown you could type instead, shown on the right. */
   shortcut?: string;
-} & ({ line: string } | { block: string } | { inline: string | (() => string) });
+} & ({ line: string } | { block: string } | { inline: string | (() => string) } | { pick: 'image' });
 
 const day = (offset: number) => () => `[[${shiftDay(todayKey(), offset)}]]`;
 
@@ -57,7 +60,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'center', label: 'Center', description: 'Center-aligned block', group: 'Layout', icon: '≡', keywords: ['align', 'middle'], block: '<center>\n{{Centered text}}\n</center>' },
   { id: 'toc', label: 'Table of contents', description: 'List of this note’s headings', group: 'Layout', icon: '☰', keywords: ['toc', 'contents', 'outline'], block: '<toc />\n{{}}' },
 
-  { id: 'image', label: 'Image', description: 'Figure with a caption', group: 'Media', icon: '▣', keywords: ['figure', 'picture', 'photo', 'img'], block: '<figure src={{image.png}} caption="Caption" />' },
+  { id: 'image', label: 'Image', description: 'Add a photo or image from your Mac', group: 'Media', icon: '▣', keywords: ['figure', 'picture', 'photo', 'img', 'upload', 'file'], pick: 'image' },
+  { id: 'figure', label: 'Figure', description: 'Image by path or URL, with a caption', group: 'Media', icon: '▢', keywords: ['image', 'picture', 'caption', 'img', 'url'], block: '<figure src={{image.png}} caption="Caption" />' },
   { id: 'video', label: 'Video embed', description: 'YouTube or Vimeo link', group: 'Media', icon: '▶', keywords: ['embed', 'youtube', 'vimeo', 'url'], block: '<embed url={{https://youtu.be/...}} />' },
 
   { id: 'code', label: 'Code block', description: 'Code with syntax highlighting', group: 'Code & math', icon: '{}', keywords: ['snippet', 'pre', 'src', 'fence'], shortcut: '```', block: '```js\n{{}}\n```' },
@@ -162,6 +166,8 @@ export function applyCommand(text: string, at: number, caret: number, command: S
     return diff(text, next, sel, sel);
   }
 
+  if ('pick' in command) return diff(text, rest, at, at);
+
   if ('inline' in command) {
     const { text: insert, sel } = expand(typeof command.inline === 'function' ? command.inline() : command.inline);
     const next = rest.slice(0, at) + insert + rest.slice(at);
@@ -216,6 +222,7 @@ export function attachSlashCommands(textarea: HTMLTextAreaElement) {
     applyEdit(textarea, edit);
     // Let the `[[` autocomplete pick up the new link right away.
     if (command.id === 'link') textarea.dispatchEvent(new Event('input'));
+    if ('pick' in command) textarea.dispatchEvent(new CustomEvent('tagdown:pick', { detail: command.pick }));
   };
 
   const render = () => {

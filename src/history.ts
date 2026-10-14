@@ -3,6 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { renderPreview, applyExternals } from './tagdown/renderer';
+import { resolveLocalImages } from './localImages';
 import { getEffectiveTheme } from './settings/theme';
 import './styles/history.css';
 
@@ -73,6 +74,7 @@ export async function openVersionHistory(options: HistoryOptions) {
     if (mine !== token) return;
     preview.innerHTML = renderPreview(cache.get(id)!);
     preview.scrollTop = 0;
+    resolveLocalImages(preview);
     void applyExternals(preview, getEffectiveTheme());
   };
 

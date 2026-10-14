@@ -9,6 +9,8 @@ use crate::models::Note;
 
 /// Context lines kept per linking note.
 const MENTIONS_PER_NOTE: usize = 3;
+/// Lines nested under a linking line kept with its mention.
+const MENTION_CHILD_LINES: usize = 12;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wikilink {
@@ -138,24 +140,52 @@ pub fn backlinks(notes: Vec<(Note, String)>, id: &str) -> Vec<Backlink> {
     backlinks
 }
 
-/// Source lines of `content` that link to `title`.
+/// Source lines of `content` that link to `title`, each with the lines indented
+/// under it (tasks nested under a link, say), re-indented two spaces under the
+/// linking line.
 pub fn mentions(content: &str, title: &str) -> Vec<String> {
     let wanted = normalize_title(title);
     let mut mentions: Vec<String> = Vec::new();
-    let mut last_line = usize::MAX;
+    // Links before this byte were already shown, on a linking line or nested under one.
+    let mut covered = 0;
     for link in parse_wikilinks(content).into_iter().filter(|l| normalize_title(&l.target) == wanted) {
-        let line_start = content[..link.start].rfind('\n').map_or(0, |i| i + 1);
-        if line_start == last_line {
+        if link.start < covered {
             continue;
         }
-        last_line = line_start;
+        let line_start = content[..link.start].rfind('\n').map_or(0, |i| i + 1);
         let line_end = content[link.end..].find('\n').map_or(content.len(), |i| link.end + i);
-        mentions.push(strip_line_marker(&content[line_start..line_end]).to_string());
+        let line = &content[line_start..line_end];
+        let mut mention = strip_line_marker(line).to_string();
+        covered = line_end;
+        let children = nested_lines(&content[line_end..], indent_width(line));
+        if let Some(min) = children.iter().map(|child| indent_width(child)).min() {
+            for child in &children {
+                mention.push_str("\n  ");
+                mention.push_str(&child.replace('\t', "  ")[min..]);
+            }
+            covered += children.iter().map(|child| child.len() + 1).sum::<usize>();
+        }
+        mentions.push(mention);
         if mentions.len() == MENTIONS_PER_NOTE {
             break;
         }
     }
     mentions
+}
+
+/// Lines nested under a line indented `depth` columns, from `rest` (which
+/// starts at that line's newline): the following lines indented deeper, up to
+/// a blank line.
+fn nested_lines(rest: &str, depth: usize) -> Vec<&str> {
+    rest.split('\n')
+        .skip(1)
+        .take_while(|line| !line.trim().is_empty() && indent_width(line) > depth)
+        .take(MENTION_CHILD_LINES)
+        .collect()
+}
+
+fn indent_width(line: &str) -> usize {
+    line.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 2 } else { 1 }).sum()
 }
 
 /// A line without its heading, quote, list, or task marker.
@@ -210,5 +240,14 @@ mod tests {
     fn mentions_are_linking_lines_without_markers() {
         let content = "# Notes\n\n- [ ] Read [[Über Alles|this]] and [[über alles]].\n## See [[Über Alles]]\nUnrelated [[Other]].\n";
         assert_eq!(mentions(content, "über alles"), vec!["Read [[Über Alles|this]] and [[über alles]].", "See [[Über Alles]]"]);
+    }
+
+    #[test]
+    fn mentions_keep_the_lines_nested_under_the_link() {
+        let content = "[[Page]]\n  - [ ] Call back\n    - [ ] about [[Page]]\nNot nested\n\n- [[Page]] list item\n  - [x] done\n- sibling";
+        assert_eq!(
+            mentions(content, "page"),
+            vec!["[[Page]]\n  - [ ] Call back\n    - [ ] about [[Page]]", "[[Page]] list item\n  - [x] done"]
+        );
     }
 }

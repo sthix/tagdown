@@ -6,6 +6,7 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { renderPreview, applyExternals } from './tagdown/renderer';
+import { resolveLocalImages } from './localImages';
 import { splitSlides, slideAtLine } from './tagdown/slides';
 import './styles/presentation.css';
 
@@ -152,6 +153,7 @@ export async function startPresentation(options: PresentOptions) {
   wake();
 
   // Math, diagrams and queries render after the slides are on screen.
+  resolveLocalImages(stage);
   await applyExternals(stage, options.theme);
   if (options.decorate) await options.decorate(stage);
   fitted.clear();

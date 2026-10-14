@@ -111,3 +111,11 @@ test('a whole section moves together', () => {
   assert.equal(moveBlock(source, blocks, 1, 2, 2), null);
   assert.equal(moveBlock(source, blocks, 1, 3, 2), null);
 });
+
+test('lines indented under a line of text render as its children', () => {
+  const source = '[[Page]]\n  - [ ] Call back\n  - [x] Done';
+  assert.deepEqual(texts(source), [source]);
+  const html = tagdown(source);
+  assert.match(html, /^<p><a class="td-wikilink"[^>]*>Page<\/a><\/p><div class="td-children"><ul class="td-tasklist">/);
+  assert.equal(html.match(/class="td-task"/g).length, 2);
+});

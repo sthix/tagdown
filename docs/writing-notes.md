@@ -60,16 +60,21 @@ The floating toolbar at the bottom of the editor inserts headings, bold, italic,
 
 ## Themes
 
-Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS.
+Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS, and set the preview's text size and line length.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
   <img width="1440" alt="Tagdown Editor in split view" src="images/tagdown-editor-light.png" />
 </picture>
 
-## Editor settings
+## Settings
 
-**Settings → Editor** (⌘,) holds options for how editing behaves. For now that is **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along. Settings are saved on this Mac and apply right away.
+**⌘,** opens Settings. Everything there is saved on this Mac and applies right away.
+
+- **General.** What opens on launch (the last note, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
+- **Editor.** Spellcheck, the size of the source text, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
+- **Appearance.** Theme, preview text size, and line length.
+- **Shortcuts.** Every keyboard shortcut, also listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ## The built-in reference
 

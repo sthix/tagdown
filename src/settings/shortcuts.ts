@@ -1,0 +1,55 @@
+// The keyboard shortcuts Settings lists. Keep in step with docs/keyboard-shortcuts.md.
+
+export type ShortcutGroup = { title: string; shortcuts: Array<{ keys: string[]; action: string }> };
+
+export const SHORTCUT_GROUPS: ShortcutGroup[] = [
+  {
+    title: 'App',
+    shortcuts: [
+      { keys: ['⌘K'], action: 'Command palette' },
+      { keys: ['⌘N'], action: 'New note' },
+      { keys: ['⌘⇧J'], action: 'Today’s journal page' },
+      { keys: ['⌘S'], action: 'Save now' },
+      { keys: ['⌘,'], action: 'Settings' },
+      { keys: ['⌘\\'], action: 'Focus mode' },
+      { keys: ['⌘⇧D'], action: 'Switch light and dark theme' },
+    ],
+  },
+  {
+    title: 'Views',
+    shortcuts: [
+      { keys: ['⌘1'], action: 'Source' },
+      { keys: ['⌘2'], action: 'Split' },
+      { keys: ['⌘3'], action: 'Preview' },
+    ],
+  },
+  {
+    title: 'Notes',
+    shortcuts: [
+      { keys: ['⌘⇧T'], action: 'Show every open task' },
+      { keys: ['⌘⇧H'], action: 'Version history' },
+      { keys: ['⌘⇧E'], action: 'Export as HTML' },
+      { keys: ['⌘P'], action: 'Print or save as PDF' },
+      { keys: ['⌥⌘P'], action: 'Present as slides' },
+      { keys: ['⌥⌘←', '⌥⌘→'], action: 'Previous / next journal day' },
+    ],
+  },
+  {
+    title: 'Editing',
+    shortcuts: [
+      { keys: ['/'], action: 'Command menu' },
+      { keys: ['[['], action: 'Link to a note' },
+      { keys: ['Esc', '⌘↩'], action: 'Finish editing a block' },
+      { keys: ['⌘⇧↑', '⌘⇧↓'], action: 'Move the block up or down' },
+    ],
+  },
+  {
+    title: 'Lists',
+    shortcuts: [
+      { keys: ['↩'], action: 'Next item' },
+      { keys: ['⇧↩'], action: 'New line in the same item' },
+      { keys: ['Tab'], action: 'Nest the item' },
+      { keys: ['⇧Tab'], action: 'Move the item out a level' },
+    ],
+  },
+];

@@ -67,6 +67,7 @@ pub fn run() {
             commands::tags::create_tag,
             commands::tags::delete_tag,
             commands::export::export_html,
+            commands::export::vault_path,
             commands::export::reveal_vault,
             commands::export::reveal_note,
         ])

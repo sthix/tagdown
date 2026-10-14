@@ -1,16 +1,153 @@
+import { invoke } from '@tauri-apps/api/core';
 import { renderPreview } from '../tagdown/renderer';
 import { tagdownDocumentation } from '../tagdown/documentation';
+import { uiIcon, UI_ICONS } from '../icons';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
-import { getPreference, setPreference, type Preferences } from './preferences';
+import { getPreference, onPreferenceChange, setPreference, type Preferences } from './preferences';
+import { SHORTCUT_GROUPS } from './shortcuts';
 
-const SETTINGS_PANELS = [
-  { id: 'general', title: 'General', body: 'Vault location, default view mode, autosave delay, and delete confirmations will appear here.' },
-  { id: 'editor', title: 'Editor', body: 'Editing behaviour.' },
-  { id: 'appearance', title: 'Appearance', body: 'Theme and display controls.' },
-  { id: 'export', title: 'Export', body: 'Default export folder and standalone HTML options will appear here.' },
-] as const;
+// ---- What the pages hold ----
+//
+// Each page is a list of groups, each group a card of rows: a label (and an
+// optional line of explanation) on the left, its control on the right. Controls
+// read and write preferences directly, so a change applies as soon as it's made.
+
+type Option = { value: string; label: string };
+
+type Control =
+  | { kind: 'switch'; name: keyof Preferences }
+  | { kind: 'segmented'; name: keyof Preferences; options: Option[] }
+  | { kind: 'select'; name: keyof Preferences; options: Option[] }
+  | { kind: 'range'; name: keyof Preferences; min: number; max: number; unit: string }
+  | { kind: 'html'; render: () => string };
+
+type Row = { label: string; description?: string; control: Control; stacked?: boolean };
+type Group = { title: string; rows: Row[] };
+type Page = { id: string; title: string; icon: keyof typeof UI_ICONS; intro: string; groups?: Group[]; body?: () => string };
+
+const VIEW_OPTIONS: Option[] = [
+  { value: 'source', label: 'Source' },
+  { value: 'split', label: 'Split' },
+  { value: 'preview', label: 'Preview' },
+];
+
+const PAGES: Page[] = [
+  {
+    id: 'general',
+    title: 'General',
+    icon: 'sliders',
+    intro: 'How Tagdown starts and how careful it is with your notes.',
+    groups: [
+      {
+        title: 'On launch',
+        rows: [
+          {
+            label: 'Open',
+            control: {
+              kind: 'select',
+              name: 'startupOpen',
+              options: [
+                { value: 'last', label: 'The last note I had open' },
+                { value: 'journal', label: 'Today’s journal page' },
+                { value: 'first', label: 'The most recent note' },
+              ],
+            },
+          },
+          { label: 'Start in', description: 'The view a note opens in. ⌘1, ⌘2 and ⌘3 switch at any time.', control: { kind: 'segmented', name: 'defaultViewMode', options: VIEW_OPTIONS } },
+          { label: 'Remember the last view', description: 'Start in whichever view you used last instead.', control: { kind: 'switch', name: 'rememberViewMode' } },
+        ],
+      },
+      {
+        title: 'Safety',
+        rows: [
+          {
+            label: 'Ask before archiving a note',
+            description: 'Archived notes can be restored from the Archive. Deleting a note for good always asks first.',
+            control: { kind: 'switch', name: 'confirmArchive' },
+          },
+        ],
+      },
+      {
+        title: 'Vault',
+        rows: [
+          {
+            label: 'Location',
+            description: 'Your notes are plain Markdown files in this folder.',
+            control: { kind: 'html', render: renderVaultControl },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'editor',
+    title: 'Editor',
+    icon: 'compose',
+    intro: 'How writing and editing behave.',
+    groups: [
+      {
+        title: 'Writing',
+        rows: [
+          { label: 'Check spelling', control: { kind: 'switch', name: 'spellcheck' } },
+          { label: 'Source text size', description: 'The Markdown editor, and blocks you edit in the preview.', control: { kind: 'range', name: 'editorFontSize', min: 11, max: 20, unit: 'px' } },
+        ],
+      },
+      {
+        title: 'Reordering blocks',
+        rows: [
+          {
+            label: 'Headings move their section',
+            description: 'Dragging a heading in the preview (or moving it with ⌘⇧↑ / ⌘⇧↓) takes everything under it along, up to the next heading of the same or a higher level.',
+            control: { kind: 'switch', name: 'dragHeadingSections' },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'appearance',
+    title: 'Appearance',
+    icon: 'sun',
+    intro: 'How Tagdown looks. ⌘⇧D switches between light and dark.',
+    groups: [
+      {
+        title: 'Theme',
+        rows: [{ label: 'Theme', stacked: true, control: { kind: 'html', render: renderThemePicker } }],
+      },
+      {
+        title: 'Reading',
+        rows: [
+          { label: 'Preview text size', control: { kind: 'range', name: 'previewFontSize', min: 13, max: 20, unit: 'px' } },
+          {
+            label: 'Line length',
+            description: 'How wide text runs in the full preview (⌘3).',
+            control: {
+              kind: 'segmented',
+              name: 'previewWidth',
+              options: [
+                { value: 'narrow', label: 'Narrow' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'wide', label: 'Wide' },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'shortcuts',
+    title: 'Shortcuts',
+    icon: 'keyboard',
+    intro: 'Every key you can press. ⌘K finds the rest by name.',
+    body: renderShortcuts,
+  },
+];
+
+const REFERENCE = { id: 'tagdown-reference', title: 'Tagdown Reference', icon: 'book' as const };
 
 let dialog: HTMLDialogElement | null = null;
+let closeTimer: number | undefined;
 
 export function initSettings() {
   if (dialog) return;
@@ -19,11 +156,23 @@ export function initSettings() {
   dialog = document.querySelector<HTMLDialogElement>('#settings-dialog');
   if (!dialog) throw new Error('Settings dialog failed to mount');
 
-  dialog.querySelector<HTMLButtonElement>('[data-settings-close]')?.addEventListener('click', () => dialog?.close());
+  dialog.querySelector<HTMLButtonElement>('[data-settings-close]')?.addEventListener('click', closeSettings);
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeSettings();
+  });
+  dialog.addEventListener('click', (event) => {
+    // A click on the backdrop lands on the dialog element itself.
+    if (event.target === dialog) closeSettings();
+  });
 
-  bindAppearanceControls();
-  bindEditorControls();
+  bindControls();
+  bindThemePicker();
   onThemePreferenceChange(updateThemeControls);
+  onPreferenceChange(syncControl);
+  dialog.querySelector('[data-reveal-vault]')?.addEventListener('click', () => {
+    void invoke('reveal_vault').catch(() => undefined);
+  });
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     tab.addEventListener('click', () => activateTab(tab));
@@ -89,11 +238,24 @@ function bindReferenceNav() {
   });
 }
 
-export function openSettings(panelId = 'tagdown-reference') {
+export function openSettings(panelId = 'general') {
   initSettings();
   const tab = dialog?.querySelector<HTMLButtonElement>(`[role="tab"][data-panel="${panelId}"]`);
   if (tab) activateTab(tab);
+  void loadVaultPath();
+  window.clearTimeout(closeTimer);
+  dialog?.classList.remove('is-closing');
   if (!dialog?.open) dialog?.showModal();
+}
+
+function closeSettings() {
+  if (!dialog?.open || dialog.classList.contains('is-closing')) return;
+  const el = dialog;
+  el.classList.add('is-closing');
+  closeTimer = window.setTimeout(() => {
+    el.close();
+    el.classList.remove('is-closing');
+  }, 110);
 }
 
 function activateTab(targetTab: HTMLButtonElement) {
@@ -112,148 +274,236 @@ function activateTab(targetTab: HTMLButtonElement) {
   });
 }
 
+// ---- Rendering ----
+
 function renderSettingsDialog() {
-  const tabs = [
-    ...SETTINGS_PANELS.map((panel) => ({ id: panel.id, title: panel.title })),
-    { id: 'tagdown-reference', title: 'Tagdown Reference' },
-  ];
+  const tabs = [...PAGES, REFERENCE];
 
   return `
     <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
-      <div class="settings-shell">
-        <header class="settings-header">
-          <div>
-            <p class="settings-eyebrow">Preferences</p>
-            <h1 id="settings-title">Settings</h1>
-          </div>
-          <button class="settings-close" type="button" data-settings-close aria-label="Close settings">×</button>
-        </header>
-        <div class="settings-body">
-          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <div class="settings-body">
+        <nav class="settings-tabs" aria-label="Settings sections">
+          <h1 id="settings-title" class="settings-title">Settings</h1>
+          <div role="tablist" aria-orientation="vertical" aria-labelledby="settings-title">
             ${tabs.map((tab, index) => `
               <button
                 role="tab"
                 id="settings-tab-${tab.id}"
                 aria-controls="settings-panel-${tab.id}"
-                aria-selected="${index === tabs.length - 1}"
-                tabindex="${index === tabs.length - 1 ? '0' : '-1'}"
+                aria-selected="${index === 0}"
+                tabindex="${index === 0 ? '0' : '-1'}"
                 data-panel="${tab.id}"
                 type="button"
-              >${escapeHtml(tab.title)}</button>
+              >${uiIcon(tab.icon, 15)}<span>${escapeHtml(tab.title)}</span></button>
             `).join('')}
-          </nav>
-          <section class="settings-panels">
-            ${SETTINGS_PANELS.map((panel) => renderPlaceholderPanel(panel)).join('')}
-            ${renderDocumentationPanel()}
-          </section>
-        </div>
+          </div>
+        </nav>
+        <section class="settings-panels">
+          ${PAGES.map((page, index) => renderPage(page, index === 0)).join('')}
+          ${renderDocumentationPanel()}
+        </section>
       </div>
+      <button class="settings-close chrome-icon-button" type="button" data-settings-close aria-label="Close settings" title="Close (Esc)">${uiIcon('close', 15)}</button>
     </dialog>
   `;
 }
 
-function renderPlaceholderPanel(panel: (typeof SETTINGS_PANELS)[number]) {
-  if (panel.id === 'appearance') return renderAppearancePanel();
-  if (panel.id === 'editor') return renderEditorPanel();
-
+function renderPage(page: Page, visible: boolean) {
   return `
     <article
-      id="settings-panel-${panel.id}"
+      id="settings-panel-${page.id}"
       role="tabpanel"
       tabindex="0"
-      aria-labelledby="settings-tab-${panel.id}"
-      hidden
-      class="settings-panel settings-placeholder"
+      aria-labelledby="settings-tab-${page.id}"
+      ${visible ? '' : 'hidden'}
+      class="settings-panel"
     >
-      <p class="settings-eyebrow">Coming soon</p>
-      <h2>${escapeHtml(panel.title)}</h2>
-      <p>${escapeHtml(panel.body)}</p>
+      <header class="settings-page-head">
+        <h2>${escapeHtml(page.title)}</h2>
+        <p>${escapeHtml(page.intro)}</p>
+      </header>
+      ${page.groups ? page.groups.map(renderGroup).join('') : page.body?.() ?? ''}
     </article>
   `;
 }
 
-function renderAppearancePanel() {
-  const currentTheme = getThemePreference();
-  const choices: Array<{ value: ThemePreference; title: string; description: string }> = [
-    { value: 'system', title: 'System', description: 'Match your macOS, Windows, or Linux appearance.' },
-    { value: 'light', title: 'Light', description: 'Use the bright editorial workspace.' },
-    { value: 'dark', title: 'Dark', description: 'Use the low-light writing workspace.' },
+function renderGroup(group: Group) {
+  return `
+    <section class="settings-group">
+      <h3>${escapeHtml(group.title)}</h3>
+      <div class="settings-card">
+        ${group.rows.map(renderRow).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderRow(row: Row) {
+  const id = 'name' in row.control ? `setting-${row.control.name}` : '';
+  const labelTag = id && row.control.kind !== 'segmented' ? `label for="${id}"` : 'span';
+  return `
+    <div class="settings-row ${row.stacked ? 'is-stacked' : ''}">
+      <div class="settings-row-text">
+        <${labelTag} class="settings-row-label" ${id ? `id="${id}-label"` : ''}>${escapeHtml(row.label)}</${labelTag.split(' ')[0]}>
+        ${row.description ? `<p>${escapeHtml(row.description)}</p>` : ''}
+      </div>
+      <div class="settings-row-control">${renderControl(row.control)}</div>
+    </div>
+  `;
+}
+
+function renderControl(control: Control) {
+  if (control.kind === 'html') return control.render();
+  const id = `setting-${control.name}`;
+  const value = getPreference(control.name);
+
+  if (control.kind === 'switch') {
+    return `<input id="${id}" class="td-switch" type="checkbox" role="switch" data-pref="${control.name}" data-kind="switch" ${value ? 'checked' : ''} />`;
+  }
+  if (control.kind === 'select') {
+    return `
+      <select id="${id}" class="td-select" data-pref="${control.name}" data-kind="select">
+        ${control.options.map((option) => `<option value="${option.value}" ${option.value === value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+      </select>
+    `;
+  }
+  if (control.kind === 'segmented') {
+    return `
+      <div class="td-segmented" role="radiogroup" aria-labelledby="${id}-label" data-pref="${control.name}" data-kind="segmented">
+        ${control.options.map((option) => `
+          <button type="button" role="radio" data-value="${option.value}" aria-checked="${option.value === value}" tabindex="${option.value === value ? '0' : '-1'}">${escapeHtml(option.label)}</button>
+        `).join('')}
+      </div>
+    `;
+  }
+  return `
+    <div class="td-range">
+      <input id="${id}" type="range" min="${control.min}" max="${control.max}" step="1" value="${value}" data-pref="${control.name}" data-kind="range" style="--fill: ${rangeFill(control.min, control.max, Number(value))}" />
+      <output for="${id}" data-range-output="${control.name}">${value}${control.unit}</output>
+    </div>
+  `;
+}
+
+function rangeFill(min: number, max: number, value: number) {
+  return `${((value - min) / (max - min)) * 100}%`;
+}
+
+function renderVaultControl() {
+  return `
+    <div class="settings-vault">
+      <code data-vault-path title="">~/Documents/Tagdown</code>
+      <button type="button" class="td-button" data-reveal-vault>${uiIcon('folder', 14)}<span>Reveal in Finder</span></button>
+    </div>
+  `;
+}
+
+function renderThemePicker() {
+  const current = getThemePreference();
+  const choices: Array<{ value: ThemePreference; title: string }> = [
+    { value: 'system', title: 'System' },
+    { value: 'light', title: 'Light' },
+    { value: 'dark', title: 'Dark' },
   ];
-
   return `
-    <article
-      id="settings-panel-appearance"
-      role="tabpanel"
-      tabindex="0"
-      aria-labelledby="settings-tab-appearance"
-      hidden
-      class="settings-panel settings-appearance"
-    >
-      <p class="settings-eyebrow">Display</p>
-      <h2>Appearance</h2>
-      <p class="settings-intro">Choose how Tagdown looks. The setting is saved locally and applied on launch.</p>
-      <fieldset class="theme-options" aria-describedby="theme-summary">
-        <legend>Theme</legend>
-        ${choices.map((choice) => `
-          <label class="theme-option">
-            <input type="radio" name="theme-preference" value="${choice.value}" ${choice.value === currentTheme ? 'checked' : ''} />
-            <span>
-              <strong>${choice.title}</strong>
-              <small>${choice.description}</small>
-            </span>
-          </label>
-        `).join('')}
-      </fieldset>
-      <p id="theme-summary" class="theme-summary">Current effective theme: <strong data-theme-summary>${getEffectiveTheme(currentTheme)}</strong>.</p>
-    </article>
+    <div class="theme-picker" role="radiogroup" aria-label="Theme">
+      ${choices.map((choice) => `
+        <label class="theme-card">
+          <input type="radio" name="theme-preference" value="${choice.value}" ${choice.value === current ? 'checked' : ''} />
+          <span class="theme-thumb theme-thumb-${choice.value}" aria-hidden="true">
+            <span class="theme-thumb-side"></span>
+            <span class="theme-thumb-page"><i></i><i></i><i></i></span>
+          </span>
+          <span class="theme-card-label">${choice.title}</span>
+        </label>
+      `).join('')}
+    </div>
+    <p class="theme-summary">System follows macOS — currently <strong data-theme-summary>${getEffectiveTheme('system')}</strong>.</p>
   `;
 }
 
-const EDITOR_TOGGLES: Array<{ name: keyof Preferences; title: string; description: string }> = [
-  {
-    name: 'dragHeadingSections',
-    title: 'Headings move their section',
-    description: 'Dragging a heading in the preview (or moving it with ⌘⇧↑ / ⌘⇧↓) takes everything under it along, up to the next heading of the same or a higher level.',
-  },
-];
-
-function renderEditorPanel() {
-  return `
-    <article
-      id="settings-panel-editor"
-      role="tabpanel"
-      tabindex="0"
-      aria-labelledby="settings-tab-editor"
-      hidden
-      class="settings-panel settings-appearance"
-    >
-      <p class="settings-eyebrow">Writing</p>
-      <h2>Editor</h2>
-      <p class="settings-intro">How editing behaves. Settings are saved locally and apply right away.</p>
-      <fieldset class="theme-options">
-        <legend>Reordering blocks</legend>
-        ${EDITOR_TOGGLES.map((toggle) => `
-          <label class="theme-option">
-            <input type="checkbox" data-preference="${toggle.name}" ${getPreference(toggle.name) ? 'checked' : ''} />
-            <span>
-              <strong>${escapeHtml(toggle.title)}</strong>
-              <small>${escapeHtml(toggle.description)}</small>
-            </span>
-          </label>
+function renderShortcuts() {
+  return SHORTCUT_GROUPS.map((group) => `
+    <section class="settings-group">
+      <h3>${escapeHtml(group.title)}</h3>
+      <div class="settings-card">
+        ${group.shortcuts.map((shortcut) => `
+          <div class="settings-row is-shortcut">
+            <span class="settings-row-label">${escapeHtml(shortcut.action)}</span>
+            <span class="settings-keys">${shortcut.keys.map((key) => `<kbd>${escapeHtml(key)}</kbd>`).join('<span>or</span>')}</span>
+          </div>
         `).join('')}
-      </fieldset>
-    </article>
-  `;
+      </div>
+    </section>
+  `).join('');
 }
 
-function bindEditorControls() {
-  dialog?.querySelectorAll<HTMLInputElement>('input[data-preference]').forEach((input) => {
-    const name = input.dataset.preference as keyof Preferences;
-    input.addEventListener('change', () => setPreference(name, input.checked));
+// ---- Behaviour ----
+
+function bindControls() {
+  dialog?.querySelectorAll<HTMLElement>('[data-pref]').forEach((el) => {
+    const name = el.dataset.pref as keyof Preferences;
+    const kind = el.dataset.kind;
+
+    if (kind === 'switch') {
+      el.addEventListener('change', () => setPreference(name, (el as HTMLInputElement).checked as never));
+    } else if (kind === 'select') {
+      el.addEventListener('change', () => setPreference(name, (el as HTMLSelectElement).value as never));
+    } else if (kind === 'range') {
+      el.addEventListener('input', () => setPreference(name, Number((el as HTMLInputElement).value) as never));
+    } else if (kind === 'segmented') {
+      const options = [...el.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+      options.forEach((option) => option.addEventListener('click', () => setPreference(name, option.dataset.value as never)));
+      el.addEventListener('keydown', (event) => {
+        const current = options.findIndex((option) => option === document.activeElement);
+        if (current === -1) return;
+        const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const next = options[(current + step + options.length) % options.length];
+        next.focus();
+        setPreference(name, next.dataset.value as never);
+      });
+    }
   });
 }
 
-function bindAppearanceControls() {
+/** Bring a control back in line with its preference, whoever changed it. */
+function syncControl(name: keyof Preferences) {
+  const el = dialog?.querySelector<HTMLElement>(`[data-pref="${name}"]`);
+  if (!el) return;
+  const value = getPreference(name);
+  const kind = el.dataset.kind;
+  if (kind === 'switch') (el as HTMLInputElement).checked = Boolean(value);
+  else if (kind === 'select') (el as HTMLSelectElement).value = String(value);
+  else if (kind === 'range') {
+    const input = el as HTMLInputElement;
+    input.value = String(value);
+    input.style.setProperty('--fill', rangeFill(Number(input.min), Number(input.max), Number(value)));
+  }
+  else if (kind === 'segmented') {
+    el.querySelectorAll<HTMLButtonElement>('[role="radio"]').forEach((option) => {
+      const checked = option.dataset.value === value;
+      option.setAttribute('aria-checked', String(checked));
+      option.tabIndex = checked ? 0 : -1;
+    });
+  }
+  const output = dialog?.querySelector<HTMLOutputElement>(`[data-range-output="${name}"]`);
+  if (output) output.textContent = `${value}px`;
+}
+
+async function loadVaultPath() {
+  const el = dialog?.querySelector<HTMLElement>('[data-vault-path]');
+  if (!el) return;
+  try {
+    const path = await invoke<string>('vault_path');
+    el.textContent = path.replace(/^\/Users\/[^/]+/, '~');
+    el.title = path;
+  } catch {
+    // Outside the app (the browser preview) there is no vault to ask about.
+  }
+}
+
+function bindThemePicker() {
   dialog?.querySelectorAll<HTMLInputElement>('input[name="theme-preference"]').forEach((input) => {
     input.addEventListener('change', () => {
       if (input.checked) setThemePreference(input.value as ThemePreference);
@@ -269,7 +519,7 @@ function updateThemeControls() {
     input.checked = input.value === preference;
   });
   const summary = dialog.querySelector<HTMLElement>('[data-theme-summary]');
-  if (summary) summary.textContent = getEffectiveTheme(preference);
+  if (summary) summary.textContent = getEffectiveTheme('system');
 }
 
 function renderDocumentationPanel() {
@@ -311,6 +561,7 @@ function renderDocumentationPanel() {
       role="tabpanel"
       tabindex="0"
       aria-labelledby="settings-tab-tagdown-reference"
+      hidden
       class="settings-panel tagdown-docs"
     >
       <nav class="tagdown-ref-nav" aria-label="Tagdown components">

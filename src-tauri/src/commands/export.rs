@@ -12,6 +12,12 @@ pub async fn export_html(html: String, dest_path: String) -> Result<String, Stri
     Ok(dest_path)
 }
 
+/// Where the vault lives on disk, for Settings.
+#[tauri::command]
+pub async fn vault_path(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
+    Ok(state.lock().map_err(|e| e.to_string())?.vault.root.display().to_string())
+}
+
 #[tauri::command]
 pub async fn reveal_vault(app: tauri::AppHandle, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let root = state.lock().map_err(|e| e.to_string())?.vault.root.clone();

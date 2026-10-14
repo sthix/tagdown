@@ -132,7 +132,7 @@ textarea#source {
   background: transparent;
   color: var(--source-fg);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--editor-font-size, 13px);
   line-height: 1.7;
   letter-spacing: -.005em;
   caret-color: var(--ink);

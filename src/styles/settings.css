@@ -114,8 +114,9 @@
    steps aside so the examples get the room. */
 .settings-dialog { transition: width .18s var(--ease-out), height .18s var(--ease-out); }
 .settings-dialog.is-expanded {
-  width: calc(100vw - 24px);
-  height: calc(100vh - 24px);
+  /* 40px clear of each edge keeps the dialog off the window's traffic lights. */
+  width: calc(100vw - 80px);
+  height: calc(100vh - 80px);
 }
 .settings-dialog.is-expanded .settings-body { grid-template-columns: minmax(0, 1fr); }
 .settings-dialog.is-expanded .settings-tabs { display: none; }

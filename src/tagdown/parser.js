@@ -281,10 +281,11 @@ function tokenize(input) {
       }
     }
 
-    let j = i;
+    // A '<' that opens no tag (e.g. <hi@example.com>) is literal text.
+    let j = ch === '<' ? i + 1 : i;
     while (j < input.length && input[j] !== '<') j++;
-    if (j > i) tokens.push({ type: 'text', value: input.slice(i, j) });
-    if (j === i) { i++; } else { i = j; }
+    tokens.push({ type: 'text', value: input.slice(i, j) });
+    i = j;
   }
   return tokens;
 }

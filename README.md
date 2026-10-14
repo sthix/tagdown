@@ -65,7 +65,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
-- **Light and dark themes** (⌘⇧D), or follow the system.
+- **Light and dark themes** (⌘⇧D), or follow the system, with eight **accent colours** to tint the app.
 
 ### Organizing
 
@@ -136,7 +136,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | | |
 | --- | --- |
 | [Getting started](docs/getting-started.md) | Install, run, build, first launch |
-| [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes |
+| [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes and accents |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
 | [Organizing your vault](docs/organizing.md) | Folders, tags, pinning, archive, search, wikilinks |
 | [Journal](docs/journal.md) | Daily pages, date links, journal template |

@@ -58,13 +58,15 @@ The floating toolbar at the bottom of the editor inserts headings, bold, italic,
 
 **⌘K** opens the command palette. Type to jump to a note by title or search inside notes (the [search syntax](organizing.md#search) works here), or run any app action: switch views, export, present, show tasks or history, change theme, and open settings. Use the arrow keys and **↩** to choose.
 
-## Themes
+## Themes and accents
 
 Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS, and set the preview's text size and line length.
 
+The **Accent** row picks the highlighter colour the whole app is tinted with: yellow (the default), orange, coral, pink, purple, blue, teal, or green. It colours the marker behind the current sidebar item, text selection, the window's tint, and the app's controls, in both themes.
+
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
-  <img width="1440" alt="Tagdown Editor in split view" src="images/tagdown-editor-light.png" />
+  <source media="(prefers-color-scheme: dark)" srcset="images/appearance-dark.png" />
+  <img width="1440" alt="Settings, Appearance page, with the blue accent: the theme picker, a row of eight accent swatches, and the app behind it tinted blue" src="images/appearance-light.png" />
 </picture>
 
 ## Settings
@@ -78,7 +80,7 @@ Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Se
 
 - **General.** What opens on launch (the last note, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
 - **Editor.** Spellcheck, the size of the source text, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
-- **Appearance.** Theme, preview text size, and line length.
+- **Appearance.** Theme, accent colour, preview text size, and line length.
 - **Shortcuts.** Every keyboard shortcut, also listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ## The built-in reference

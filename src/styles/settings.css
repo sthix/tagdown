@@ -102,6 +102,24 @@
   z-index: 2;
 }
 
+.settings-expand {
+  position: absolute;
+  top: 12px;
+  right: 44px;
+  z-index: 2;
+}
+.settings-dialog:not([data-panel="tagdown-reference"]) .settings-expand { display: none; }
+
+/* Expanded reference: the dialog fills the window and the settings sidebar
+   steps aside so the examples get the room. */
+.settings-dialog { transition: width .18s var(--ease-out), height .18s var(--ease-out); }
+.settings-dialog.is-expanded {
+  width: calc(100vw - 24px);
+  height: calc(100vh - 24px);
+}
+.settings-dialog.is-expanded .settings-body { grid-template-columns: minmax(0, 1fr); }
+.settings-dialog.is-expanded .settings-tabs { display: none; }
+
 /* Pages */
 .settings-panels {
   min-height: 0;

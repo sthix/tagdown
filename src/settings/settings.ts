@@ -196,6 +196,40 @@ export function initSettings() {
   });
 
   bindReferenceNav();
+  bindReferenceExpand();
+  bindReferenceAnchors();
+}
+
+// The reference reads better with room: expanding hides the settings sidebar
+// and grows the dialog to fill the window.
+function bindReferenceExpand() {
+  const button = dialog?.querySelector<HTMLButtonElement>('[data-settings-expand]');
+  button?.addEventListener('click', () => setReferenceExpanded(!dialog!.classList.contains('is-expanded')));
+}
+
+function setReferenceExpanded(expanded: boolean) {
+  if (!dialog) return;
+  dialog.classList.toggle('is-expanded', expanded);
+  const button = dialog.querySelector<HTMLButtonElement>('[data-settings-expand]');
+  if (!button) return;
+  const label = expanded ? 'Collapse reference' : 'Expand reference';
+  button.setAttribute('aria-pressed', String(expanded));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.innerHTML = uiIcon(expanded ? 'collapse' : 'expand', 15);
+}
+
+// Anchor links in an example (a <toc />, a [jump](#section)) scroll within that
+// example's preview instead of navigating the app.
+function bindReferenceAnchors() {
+  dialog?.querySelector('#settings-panel-tagdown-reference')?.addEventListener('click', (event) => {
+    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('.tagdown-reference-preview a[href^="#"]');
+    if (!link) return;
+    event.preventDefault();
+    const id = decodeURIComponent(link.getAttribute('href')!.slice(1));
+    const preview = link.closest('.tagdown-reference-preview');
+    preview?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
 }
 
 function bindReferenceNav() {
@@ -272,6 +306,10 @@ function activateTab(targetTab: HTMLButtonElement) {
   dialog.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach((panel) => {
     panel.hidden = panel.id !== targetPanelId;
   });
+
+  const panelName = targetTab.getAttribute('data-panel') ?? '';
+  dialog.dataset.panel = panelName;
+  if (panelName !== REFERENCE.id) setReferenceExpanded(false);
 }
 
 // ---- Rendering ----
@@ -303,6 +341,7 @@ function renderSettingsDialog() {
           ${renderDocumentationPanel()}
         </section>
       </div>
+      <button class="settings-expand chrome-icon-button" type="button" data-settings-expand aria-pressed="false" aria-label="Expand reference" title="Expand reference">${uiIcon('expand', 15)}</button>
       <button class="settings-close chrome-icon-button" type="button" data-settings-close aria-label="Close settings" title="Close (Esc)">${uiIcon('close', 15)}</button>
     </dialog>
   `;

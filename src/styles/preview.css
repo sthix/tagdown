@@ -388,7 +388,7 @@
 .preview .td-fn-back:hover { opacity: 1; }
 
 /* ---- Table of contents ---- */
-.preview .td-toc {
+:is(.preview, .tagdown-reference-preview) .td-toc {
   margin: 1.4em 0;
   padding: 14px 18px;
   background: var(--pv-surface);
@@ -397,7 +397,7 @@
   font-family: var(--font-ui);
   font-size: 13.5px;
 }
-.preview .td-toc-title {
+:is(.preview, .tagdown-reference-preview) .td-toc-title {
   font-family: var(--font-serif);
   font-style: italic;
   font-size: 13px;
@@ -405,20 +405,20 @@
   margin-bottom: 8px;
   letter-spacing: 0.02em;
 }
-.preview .td-toc-list { list-style: none; padding: 0; margin: 0; }
-.preview .td-toc-list li { margin: 3px 0; }
-.preview .td-toc-list a {
+:is(.preview, .tagdown-reference-preview) .td-toc-list { list-style: none; padding: 0; margin: 0; }
+:is(.preview, .tagdown-reference-preview) .td-toc-list li { margin: 3px 0; }
+:is(.preview, .tagdown-reference-preview) .td-toc-list a {
   color: var(--pv-ink);
   text-decoration: none;
   border-bottom: none;
 }
-.preview .td-toc-list a:hover { color: var(--pv-accent); }
-.preview .td-toc-l1 { padding-left: 0;    font-weight: 600; }
-.preview .td-toc-l2 { padding-left: 14px; }
-.preview .td-toc-l3 { padding-left: 28px; font-size: 12.5px; color: var(--pv-ink-soft); }
-.preview .td-toc-l4 { padding-left: 42px; font-size: 12.5px; color: var(--pv-ink-soft); }
-.preview .td-toc-l5 { padding-left: 56px; font-size: 12px;   color: var(--pv-ink-soft); }
-.preview .td-toc-l6 { padding-left: 70px; font-size: 12px;   color: var(--pv-ink-soft); }
+:is(.preview, .tagdown-reference-preview) .td-toc-list a:hover { color: var(--pv-accent); }
+:is(.preview, .tagdown-reference-preview) .td-toc-l1 { padding-left: 0;    font-weight: 600; }
+:is(.preview, .tagdown-reference-preview) .td-toc-l2 { padding-left: 14px; }
+:is(.preview, .tagdown-reference-preview) .td-toc-l3 { padding-left: 28px; font-size: 12.5px; color: var(--pv-ink-soft); }
+:is(.preview, .tagdown-reference-preview) .td-toc-l4 { padding-left: 42px; font-size: 12.5px; color: var(--pv-ink-soft); }
+:is(.preview, .tagdown-reference-preview) .td-toc-l5 { padding-left: 56px; font-size: 12px;   color: var(--pv-ink-soft); }
+:is(.preview, .tagdown-reference-preview) .td-toc-l6 { padding-left: 70px; font-size: 12px;   color: var(--pv-ink-soft); }
 
 /* ---- Tabs (CSS-only via radio buttons) ---- */
 .preview .td-tabs {

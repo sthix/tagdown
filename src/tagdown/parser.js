@@ -525,6 +525,28 @@ function splitHorizontalRules(value) {
   return runs;
 }
 
+/* Split a paragraph-sized chunk so every `# heading` line stands alone, the way
+   Markdown doesn't need blank lines around headings. Lines inside a ``` fence
+   are left alone so a `# comment` in code stays code. */
+function splitHeadingLines(text) {
+  if (!/^#{1,6}\s/m.test(text)) return [text];
+  const chunks = [];
+  let buf = [];
+  let inFence = false;
+  const flush = () => { if (buf.length) { chunks.push(buf.join('\n')); buf = []; } };
+  for (const line of text.split('\n')) {
+    if (/^\s*```/.test(line)) inFence = !inFence;
+    if (!inFence && /^#{1,6}\s/.test(line)) {
+      flush();
+      chunks.push(line);
+    } else {
+      buf.push(line);
+    }
+  }
+  flush();
+  return chunks;
+}
+
 function renderChildren(node, blockCtx = true) {
   if (!blockCtx) {
     return node.children.map(c => render(c, false)).join('');
@@ -552,8 +574,9 @@ function renderChildren(node, blockCtx = true) {
           out += '<hr>';
           continue;
         }
-        // Within a run, split text on blank lines; each break = paragraph boundary
-        const parts = run.text.split(/\n[ \t]*\n/);
+        // Within a run, split text on blank lines; each break = paragraph boundary.
+        // A heading line is its own block too, so `# A\n## B` gives two headings.
+        const parts = run.text.split(/\n[ \t]*\n/).flatMap(splitHeadingLines);
         parts.forEach((part, i) => {
           if (i > 0) flushPara();
           // Try to detect a markdown block, but only at fresh paragraph boundaries

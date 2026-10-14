@@ -11,6 +11,8 @@ export const UI_ICONS: Record<string, string> = {
   hash: '<path d="M6.3 2.5L5 13.5M11 2.5L9.7 13.5M3 6h10.5M2.5 10H13" />',
   chevronDown: '<path d="M4.5 6.3L8 9.8l3.5-3.5" />',
   focus: '<path d="M2.8 6V3.6c0-.4.4-.8.8-.8H6M10 2.8h2.4c.4 0 .8.4.8.8V6M13.2 10v2.4c0 .4-.4.8-.8.8H10M6 13.2H3.6c-.4 0-.8-.4-.8-.8V10" />',
+  expand: '<path d="M9.5 2.8h3.7v3.7M13.2 2.8L9 7M6.5 13.2H2.8V9.5M2.8 13.2L7 9" />',
+  collapse: '<path d="M12.8 7H9V3.2M9 7l4.2-4.2M3.2 9H7v3.8M7 9l-4.2 4.2" />',
   sidebar: '<rect x="2.5" y="3" width="11" height="10" rx="1.6" /><path d="M6.3 3v10" />',
   moon: '<path d="M12.8 9.6A5.2 5.2 0 016.4 3.2a5.2 5.2 0 106.4 6.4z" />',
   sun: '<circle cx="8" cy="8" r="2.6" /><path d="M8 1.8v1.4M8 12.8v1.4M3.6 3.6l1 1M11.4 11.4l1 1M1.8 8h1.4M12.8 8h1.4M3.6 12.4l1-1M11.4 4.6l1-1" />',

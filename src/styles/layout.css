@@ -11,6 +11,7 @@
   transition: grid-template-columns .28s var(--ease-out);
 }
 #app.is-focus { grid-template-columns: 0 minmax(0, 1fr); }
+:root[data-grain="off"] #app { background-image: var(--bg-desk); }
 
 .sheet {
   min-width: 0;

@@ -65,7 +65,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
-- **Light and dark themes** (⌘⇧D), or follow the system, with eight **accent colours** to tint the app.
+- **Light and dark themes** (⌘⇧D), or follow the system, with sixteen **accent colours** to tint the app and an optional paper grain.
 
 ### Organizing
 

@@ -120,6 +120,7 @@ const PAGES: Page[] = [
             description: 'The highlighter colour for selections, markers and the window tint.',
             control: { kind: 'swatches', name: 'accent', options: [...ACCENTS] },
           },
+          { label: 'Paper grain', description: 'A faint texture on the window background.', control: { kind: 'switch', name: 'grain' } },
         ],
       },
       {

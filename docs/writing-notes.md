@@ -62,11 +62,11 @@ The floating toolbar at the bottom of the editor inserts headings, bold, italic,
 
 Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS, and set the preview's text size and line length.
 
-The **Accent** row picks the highlighter colour the whole app is tinted with: yellow (the default), orange, coral, pink, purple, blue, teal, or green. It colours the marker behind the current sidebar item, text selection, the window's tint, and the app's controls, in both themes.
+The **Accent** row picks the highlighter colour the whole app is tinted with, from sixteen: yellow (the default), lime, green, mint, teal, cyan, blue, indigo, purple, magenta, pink, red, coral, orange, peach, or graphite. It colours the marker behind the current sidebar item, text selection, the window's tint, and the app's controls, in both themes. **Paper grain** turns the faint texture on the window background on or off.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/appearance-dark.png" />
-  <img width="1440" alt="Settings, Appearance page, with the blue accent: the theme picker, a row of eight accent swatches, and the app behind it tinted blue" src="images/appearance-light.png" />
+  <img width="1440" alt="Settings, Appearance page, with the blue accent: the theme picker, sixteen accent swatches, the paper grain switch, and the app behind it tinted blue" src="images/appearance-light.png" />
 </picture>
 
 ## Settings
@@ -80,7 +80,7 @@ The **Accent** row picks the highlighter colour the whole app is tinted with: ye
 
 - **General.** What opens on launch (the last note, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
 - **Editor.** Spellcheck, the size of the source text, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
-- **Appearance.** Theme, accent colour, preview text size, and line length.
+- **Appearance.** Theme, accent colour, paper grain, preview text size, and line length.
 - **Shortcuts.** Every keyboard shortcut, also listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ## The built-in reference

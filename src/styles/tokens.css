@@ -20,7 +20,7 @@
   --accent-desk: #fff6d1;
   --bg-desk: linear-gradient(180deg, var(--accent-desk) 0%, #fffdf4 100%);
   /* A faint paper grain laid over the desk. */
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .19 0 0 0 0 .16 0 0 0 0 .06 0 0 0 .2 -.065'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .19 0 0 0 0 .16 0 0 0 0 .06 0 0 0 .3 -.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   --bg-sidebar: transparent;
   --bg-sheet: #fffefb;
   --bg-notes: #faf8f2;
@@ -137,7 +137,7 @@
   /* Warm charcoal rather than blue graphite. */
   --bg-window: #1c1b18;
   --bg-desk: none;
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .97 0 0 0 0 .88 0 0 0 .13 -.045'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .97 0 0 0 0 .88 0 0 0 .2 -.07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   --bg-sheet: #252420;
   --bg-notes: #21201c;
   --bg-list: #21201c;
@@ -226,13 +226,21 @@
 /* Accents. Yellow is the palette above; each other accent names its marker,
    the readable text shade for light and dark, and the desk tint. The rest of
    the accent family is mixed from those. */
-:root[data-accent="orange"] { --a-marker: #ffb54d; --a-strong: #f59a1b; --a-text: #8a4b00; --a-text-dark: #ffbe6b; --a-desk: #ffe9d1; }
-:root[data-accent="coral"]  { --a-marker: #ff9a85; --a-strong: #f27a62; --a-text: #9a3020; --a-text-dark: #ffa493; --a-desk: #ffe3dc; }
-:root[data-accent="pink"]   { --a-marker: #ffa3cf; --a-strong: #f57fb6; --a-text: #9c2a62; --a-text-dark: #ffaad2; --a-desk: #ffe2ef; }
-:root[data-accent="purple"] { --a-marker: #c9a8ff; --a-strong: #ad85f5; --a-text: #5b2fa8; --a-text-dark: #c8a9ff; --a-desk: #ece3ff; }
-:root[data-accent="blue"]   { --a-marker: #93c5ff; --a-strong: #6aa8f5; --a-text: #1f4f9c; --a-text-dark: #9cc8ff; --a-desk: #dfecff; }
-:root[data-accent="teal"]   { --a-marker: #7fe0cf; --a-strong: #4fcab5; --a-text: #0f6b5c; --a-text-dark: #84e3d2; --a-desk: #d8f5ee; }
-:root[data-accent="green"]  { --a-marker: #a8e07a; --a-strong: #86c955; --a-text: #3d6b14; --a-text-dark: #b0e485; --a-desk: #e6f5d6; }
+:root[data-accent="orange"]   { --a-marker: #ffb54d; --a-strong: #f59a1b; --a-text: #8a4b00; --a-text-dark: #ffbe6b; --a-desk: #ffe9d1; }
+:root[data-accent="coral"]    { --a-marker: #ff9a85; --a-strong: #f27a62; --a-text: #9a3020; --a-text-dark: #ffa493; --a-desk: #ffe3dc; }
+:root[data-accent="pink"]     { --a-marker: #ffa3cf; --a-strong: #f57fb6; --a-text: #9c2a62; --a-text-dark: #ffaad2; --a-desk: #ffe2ef; }
+:root[data-accent="purple"]   { --a-marker: #c9a8ff; --a-strong: #ad85f5; --a-text: #5b2fa8; --a-text-dark: #c8a9ff; --a-desk: #ece3ff; }
+:root[data-accent="blue"]     { --a-marker: #93c5ff; --a-strong: #6aa8f5; --a-text: #1f4f9c; --a-text-dark: #9cc8ff; --a-desk: #dfecff; }
+:root[data-accent="teal"]     { --a-marker: #7fe0cf; --a-strong: #4fcab5; --a-text: #0f6b5c; --a-text-dark: #84e3d2; --a-desk: #d8f5ee; }
+:root[data-accent="green"]    { --a-marker: #a8e07a; --a-strong: #86c955; --a-text: #3d6b14; --a-text-dark: #b0e485; --a-desk: #e6f5d6; }
+:root[data-accent="lime"]     { --a-marker: #d4ec5c; --a-strong: #bcd83a; --a-text: #556b00; --a-text-dark: #d6ee6a; --a-desk: #f1f8d0; }
+:root[data-accent="mint"]     { --a-marker: #9ae8b8; --a-strong: #6fd498; --a-text: #1d6b3f; --a-text-dark: #a3ecc0; --a-desk: #e0f7e9; }
+:root[data-accent="cyan"]     { --a-marker: #7fd6f0; --a-strong: #4fbfe0; --a-text: #0c5f7a; --a-text-dark: #8adbf2; --a-desk: #daf2fa; }
+:root[data-accent="indigo"]   { --a-marker: #aab4ff; --a-strong: #8691f5; --a-text: #3240a3; --a-text-dark: #b0b9ff; --a-desk: #e6e8ff; }
+:root[data-accent="magenta"]  { --a-marker: #f0a0f0; --a-strong: #e078e0; --a-text: #8a2a8a; --a-text-dark: #f2aaf2; --a-desk: #f9e3f9; }
+:root[data-accent="red"]      { --a-marker: #ff7a7a; --a-strong: #f05555; --a-text: #a12626; --a-text-dark: #ff8f8f; --a-desk: #ffe0e0; }
+:root[data-accent="peach"]    { --a-marker: #ffc8a2; --a-strong: #f5a878; --a-text: #8f4a1e; --a-text-dark: #ffcaa8; --a-desk: #ffeee2; }
+:root[data-accent="graphite"] { --a-marker: #c9c4b8; --a-strong: #aaa497; --a-text: #4a463d; --a-text-dark: #d6d1c5; --a-desk: #efede7; }
 :root[data-accent] {
   --accent-desk: var(--a-desk);
   --bg-window: color-mix(in srgb, var(--a-desk) 55%, #fffefb);

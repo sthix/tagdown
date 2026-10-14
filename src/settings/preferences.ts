@@ -4,13 +4,21 @@ export type ViewMode = 'source' | 'split' | 'preview';
 
 export const ACCENTS = [
   { value: 'yellow', label: 'Yellow', swatch: '#ffd60a' },
-  { value: 'orange', label: 'Orange', swatch: '#ffb54d' },
-  { value: 'coral', label: 'Coral', swatch: '#ff9a85' },
-  { value: 'pink', label: 'Pink', swatch: '#ffa3cf' },
-  { value: 'purple', label: 'Purple', swatch: '#c9a8ff' },
-  { value: 'blue', label: 'Blue', swatch: '#93c5ff' },
-  { value: 'teal', label: 'Teal', swatch: '#7fe0cf' },
+  { value: 'lime', label: 'Lime', swatch: '#d4ec5c' },
   { value: 'green', label: 'Green', swatch: '#a8e07a' },
+  { value: 'mint', label: 'Mint', swatch: '#9ae8b8' },
+  { value: 'teal', label: 'Teal', swatch: '#7fe0cf' },
+  { value: 'cyan', label: 'Cyan', swatch: '#7fd6f0' },
+  { value: 'blue', label: 'Blue', swatch: '#93c5ff' },
+  { value: 'indigo', label: 'Indigo', swatch: '#aab4ff' },
+  { value: 'purple', label: 'Purple', swatch: '#c9a8ff' },
+  { value: 'magenta', label: 'Magenta', swatch: '#f0a0f0' },
+  { value: 'pink', label: 'Pink', swatch: '#ffa3cf' },
+  { value: 'red', label: 'Red', swatch: '#ff7a7a' },
+  { value: 'coral', label: 'Coral', swatch: '#ff9a85' },
+  { value: 'orange', label: 'Orange', swatch: '#ffb54d' },
+  { value: 'peach', label: 'Peach', swatch: '#ffc8a2' },
+  { value: 'graphite', label: 'Graphite', swatch: '#c9c4b8' },
 ] as const;
 
 export type Accent = (typeof ACCENTS)[number]['value'];
@@ -38,6 +46,8 @@ export type Preferences = {
   dragHeadingSections: boolean;
   /** The highlighter colour the whole app is tinted with. */
   accent: Accent;
+  /** The faint paper texture on the window background. */
+  grain: boolean;
 };
 
 export const DEFAULTS: Preferences = {
@@ -53,6 +63,7 @@ export const DEFAULTS: Preferences = {
   previewWidth: 'medium',
   dragHeadingSections: true,
   accent: 'yellow',
+  grain: true,
 };
 
 const PREVIEW_WIDTHS: Record<Preferences['previewWidth'], string> = { narrow: '640px', medium: '760px', wide: '920px' };
@@ -90,6 +101,8 @@ export function applyPreferences() {
   const accent = getPreference('accent');
   if (accent !== 'yellow' && ACCENTS.some((option) => option.value === accent)) document.documentElement.dataset.accent = accent;
   else delete document.documentElement.dataset.accent;
+  if (getPreference('grain')) delete document.documentElement.dataset.grain;
+  else document.documentElement.dataset.grain = 'off';
 }
 
 export function onPreferenceChange(callback: (name: keyof Preferences) => void) {

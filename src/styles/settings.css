@@ -259,8 +259,8 @@
 :root[data-theme="dark"] .td-segmented button[aria-checked="true"] { background: var(--bg-button-hover); }
 
 .td-swatches {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(8, 20px);
   gap: 8px;
 }
 .td-swatches button {

@@ -313,9 +313,14 @@ export function backspaceInList(text: string, start: number, end: number): Resul
 export function applyEdit(textarea: HTMLTextAreaElement, edit: Edit) {
   textarea.focus();
   textarea.setSelectionRange(edit.from, edit.to);
+  const before = textarea.value.length;
   const ok = edit.text ? document.execCommand('insertText', false, edit.text) : edit.from === edit.to || document.execCommand('delete');
   if (!ok || textarea.value.slice(edit.from, edit.from + edit.text.length) !== edit.text) {
-    textarea.setRangeText(edit.text, edit.from, edit.to);
+    // macOS may rewrite the inserted text (smart quotes turn `"` into `“`):
+    // replace whatever the command inserted, not the original range, or the
+    // text ends up there twice.
+    const inserted = ok ? textarea.value.length - before + (edit.to - edit.from) : edit.to - edit.from;
+    textarea.setRangeText(edit.text, edit.from, edit.from + inserted);
     textarea.dispatchEvent(new Event('input'));
   }
   textarea.setSelectionRange(edit.selStart, edit.selEnd);

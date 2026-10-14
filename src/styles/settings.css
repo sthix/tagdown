@@ -741,7 +741,9 @@
 }
 .tagdown-reference-preview .td-code-body { padding: 12px 0; color: var(--pv-pre-fg); overflow-x: auto; }
 .tagdown-reference-preview .td-code-line { display: flex; padding: 0 16px; }
-.tagdown-reference-preview .td-code-line.hl { background: var(--marker-soft); border-left: 2px solid var(--pv-accent); padding-left: 14px; }
+/* Code blocks stay dark in both themes, so the highlight is a translucent
+   marker tint rather than the pale paper one (which hid the light text). */
+.tagdown-reference-preview .td-code-line.hl { background: color-mix(in srgb, var(--marker) 16%, transparent); border-left: 2px solid var(--pv-accent); padding-left: 14px; }
 .tagdown-reference-preview .td-code-num {
   color: var(--pv-pre-num-fg);
   user-select: none;

@@ -71,6 +71,11 @@ Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Se
 
 **⌘,** opens Settings. Everything there is saved on this Mac and applies right away.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/settings-dark.png" />
+  <img width="1440" alt="Tagdown Settings, General page" src="images/settings-light.png" />
+</picture>
+
 - **General.** What opens on launch (the last note, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
 - **Editor.** Spellcheck, the size of the source text, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
 - **Appearance.** Theme, preview text size, and line length.

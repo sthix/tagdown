@@ -74,6 +74,10 @@ export function renderEditablePreview(source: string): { html: string; blocks: S
   return wrapped === null ? { html: renderPreview(source), blocks: [] } : { html: wrapped, blocks };
 }
 
+// Mermaid renders every `.mermaid` element on window load unless told not to,
+// including ones in hidden panels, which come out zero-sized. Diagrams are
+// drawn only through applyExternals.
+mermaid.initialize({ startOnLoad: false });
 let mermaidConfiguredTheme: 'light' | 'dark' | null = null;
 let mermaidIdCounter = 0;
 

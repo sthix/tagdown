@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { renderPreview } from '../tagdown/renderer';
+import { applyExternals, renderPreview } from '../tagdown/renderer';
 import { tagdownDocumentation } from '../tagdown/documentation';
 import { uiIcon, UI_ICONS } from '../icons';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
@@ -257,6 +257,7 @@ function bindReferenceNav() {
     dialog!.querySelectorAll<HTMLElement>('[data-ref-panel]').forEach((panel) => {
       panel.hidden = panel.getAttribute('data-ref-panel') !== id;
     });
+    renderShownReferenceExternals();
   };
 
   buttons.forEach((button) => {
@@ -319,6 +320,16 @@ function activateTab(targetTab: HTMLButtonElement) {
   const panelName = targetTab.getAttribute('data-panel') ?? '';
   dialog.dataset.panel = panelName;
   if (panelName !== REFERENCE.id) setReferenceExpanded(false);
+  else renderShownReferenceExternals();
+}
+
+/** Typeset math and draw Mermaid diagrams in the reference section on show.
+ *  Each section is done once, while visible, so diagrams get measured. */
+function renderShownReferenceExternals() {
+  const section = dialog?.querySelector<HTMLElement>('[data-ref-panel]:not([hidden])');
+  if (!section || section.dataset.externals) return;
+  section.dataset.externals = 'done';
+  void applyExternals(section, getEffectiveTheme());
 }
 
 // ---- Rendering ----

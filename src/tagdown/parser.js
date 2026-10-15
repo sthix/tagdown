@@ -98,7 +98,10 @@ function restoreSentinels(html) {
 
 /* Module-scope state for cross-cutting features (footnotes, TOC, tabs). Reset at the
    start of every preprocess() call. Declared early so preprocess() can reference it. */
-let _state = { frontmatter: null, footnotes: [], headings: [], tabsCounter: 0 };
+let _state = { frontmatter: null, footnotes: [], headings: [] };
+/* Never reset: separately rendered blocks share one page, so tab radio ids
+   must stay unique across renders, not just within one. */
+let _tabsCounter = 0;
 
 /* term :: description
    term2 :: description2          becomes  <defs>...</defs>
@@ -180,7 +183,7 @@ function preprocessFootnotes(input) {
 
 function preprocess(input) {
   // Reset per-document state
-  _state = { frontmatter: null, footnotes: [], headings: [], tabsCounter: 0 };
+  _state = { frontmatter: null, footnotes: [], headings: [] };
 
   // Frontmatter must be first — runs on raw input
   input = preprocessFrontmatter(input);
@@ -970,7 +973,7 @@ const HANDLERS = {
   /* <tabs> ... <tab "label"> ... </tab> ... </tabs> — tabbed content groups.
      The tabs are wired via plain CSS using a unique radio-button group per tabs block. */
   tabs: (n, a) => {
-    const groupId = 'td-tabs-' + (++_state.tabsCounter);
+    const groupId = 'td-tabs-' + (++_tabsCounter);
     const tabs = n.children.filter(c => c.type === 'element' && c.name === 'tab');
     if (tabs.length === 0) return '';
     let labels = '';

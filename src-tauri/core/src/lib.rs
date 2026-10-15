@@ -5,6 +5,7 @@ pub mod history;
 pub mod journal;
 pub mod links;
 pub mod models;
+pub mod properties;
 pub mod search_index;
 pub mod site;
 pub mod tasks;

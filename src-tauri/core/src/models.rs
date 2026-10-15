@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::properties::Property;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SortOrder {
@@ -26,6 +28,9 @@ pub struct Note {
     /// The day this note is the journal page for, if it is one.
     #[serde(default)]
     pub journal: Option<NaiveDate>,
+    /// Custom frontmatter entries as typed values.
+    #[serde(default)]
+    pub properties: Vec<Property>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

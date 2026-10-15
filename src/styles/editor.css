@@ -91,6 +91,80 @@
   font-variant-numeric: tabular-nums;
 }
 .doc-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---- Properties: custom frontmatter entries as typed fields ---- */
+.doc-properties { margin-top: 10px; font-size: 13px; }
+.doc-properties.is-empty { margin-top: 4px; }
+.props { display: grid; grid-template-columns: 24px minmax(72px, max-content) minmax(0, 1fr) 22px; column-gap: 6px; }
+.prop-row { display: contents; }
+.prop-row > * { min-height: 28px; display: flex; align-items: center; }
+.prop-type { position: relative; justify-content: center; }
+.prop-type-button {
+  width: 22px; height: 22px;
+  display: inline-grid; place-items: center;
+  border: 0; border-radius: 6px; padding: 0;
+  background: none; color: var(--ink-3);
+  font: 600 11px/1 var(--font-ui);
+  cursor: pointer;
+}
+.prop-type-button:hover:not(:disabled) { background: var(--chip-bg); color: var(--ink); }
+.prop-type-button:disabled { cursor: default; }
+.prop-type-menu {
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: 100;
+  min-width: 140px; padding: 5px;
+  background: var(--bg-dialog); border-radius: 10px; box-shadow: var(--shadow-lg);
+  animation: menu-in .16s var(--ease-out) both;
+}
+.prop-type-menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; border-radius: 6px; padding: 5px 8px;
+  background: none; color: var(--ink); font: 13px var(--font-ui); text-align: left; cursor: pointer;
+}
+.prop-type-menu button:hover, .prop-type-menu button:focus-visible { background: var(--chip-bg); outline: none; }
+.prop-type-menu button[aria-checked="true"] { font-weight: 600; }
+.prop-type-icon { width: 18px; color: var(--ink-3); font-size: 11px; font-weight: 600; text-align: center; }
+.prop-key, .prop-input {
+  width: 100%; min-width: 0; height: 26px;
+  border: 0; border-radius: 6px; padding: 0 6px;
+  background: none; color: var(--ink-2); font: inherit;
+}
+.prop-key { max-width: 160px; field-sizing: content; color: var(--ink-3); }
+.prop-key:hover, .prop-input:hover { background: var(--chip-bg); }
+.prop-key:focus, .prop-input:focus { background: var(--chip-bg); color: var(--ink); outline: none; box-shadow: 0 0 0 1.5px var(--accent-tint-strong); }
+.prop-key:invalid { box-shadow: 0 0 0 1.5px #d4574a; }
+.prop-input[type="date"], .prop-input[type="number"] { width: auto; max-width: 100%; font-variant-numeric: tabular-nums; }
+.prop-value { min-width: 0; color: var(--ink); }
+.prop-value input[type="checkbox"] { margin: 0 6px; accent-color: var(--accent-soft); }
+.prop-text { width: 100%; min-width: 0; }
+.prop-display {
+  min-height: 26px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  border-radius: 6px; padding: 2px 6px; cursor: text;
+}
+.prop-display:hover { background: var(--chip-bg); }
+.prop-display:focus-visible { outline: none; box-shadow: 0 0 0 1.5px var(--accent-tint-strong); }
+.prop-display.is-empty { color: var(--ink-3); opacity: .7; }
+.prop-display.is-list .prop-item { padding: 1px 8px; border-radius: 10px; background: var(--chip-bg); font-size: 12px; }
+.prop-display .td-wikilink { color: var(--accent-soft); text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
+.prop-display .td-wikilink.is-missing { color: var(--ink-3); }
+.prop-raw { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; color: var(--ink-3); font-size: 12px; }
+.prop-remove {
+  width: 22px; height: 22px; justify-content: center;
+  border: 0; border-radius: 6px; padding: 0;
+  background: none; color: var(--ink-3); font-size: 15px; line-height: 1;
+  opacity: 0; cursor: pointer;
+}
+.prop-row:hover .prop-remove, .prop-remove:focus-visible { opacity: 1; }
+.prop-remove:hover { background: var(--chip-bg); color: var(--ink); }
+.prop-add {
+  margin-top: 2px; height: 24px;
+  border: 0; border-radius: 6px; padding: 0 8px 0 6px;
+  background: none; color: var(--ink-3); font: 12px var(--font-ui);
+  cursor: pointer; opacity: .75;
+}
+.prop-add:hover, .prop-add:focus-visible { opacity: 1; background: var(--chip-bg); color: var(--ink); outline: none; }
+.prop-add span { display: inline-block; width: 14px; text-align: center; }
+.prop-add[hidden] { display: none; }
+
 .doc-tag {
   height: 22px;
   display: inline-flex;

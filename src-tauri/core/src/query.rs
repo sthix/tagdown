@@ -6,14 +6,27 @@
 //   show:notes | show:tasks        what to list (notes by default)
 //   status:open | done | all       which tasks (open by default)
 //   sort:updated | created | title order (most recently edited first by default)
+//   sort:due | sort:-priority      by a property, ascending (or descending with -)
 //   folder:Name                    only notes in this folder ("quote" names with spaces)
 //   limit:N                        at most N items (50 by default)
+//
+// and property filters (see properties.rs), any number of them:
+//   status=active                  equals; for a list, holds the item; links match by title
+//   status!=done                   doesn't (notes without the property included)
+//   priority=2..  due=..today+7    ranges of numbers or dates, either end open
+//   has:owner  -has:owner          the property is set (not empty), or isn't
+// Dates can be written as today, today+N or today-N (days). There's no `>` or
+// `<`: a `>` would end the <query /> tag.
 
+use std::cmp::Ordering;
+
+use chrono::{Local, NaiveDate, TimeDelta};
 use serde::Serialize;
 
 use crate::{
     links::normalize_title,
     models::{FolderRecord, Note},
+    properties::{Property, PropertyValue},
     search_index::SearchIndex,
     tasks::{parse_tasks, Task, TaskFilter},
 };
@@ -28,11 +41,26 @@ pub enum Show {
     Tasks,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Sort {
     Updated,
     Created,
     Title,
+    Property { key: String, desc: bool },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Match {
+    Equals(String),
+    Range(Option<String>, Option<String>),
+    Has,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PropertyFilter {
+    key: String,
+    negate: bool,
+    matcher: Match,
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,6 +71,7 @@ struct Spec {
     sort: Sort,
     folder: Option<String>,
     limit: usize,
+    properties: Vec<PropertyFilter>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -53,6 +82,7 @@ pub struct QueryNote {
     pub folder: Option<String>,
     pub tags: Vec<String>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub properties: Vec<Property>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,20 +93,28 @@ pub struct QueryOutput {
     pub tasks: Vec<Task>,
     /// Matches before `limit` was applied.
     pub total: usize,
+    /// Properties the query filters or sorts by, to show with each note.
+    pub columns: Vec<String>,
 }
 
-/// Split a query into tokens, keeping "quoted phrases" (and `key:"quoted value"`) together.
+/// Split a query into tokens, keeping "quoted phrases" (and `key:"quoted value"`)
+/// and `[[links with spaces]]` together.
 fn tokens(raw: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut quoted = false;
+    let mut brackets = 0usize;
     for c in raw.chars() {
         match c {
             '"' => {
                 quoted = !quoted;
                 current.push(c);
             }
-            c if c.is_whitespace() && !quoted => {
+            '[' | ']' => {
+                brackets = if c == '[' { brackets + 1 } else { brackets.saturating_sub(1) };
+                current.push(c);
+            }
+            c if c.is_whitespace() && !quoted && brackets == 0 => {
                 if !current.is_empty() {
                     out.push(std::mem::take(&mut current));
                 }
@@ -90,10 +128,45 @@ fn tokens(raw: &str) -> Vec<String> {
     out
 }
 
+/// A property filter token: `key=value`, `key!=value`, `-key=value`.
+fn property_filter(token: &str) -> Option<PropertyFilter> {
+    let (negate, token) = token.strip_prefix('-').map_or((false, token), |t| (true, t));
+    let at = token.find('=')?;
+    let (key, not) = match token[..at].strip_suffix('!') {
+        Some(key) => (key, true),
+        None => (&token[..at], false),
+    };
+    let valid = key.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_')
+        && key.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+    if !valid {
+        return None;
+    }
+    let value = token[at + 1..].trim_matches('"').to_string();
+    let matcher = match value.split_once("..") {
+        Some((lo, hi)) => Match::Range(Some(lo.to_string()).filter(|v| !v.is_empty()), Some(hi.to_string()).filter(|v| !v.is_empty())),
+        None => Match::Equals(value),
+    };
+    Some(PropertyFilter { key: key.to_string(), negate: negate != not, matcher })
+}
+
 fn parse(raw: &str) -> Result<Spec, String> {
-    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT };
+    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new() };
     let mut filter = Vec::new();
     for token in tokens(raw) {
+        if let Some(has) = token.strip_prefix("has:").map(|k| (false, k)).or_else(|| token.strip_prefix("-has:").map(|k| (true, k))) {
+            let key = has.1.trim_matches('"');
+            if key.is_empty() {
+                return Err("has: needs a property name, like has:status".into());
+            }
+            spec.properties.push(PropertyFilter { key: key.to_string(), negate: has.0, matcher: Match::Has });
+            continue;
+        }
+        if !token.contains(':') || token.find('=') < token.find(':') {
+            if let Some(property) = property_filter(&token) {
+                spec.properties.push(property);
+                continue;
+            }
+        }
         let Some((key, value)) = token.split_once(':') else {
             filter.push(token);
             continue;
@@ -115,7 +188,11 @@ fn parse(raw: &str) -> Result<Spec, String> {
                 "updated" | "edited" => Sort::Updated,
                 "created" => Sort::Created,
                 "title" => Sort::Title,
-                _ => return Err(format!("sort: must be updated, created or title, not \"{value}\"")),
+                "" | "-" => return Err("sort: must be updated, created, title or a property name".into()),
+                key => match key.strip_prefix('-') {
+                    Some(key) => Sort::Property { key: key.to_string(), desc: true },
+                    None => Sort::Property { key: key.to_string(), desc: false },
+                },
             },
             "limit" => spec.limit = value.parse::<usize>().map_err(|_| format!("limit: must be a number, not \"{value}\""))?.clamp(1, MAX_LIMIT),
             "folder" => spec.folder = Some(value.to_string()),
@@ -130,7 +207,19 @@ fn parse(raw: &str) -> Result<Spec, String> {
 /// Run `raw` over `notes`. The note holding the query (`exclude_id`) is left
 /// out, so a dashboard doesn't list itself.
 pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>) -> Result<QueryOutput, String> {
+    run_at(raw, notes, index, folders, exclude_id, Local::now().date_naive())
+}
+
+/// `run`, with `today` for dates like `today+7`.
+pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>, today: NaiveDate) -> Result<QueryOutput, String> {
     let spec = parse(raw)?;
+    let mut columns: Vec<String> = Vec::new();
+    let sort_key = match &spec.sort { Sort::Property { key, .. } => Some(key), _ => None };
+    for key in spec.properties.iter().map(|p| &p.key).chain(sort_key) {
+        if !columns.iter().any(|c| c.eq_ignore_ascii_case(key)) {
+            columns.push(key.clone());
+        }
+    }
     let folder_id = match &spec.folder {
         Some(name) => Some(
             folders
@@ -156,11 +245,22 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
             None => n.folder_id.as_deref() != Some("archive"),
         })
         .filter(|(n, _)| matching.as_ref().is_none_or(|ids| ids.contains(&n.id)))
+        .filter(|(n, _)| spec.properties.iter().all(|f| f.matches(property(n, &f.key), today)))
         .collect();
-    match spec.sort {
+    match &spec.sort {
         Sort::Updated => selected.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at)),
         Sort::Created => selected.sort_by(|a, b| b.0.created_at.cmp(&a.0.created_at)),
         Sort::Title => selected.sort_by_key(|(n, _)| n.title.to_lowercase()),
+        Sort::Property { key, desc } => {
+            // Ties stay most recently edited first; notes without the property go last either way.
+            selected.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+            selected.sort_by(|a, b| match (property(&a.0, key).filter(|v| !v.is_empty()), property(&b.0, key).filter(|v| !v.is_empty())) {
+                (Some(x), Some(y)) => if *desc { compare(y, x) } else { compare(x, y) },
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            });
+        }
     }
 
     let folder_name = |id: &Option<String>| id.as_ref().and_then(|id| folders.iter().find(|f| &f.id == id)).map(|f| f.name.clone());
@@ -171,9 +271,10 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
             notes: selected
                 .into_iter()
                 .take(spec.limit)
-                .map(|(n, _)| QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at })
+                .map(|(n, _)| QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, properties: n.properties })
                 .collect(),
             tasks: Vec::new(),
+            columns,
         },
         Show::Tasks => {
             let tasks: Vec<Task> = selected
@@ -181,9 +282,99 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
                 .flat_map(|(n, content)| parse_tasks(n, content))
                 .filter(|t| spec.status.wants(t.done))
                 .collect();
-            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new() }
+            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new() }
         }
     })
+}
+
+/// The note's property `key`, compared case-insensitively.
+fn property<'a>(note: &'a Note, key: &str) -> Option<&'a PropertyValue> {
+    note.properties.iter().find(|p| p.key.eq_ignore_ascii_case(key)).map(|p| &p.value)
+}
+
+/// `[[Title|label]]` and `Title` both compare as `title`.
+fn link_text(text: &str) -> String {
+    let t = text.trim();
+    let t = t.strip_prefix("[[").and_then(|t| t.strip_suffix("]]")).map_or(t, |inner| inner.split('|').next().unwrap_or(inner));
+    normalize_title(t)
+}
+
+/// `today`, `today+7`, `today-1` or `2026-11-14`.
+fn date_value(value: &str, today: NaiveDate) -> Option<NaiveDate> {
+    let value = value.trim();
+    if let Some(rest) = value.strip_prefix("today") {
+        if rest.is_empty() {
+            return Some(today);
+        }
+        let days: i64 = rest.strip_prefix('+').unwrap_or(rest).parse().ok()?;
+        return today.checked_add_signed(TimeDelta::days(days));
+    }
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+}
+
+impl PropertyFilter {
+    fn matches(&self, value: Option<&PropertyValue>, today: NaiveDate) -> bool {
+        let hit = match (&self.matcher, value) {
+            (_, None) => false,
+            (Match::Has, Some(v)) => !v.is_empty(),
+            (Match::Equals(want), Some(v)) => equals(v, want, today),
+            (Match::Range(lo, hi), Some(v)) => in_range(v, lo.as_deref(), hi.as_deref(), today),
+        };
+        hit != self.negate
+    }
+}
+
+fn equals(value: &PropertyValue, want: &str, today: NaiveDate) -> bool {
+    match value {
+        PropertyValue::Number(n) => want.parse::<f64>().is_ok_and(|w| *n == w),
+        PropertyValue::Checkbox(b) => matches!((b, want.to_lowercase().as_str()), (true, "true" | "yes") | (false, "false" | "no")),
+        PropertyValue::Date(d) => date_value(want, today) == Some(*d),
+        PropertyValue::Text(t) => link_text(t) == link_text(want),
+        PropertyValue::List(items) => items.iter().any(|item| link_text(item) == link_text(want)),
+        PropertyValue::Raw(_) => false,
+    }
+}
+
+fn in_range(value: &PropertyValue, lo: Option<&str>, hi: Option<&str>, today: NaiveDate) -> bool {
+    match value {
+        PropertyValue::Number(n) => {
+            let bound = |b: Option<&str>| b.map(|b| b.parse::<f64>().ok());
+            match (bound(lo), bound(hi)) {
+                (Some(None), _) | (_, Some(None)) => false,
+                (lo, hi) => lo.flatten().is_none_or(|lo| *n >= lo) && hi.flatten().is_none_or(|hi| *n <= hi),
+            }
+        }
+        PropertyValue::Date(d) => {
+            let bound = |b: Option<&str>| b.map(|b| date_value(b, today));
+            match (bound(lo), bound(hi)) {
+                (Some(None), _) | (_, Some(None)) => false,
+                (lo, hi) => lo.flatten().is_none_or(|lo| *d >= lo) && hi.flatten().is_none_or(|hi| *d <= hi),
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Order two property values: numbers, dates and checkboxes by value, text
+/// and lists (by their first item) alphabetically; different types by type.
+fn compare(a: &PropertyValue, b: &PropertyValue) -> Ordering {
+    fn rank(v: &PropertyValue) -> u8 {
+        match v {
+            PropertyValue::Number(_) => 0,
+            PropertyValue::Date(_) => 1,
+            PropertyValue::Checkbox(_) => 2,
+            PropertyValue::Text(_) | PropertyValue::List(_) => 3,
+            PropertyValue::Raw(_) => 4,
+        }
+    }
+    let text = |v: &PropertyValue| v.texts().first().map(|t| link_text(t)).unwrap_or_default();
+    match (a, b) {
+        (PropertyValue::Number(x), PropertyValue::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+        (PropertyValue::Date(x), PropertyValue::Date(y)) => x.cmp(y),
+        (PropertyValue::Checkbox(x), PropertyValue::Checkbox(y)) => x.cmp(y),
+        _ if rank(a) != rank(b) => rank(a).cmp(&rank(b)),
+        _ => text(a).cmp(&text(b)),
+    }
 }
 
 #[cfg(test)]
@@ -193,7 +384,7 @@ mod tests {
 
     fn note(id: &str, title: &str, tags: &[&str], folder: Option<&str>, age_minutes: i64) -> Note {
         let at = Utc::now() - TimeDelta::minutes(age_minutes);
-        Note { id: id.into(), title: title.into(), preview: String::new(), tags: tags.iter().map(|t| t.to_string()).collect(), starred: false, folder_id: folder.map(Into::into), created_at: at, updated_at: at, word_count: 0, journal: None }
+        Note { id: id.into(), title: title.into(), preview: String::new(), tags: tags.iter().map(|t| t.to_string()).collect(), starred: false, folder_id: folder.map(Into::into), created_at: at, updated_at: at, word_count: 0, journal: None, properties: Vec::new() }
     }
 
     fn vault() -> (Vec<(Note, String)>, SearchIndex, Vec<FolderRecord>) {
@@ -240,10 +431,47 @@ mod tests {
         assert_eq!(out.tasks.iter().map(|t| (t.note_title.as_str(), t.text.as_str(), t.line)).collect::<Vec<_>>(), vec![("Atlas", "Kickoff", 4)]);
     }
 
+    fn with(mut n: Note, props: &[(&str, PropertyValue)]) -> Note {
+        n.properties = props.iter().map(|(k, v)| Property { key: k.to_string(), value: v.clone() }).collect();
+        n
+    }
+
+    #[test]
+    fn filters_and_sorts_by_properties() {
+        use PropertyValue::*;
+        let day = |d: u32| Date(NaiveDate::from_ymd_opt(2026, 10, d).unwrap());
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let notes = vec![
+            (with(note("a", "Atlas", &[], None, 3), &[("status", Text("active".into())), ("priority", Number(2.0)), ("due", day(20)), ("owner", Text("[[Sam Rivera]]".into()))]), String::new()),
+            (with(note("b", "Beacon", &[], None, 2), &[("status", Text("Done".into())), ("priority", Number(1.0)), ("due", day(10)), ("team", List(vec!["Alex".into(), "[[Sam Rivera|Sam]]".into()]))]), String::new()),
+            (with(note("c", "Comet", &[], None, 1), &[("status", Text("active".into())), ("priority", Number(3.0)), ("reviewed", Checkbox(true)), ("owner", Text(String::new()))]), String::new()),
+            (note("d", "Dune", &[], None, 0), String::new()),
+        ];
+        let q = |raw: &str| run_at(raw, notes.clone(), None, &[], None, today).unwrap();
+        let t = |raw: &str| titles(&q(raw)).into_iter().map(String::from).collect::<Vec<_>>();
+        assert_eq!(t("status=active"), vec!["Comet", "Atlas"]);
+        assert_eq!(t("status=done"), vec!["Beacon"], "text compares without case");
+        assert_eq!(t("status!=done"), vec!["Dune", "Comet", "Atlas"], "notes without the property don't equal it");
+        assert_eq!(t("-status=active"), vec!["Dune", "Beacon"]);
+        assert_eq!(t("priority=2.."), vec!["Comet", "Atlas"]);
+        assert_eq!(t("due=..today+7"), vec!["Beacon", "Atlas"]);
+        assert_eq!(t("due=today.."), vec!["Atlas"]);
+        assert_eq!(t("reviewed=true"), vec!["Comet"]);
+        assert_eq!(t("owner=\"Sam Rivera\""), vec!["Atlas"], "links match by title");
+        assert_eq!(t("team=[[sam rivera]]"), vec!["Beacon"], "lists match an item");
+        assert_eq!(t("has:owner"), vec!["Atlas"], "an empty value isn't set");
+        assert_eq!(t("-has:status"), vec!["Dune"]);
+        assert_eq!(t("sort:priority"), vec!["Beacon", "Atlas", "Comet", "Dune"]);
+        assert_eq!(t("sort:-due"), vec!["Atlas", "Beacon", "Dune", "Comet"], "notes without it last, most recent first");
+        assert_eq!(q("status=active sort:due").columns, vec!["status", "due"]);
+        assert_eq!(q("status=active").notes[0].properties.len(), 4);
+    }
+
     #[test]
     fn explains_bad_options() {
         let (notes, index, folders) = vault();
         assert_eq!(run("show:table", notes.clone(), Some(&index), &folders, None).unwrap_err(), "show: must be notes or tasks, not \"table\"");
+        assert!(run("has:", notes.clone(), Some(&index), &folders, None).unwrap_err().contains("property name"));
         assert!(run("folder:Nope", notes, Some(&index), &folders, None).unwrap_err().contains("no folder named"));
     }
 }

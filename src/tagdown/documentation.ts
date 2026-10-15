@@ -229,6 +229,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: '## Open project tasks\n\n<query tag:project show:tasks />\n\n## Recently edited\n\n<query folder:Work sort:updated limit:5 />'
       },
       {
+        title: 'Properties',
+        description: 'Typed fields under a note’s title (Add property, or ⌘K). They live in the note’s frontmatter as plain YAML: text, numbers, true/false, dates (2026-11-14), lists, and [[links]] that count as backlinks. Queries filter on them with key=value, key!=value, ranges like priority=2.. or due=..today+7, has:key and -has:key, and sort with sort:due or sort:-priority.',
+        syntax: '## Due this week\n\n<query status=active due=..today+7 sort:due />\n\n## Unowned projects\n\n<query tag:project -has:owner />'
+      },
+      {
         title: 'Math (KaTeX)',
         description: 'Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.',
         syntax: 'Inline math like $E = mc^2$ or:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$'

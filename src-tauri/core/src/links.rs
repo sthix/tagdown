@@ -343,12 +343,24 @@ pub fn backlinks(notes: Vec<(Note, String)>, id: &str) -> Vec<Backlink> {
         .into_iter()
         .filter(|(note, _)| note.id != id && note.folder_id.as_deref() != Some("archive"))
         .filter_map(|(note, content)| {
-            let mentions = mentions(&content, &title);
+            let mut mentions = property_mentions(&note, &title);
+            mentions.extend(self::mentions(&content, &title));
+            mentions.truncate(MENTIONS_PER_NOTE);
             (!mentions.is_empty()).then_some(Backlink { note, mentions })
         })
         .collect();
     backlinks.sort_by(|a, b| b.note.updated_at.cmp(&a.note.updated_at));
     backlinks
+}
+
+/// The note's properties that link to `title`, as `key: value` lines.
+pub fn property_mentions(note: &Note, title: &str) -> Vec<String> {
+    let wanted = normalize_title(title);
+    note.properties
+        .iter()
+        .filter(|p| p.value.texts().iter().any(|t| parse_wikilinks(t).iter().any(|l| normalize_title(&l.target) == wanted)))
+        .map(|p| format!("{}: {}", p.key, p.value.display()))
+        .collect()
 }
 
 /// Source lines of `content` that link to `title`, each with the lines indented
@@ -519,6 +531,21 @@ mod tests {
         let after = "- keep me, edited ^k1\n\nIntro\n\nOutro";
         assert_eq!(find_block(before, "k1").unwrap().text, "- keep me");
         assert_eq!(find_block(after, "k1").unwrap().text, "- keep me, edited");
+    }
+
+    #[test]
+    fn properties_that_link_count_as_backlinks() {
+        use crate::properties::{Property, PropertyValue};
+        let mut linking = Note { id: "a".into(), title: "Meeting".into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0, journal: None, properties: vec![] };
+        linking.properties = vec![
+            Property { key: "owner".into(), value: PropertyValue::Text("[[Sam]]".into()) },
+            Property { key: "attendees".into(), value: PropertyValue::List(vec!["Alex".into(), "[[sam|S.]]".into()]) },
+            Property { key: "status".into(), value: PropertyValue::Text("Sam".into()) },
+        ];
+        let mut target = linking.clone();
+        (target.id, target.title, target.properties) = ("b".into(), "Sam".into(), vec![]);
+        let found = backlinks(vec![(linking, "# Meeting\n\nWith [[Sam]].".into()), (target, "# Sam".into())], "b");
+        assert_eq!(found[0].mentions, vec!["owner: [[Sam]]", "attendees: Alex, [[sam|S.]]", "With [[Sam]]."]);
     }
 
     #[test]

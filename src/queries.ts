@@ -7,10 +7,11 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { renderPreview } from './tagdown/renderer';
+import { valueText, type Property } from './propertyValues';
 
-type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string };
+type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; properties?: Property[] };
 type QueryTask = { noteId: string; noteTitle: string; text: string; done: boolean; line: number };
-type QueryOutput = { show: 'notes' | 'tasks'; notes: QueryNote[]; tasks: QueryTask[]; total: number };
+type QueryOutput = { show: 'notes' | 'tasks'; notes: QueryNote[]; tasks: QueryTask[]; total: number; columns?: string[] };
 type Result = { ok: true; output: QueryOutput } | { ok: false; error: string };
 
 const results = new Map<string, Result>();
@@ -79,7 +80,7 @@ function paint(body: HTMLElement, result: Result, options: FillOptions) {
   if (output.show === 'notes') {
     body.innerHTML = output.notes.length
       ? `<ul class="td-query-notes">${output.notes.map((note) => `
-          <li><a class="td-query-note" href="#" data-open-note="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</a>
+          <li><a class="td-query-note" href="#" data-open-note="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</a>${propertyChips(note, output.columns ?? [])}
           <span class="td-query-meta">${escapeHtml([note.folder, shortDate(note.updatedAt)].filter(Boolean).join(' · '))}${note.tags.length ? ` · ${note.tags.map((t) => `#${escapeHtml(t)}`).join(' ')}` : ''}</span></li>`).join('')}</ul>${more}`
       : '<p class="td-query-empty">No notes match.</p>';
     return;
@@ -176,4 +177,16 @@ export function openTaskList(options: TaskListOptions) {
   });
   dialog.showModal();
   void refresh();
+}
+
+/** The values of the properties a query filters or sorts by. */
+function propertyChips(note: QueryNote, columns: string[]): string {
+  const chips = columns.flatMap((column) => {
+    const property = note.properties?.find((p) => p.key.toLowerCase() === column.toLowerCase());
+    if (!property || property.type === 'raw') return [];
+    const text = property.type === 'checkbox' ? (property.value ? '✓' : '✗') : valueText(property).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target);
+    if (!text) return [];
+    return [`<span class="td-query-prop"><span class="td-query-prop-key">${escapeHtml(property.key)}</span>${escapeHtml(text)}</span>`];
+  });
+  return chips.length ? ` <span class="td-query-props">${chips.join('')}</span>` : '';
 }

@@ -921,6 +921,13 @@
   text-decoration: none;
 }
 .preview .td-query-note:hover { color: var(--pv-accent); text-decoration: underline; }
+.preview .td-query-props { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.preview .td-query-prop {
+  padding: 0 7px; border-radius: 9px;
+  background: var(--chip-bg); color: var(--ink-2);
+  font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.preview .td-query-prop-key { margin-right: 4px; color: var(--ink-3); }
 .preview .td-query-meta {
   overflow: hidden;
   text-overflow: ellipsis;

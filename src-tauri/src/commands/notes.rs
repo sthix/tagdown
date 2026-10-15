@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use tauri::{Emitter, State};
 
-use crate::{commands::search::SearchState, models::{Note, NoteContent, SortOrder}, AppState};
+use crate::{commands::search::SearchState, models::{Note, NoteContent, SortOrder}, properties::PropertyValue, AppState};
 
 #[tauri::command]
 pub async fn list_notes(folder_id: Option<String>, sort: SortOrder, state: State<'_, Mutex<AppState>>) -> Result<Vec<Note>, String> {
@@ -27,6 +27,24 @@ pub async fn create_note(folder_id: Option<String>, app: tauri::AppHandle, state
 pub async fn save_note(id: String, content: String, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
     let note = state.lock().map_err(|e| e.to_string())?.vault.save_note(&id, content.clone())?;
     search.index(&note, &content);
+    let _ = app.emit("note-saved", &note);
+    Ok(note)
+}
+
+/// Set, rename (`rename_from`) or remove (`value: null`) one of a note's properties.
+#[tauri::command]
+pub async fn set_property(
+    id: String,
+    key: String,
+    value: Option<PropertyValue>,
+    rename_from: Option<String>,
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    search: State<'_, SearchState>,
+) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.set_property(&id, &key, value, rename_from.as_deref())?;
+    search.index(&note, &state.vault.get_note_content(&id)?.content);
     let _ = app.emit("note-saved", &note);
     Ok(note)
 }

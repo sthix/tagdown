@@ -386,6 +386,20 @@ A <query /> lists the notes or tasks across the vault that match a search (words
 <query folder:Work sort:updated limit:5 />
 ```
 
+### Properties
+
+Typed fields under a note’s title (Add property, or ⌘K). They live in the note’s frontmatter as plain YAML: text, numbers, true/false, dates (2026-11-14), lists, and [[links]] that count as backlinks. Queries filter on them with key=value, key!=value, ranges like priority=2.. or due=..today+7, has:key and -has:key, and sort with sort:due or sort:-priority.
+
+```tagdown
+## Due this week
+
+<query status=active due=..today+7 sort:due />
+
+## Unowned projects
+
+<query tag:project -has:owner />
+```
+
 ### Math (KaTeX)
 
 Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.

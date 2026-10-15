@@ -20,6 +20,8 @@ import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget 
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
 import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './blockRefs';
+import { renderPropertiesPanel } from './propertiesPanel';
+import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
@@ -46,6 +48,8 @@ type Note = {
   wordCount: number;
   /** The day (YYYY-MM-DD) this note is the journal page for. */
   journal?: string | null;
+  /** Custom frontmatter entries, typed. */
+  properties?: Property[];
 };
 
 type Folder = {
@@ -264,7 +268,10 @@ async function onExternalChange(note: Note, diskContent: string) {
     return;
   }
   if (diskContent === content) {
+    // Only the frontmatter changed, say a property edited in another app.
+    const propertiesChanged = JSON.stringify(note.properties ?? []) !== JSON.stringify(selectedNote.properties ?? []);
     selectedNote = note;
+    if (propertiesChanged) paintProperties();
     return;
   }
   if (savedMessage === 'Saving…') {
@@ -421,6 +428,7 @@ function paletteActions(): PaletteAction[] {
       { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
       { id: 'publish', label: 'Publish as website…', hint: 'Notes as web pages for any host', icon: uiIcon('globe', 15), run: showPublish },
       { id: 'present', label: 'Present as slides', hint: 'Each --- starts a new slide', shortcut: '⌥⌘P', icon: uiIcon('play', 15), run: presentNote },
+      { id: 'add-property', label: 'Add property', hint: 'A typed field in this note’s frontmatter', icon: uiIcon('sliders', 15), run: () => paintProperties('new') },
       { id: 'block-link', label: 'Copy link to block', hint: 'A [[link]] to the block at the caret', icon: uiIcon('share', 15), run: () => copyBlockReference(false) },
       { id: 'block-embed', label: 'Copy block embed', hint: 'Shows the block’s current text in another note', icon: uiIcon('share', 15), run: () => copyBlockReference(true) },
       { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
@@ -1274,6 +1282,71 @@ function scrollToBlock(id: string) {
   block.addEventListener('animationend', () => block.classList.remove('is-block-target'), { once: true });
 }
 
+// ---- Properties ----
+
+/** Draw the open note's properties panel. */
+function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['focus']) {
+  const host = editorRoot.querySelector<HTMLElement>('[data-properties]');
+  if (!host || !selectedNote) return;
+  renderPropertiesPanel(host, {
+    properties: selectedNote.properties ?? [],
+    keySuggestions: () => vaultPropertyKeys(),
+    valueSuggestions: (key) => {
+      const values = new Set<string>();
+      for (const note of libraryNotes) {
+        for (const p of note.properties ?? []) {
+          if (p.key !== key) continue;
+          if (p.type === 'text' && p.value) values.add(p.value);
+          if (p.type === 'list') p.value.forEach((item) => values.add(item));
+        }
+      }
+      return [...values].slice(0, 50);
+    },
+    knownType: (key) => {
+      const counts = new Map<PropertyType, number>();
+      for (const note of libraryNotes) for (const p of note.properties ?? []) if (p.key === key) counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
+      return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    },
+    save: saveProperty,
+    decorate: markWikilinks,
+    openLink: (target) => void followWikilink(target),
+    focus,
+  });
+}
+
+/** Property names across the vault, most used first. */
+function vaultPropertyKeys(): string[] {
+  const counts = new Map<string, number>();
+  for (const note of libraryNotes) for (const p of note.properties ?? []) counts.set(p.key, (counts.get(p.key) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([key]) => key);
+}
+
+async function saveProperty(key: string, value: PropertyValue | null, renameFrom?: string): Promise<boolean> {
+  if (!selectedNote) return false;
+  const id = selectedNote.id;
+  const isNew = value !== null && !renameFrom && !(selectedNote.properties ?? []).some((p) => p.key === key);
+  // Body edits go first, so the two writes don't race.
+  if (savedMessage === 'Saving…') {
+    window.clearTimeout(saveTimer);
+    await flushSave();
+  }
+  try {
+    const note = await invoke<Note>('set_property', { id, key, value, renameFrom: renameFrom ?? null });
+    if (selectedNote?.id !== id) return true;
+    selectedNote = note;
+    libraryNotes = libraryNotes.map((n) => (n.id === id ? note : n));
+    invalidateQueries();
+    paintProperties(isNew ? { key, part: 'value' } : undefined);
+    const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+    if (preview) void fillQueries(preview, { excludeId: id });
+    scheduleListRefresh();
+    return true;
+  } catch (error) {
+    await message(String(error), { title: 'Could not change the property', kind: 'warning' });
+    return false;
+  }
+}
+
 // ---- Block references ----
 
 /** The note line the caret was last on, in the block editor or the source. */
@@ -1714,6 +1787,7 @@ function renderEditor() {
         <span id="counts"></span>
         ${selectedNote.tags.length ? `<span class="doc-tags">${selectedNote.tags.map((tag) => `<button type="button" class="doc-tag" data-doc-tag="${escapeHtml(tag)}" style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag)}</button>`).join('')}</span>` : ''}
       </div>
+      <div class="doc-properties" data-properties></div>
     </div>
     <div class="editor-body">${viewMode === 'source' ? textarea : viewMode === 'preview' ? preview : `<div class="split">${textarea}${preview}</div>`}</div>
     <div class="format-dock">${renderEditorToolbar()}</div>
@@ -1740,6 +1814,7 @@ function renderEditor() {
   });
 
   editorRoot.querySelector('[data-empty-new]')?.addEventListener('click', createNote);
+  paintProperties();
   editorRoot.querySelectorAll<HTMLButtonElement>('[data-journal-day]').forEach((button) => {
     button.addEventListener('click', () => void openJournal(button.dataset.journalDay!));
   });

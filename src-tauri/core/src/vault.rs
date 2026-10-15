@@ -8,6 +8,7 @@ use crate::{
     history::History,
     frontmatter::{derive_preview, derive_tags, derive_title, split_frontmatter, word_count, write_frontmatter},
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
+    properties::{parse_properties, set_property, PropertyValue},
     watcher::FileTracker,
 };
 
@@ -182,6 +183,38 @@ impl Vault {
         Ok(note_from_meta(meta, &content))
     }
 
+    /// Set (`Some`) or remove (`None`) the property `key` of a note, or rename
+    /// the property `rename_from` to `key`. The body is left as it is.
+    pub fn set_property(&self, id: &str, key: &str, value: Option<PropertyValue>, rename_from: Option<&str>) -> Result<Note, String> {
+        let path = self.note_path(id)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let (mut meta, content) = split_frontmatter(&raw)?;
+        set_property(&mut meta.extra, key, value.as_ref(), rename_from)?;
+        meta.updated = Utc::now();
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        Ok(note_from_meta(meta, &content))
+    }
+
+    /// Point links to `old_title` in a note's properties at `new_title`,
+    /// without touching its edit time; `None` when nothing linked there.
+    pub fn rename_property_links(&self, id: &str, old_title: &str, new_title: &str) -> Result<Option<Note>, String> {
+        let path = self.note_path(id)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let (mut meta, content) = split_frontmatter(&raw)?;
+        let mut changed = false;
+        for entry in meta.extra.iter_mut() {
+            if let Some(next) = crate::links::rename_links(entry, old_title, new_title) {
+                *entry = next;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(None);
+        }
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        Ok(Some(note_from_meta(meta, &content)))
+    }
+
     pub fn star_note(&self, id: &str, starred: bool) -> Result<Note, String> {
         let path = self.note_path(id)?;
         let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -286,6 +319,7 @@ pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
         updated_at: meta.updated,
         word_count: word_count(content),
         journal: meta.journal,
+        properties: parse_properties(&meta.extra),
     }
 }
 
@@ -314,6 +348,22 @@ mod tests {
         let rewritten = vault.rewrite_content(&note.id, "# A\n\nSee [[New]].").unwrap();
         assert_eq!(rewritten.updated_at, note.updated_at);
         assert_eq!(vault.get_note_content(&note.id).unwrap().content, "# A\n\nSee [[New]].");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn properties_are_set_in_the_frontmatter_only() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.save_note(&vault.create_note(None).unwrap().id, "# A\n\nBody".into()).unwrap();
+        let set = vault.set_property(&note.id, "status", Some(PropertyValue::Text("active".into())), None).unwrap();
+        assert_eq!(set.properties.len(), 1);
+        let raw = std::fs::read_to_string(vault.note_file_path(&note.id).unwrap()).unwrap();
+        assert!(raw.contains("\nstatus: active\n---\n\n# A\n\nBody"), "{raw}");
+        // Saving the body keeps the property.
+        let saved = vault.save_note(&note.id, "# A\n\nNew body".into()).unwrap();
+        assert_eq!(saved.properties, set.properties);
+        assert!(vault.set_property(&note.id, "status", None, None).unwrap().properties.is_empty());
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -126,6 +126,12 @@ impl Server {
                 if !view.linked_from.is_empty() {
                     out.push_str(&format!("Linked from: {}\n", view.linked_from.join(", ")));
                 }
+                if !view.note.properties.is_empty() {
+                    out.push_str("Properties:\n");
+                    for p in &view.note.properties {
+                        out.push_str(&format!("  {}: {}\n", p.key, p.value.display()));
+                    }
+                }
                 out.push_str(&format!("\n---\n\n{}", view.content));
                 Ok(out)
             }

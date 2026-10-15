@@ -5,7 +5,7 @@ use tauri::{Emitter, Manager};
 mod commands;
 
 // The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
-pub use tagdown_core::{history, journal, links, models, query, search_index, site, tasks, vault, watcher};
+pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, vault, watcher};
 
 use commands::search::SearchState;
 use search_index::SearchIndex;
@@ -44,6 +44,7 @@ pub fn run() {
             commands::notes::create_note,
             commands::notes::save_note,
             commands::notes::move_note,
+            commands::notes::set_property,
             commands::notes::star_note,
             commands::notes::delete_note,
             commands::notes::destroy_note,

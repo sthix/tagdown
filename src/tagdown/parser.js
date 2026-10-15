@@ -499,9 +499,12 @@ function applySmartTypography(s) {
 
   s = s
     .replace(/\.\.\./g, '…')                                // … ellipsis
-    .replace(/(\w)---(\w)/g, '$1—$2')                       // word—word
-    .replace(/(\w) --- (\w)/g, '$1 — $2')                    // word — word
-    .replace(/(\w)--(\w)/g, '$1–$2')                        // word–word
+    // Dashes need text on both sides with matching spacing, so a quote or
+    // bracket can sit next to them but `--flag` and `----` stay as typed.
+    .replace(/(?<=[^\s-])---(?=[^\s-])/g, '—')              // word—word
+    .replace(/(?<=[^\s-]) --- (?=[^\s-])/g, ' — ')          // "word" — word
+    .replace(/(?<=[^\s-])--(?=[^\s-])/g, '–')               // word–word
+    .replace(/(?<=[^\s-]) -- (?=[^\s-])/g, ' – ')           // word – word
     .replace(/(\d) ?-- ?(\d)/g, '$1–$2')                    // 1990–2020
     // Double quotes: esc() turned " into &quot;, so look for that entity
     .replace(/(^|[\s—–(\[{])&quot;/g, '$1“')        // opening "

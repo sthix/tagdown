@@ -8,6 +8,8 @@
 // Obsidian writes them: `Some paragraph ^ab12cd`, `- [ ] a task ^ab12cd`. The
 // marker travels with the text, so the id survives edits and moves.
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 
 use crate::models::Note;
@@ -190,17 +192,20 @@ fn breaks_paragraph(line: &str) -> bool {
 /// The block in `content` marked `^id` (compared case-insensitively), outside
 /// code fences. A list item or task brings the lines nested under it; a
 /// paragraph is the run of text lines ending in the marker; a heading is its
-/// line.
+/// line. A marker on a line of its own names the block above it (a table,
+/// callout, code block, quote or list), as in Obsidian.
 pub fn find_block(content: &str, id: &str) -> Option<Block> {
     let lines: Vec<&str> = content.split('\n').collect();
-    let mut in_fence: Option<&str> = None;
+    let mut in_fence: Option<(&str, usize)> = None;
+    // Closing fence line -> its opening line.
+    let mut fences = HashMap::new();
     let mut at = None;
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
         let fence = ["```", "~~~"].into_iter().find(|f| trimmed.starts_with(f));
         match (in_fence, fence) {
-            (None, Some(f)) => { in_fence = Some(f); continue; }
-            (Some(open), Some(f)) if open == f => { in_fence = None; continue; }
+            (None, Some(f)) => { in_fence = Some((f, i)); continue; }
+            (Some((open, from)), Some(f)) if open == f => { fences.insert(i, from); in_fence = None; continue; }
             (Some(_), _) => continue,
             _ => {}
         }
@@ -211,6 +216,12 @@ pub fn find_block(content: &str, id: &str) -> Option<Block> {
     }
     let at = at?;
     let line = lines[at];
+    let (found, cut) = block_marker(line)?;
+    if cut == 0 {
+        let last = (0..at).rev().find(|&i| !lines[i].trim().is_empty())?;
+        let start = block_start(&lines, last, &fences);
+        return Some(Block { id: found.to_string(), start_line: start, end_line: at + 1, text: dedent(&lines[start..=last]) });
+    }
     let (start, end) = if is_list_item(line) {
         let depth = indent_width(line);
         let children = lines[at + 1..]
@@ -227,20 +238,89 @@ pub fn find_block(content: &str, id: &str) -> Option<Block> {
         }
         (start, at + 1)
     };
-    let (_, cut) = block_marker(line)?;
-    let depth = indent_width(lines[start]);
-    let text = lines[start..end]
+    let mut block_lines = lines[start..end].to_vec();
+    block_lines[at - start] = &line[..cut];
+    Some(Block { id: found.to_string(), start_line: start, end_line: end, text: dedent(&block_lines) })
+}
+
+/// First line of the block that ends on line `last`.
+fn block_start(lines: &[&str], last: usize, fences: &HashMap<usize, usize>) -> usize {
+    if let Some(&open) = fences.get(&last) {
+        return open;
+    }
+    let t = lines[last].trim();
+    let up_to = |found: &dyn Fn(&str) -> bool| (0..last).rev().find(|&i| found(lines[i].trim())).unwrap_or(last);
+    let walk_up = |keep: &dyn Fn(&str) -> bool| {
+        let mut start = last;
+        while start > 0 && keep(lines[start - 1]) {
+            start -= 1;
+        }
+        start
+    };
+    if t == ":::" {
+        return up_to(&|l| l.starts_with(":::") && l.len() > 3);
+    }
+    if t == "$$" {
+        return up_to(&|l| l.starts_with("$$"));
+    }
+    if let Some(name) = t.strip_prefix("</").and_then(|r| r.strip_suffix('>')).map(str::trim).filter(|n| !n.is_empty()) {
+        // Walk up to the tag that opens this one, counting nested pairs.
+        let mut depth = 0i32;
+        for i in (0..=last).rev() {
+            depth += count_tags(lines[i], name, true) - count_tags(lines[i], name, false);
+            if depth <= 0 {
+                return i;
+            }
+        }
+        return last;
+    }
+    if t.starts_with('|') {
+        return walk_up(&|l| l.trim_start().starts_with('|'));
+    }
+    if t.starts_with('>') {
+        return walk_up(&|l| l.trim_start().starts_with('>'));
+    }
+    if is_list_item(lines[last]) || lines[last].starts_with([' ', '\t']) {
+        return walk_up(&|l| !l.trim().is_empty() && !is_heading(l) && !l.trim_start().starts_with("```") && !l.trim_start().starts_with("~~~"));
+    }
+    if is_heading(lines[last]) {
+        return last;
+    }
+    walk_up(&|l| !breaks_paragraph(l))
+}
+
+/// How often `line` closes (`</name>`) or opens (`<name …>`, not self-closing) the tag `name`.
+fn count_tags(line: &str, name: &str, closing: bool) -> i32 {
+    let lower = line.to_lowercase();
+    let name = name.to_lowercase();
+    let prefix = if closing { format!("</{name}") } else { format!("<{name}") };
+    let mut count = 0;
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(&prefix) {
+        let after = from + i + prefix.len();
+        let rest = &lower[after..];
+        let boundary = rest.starts_with(['>', ' ', '\t']) || rest.is_empty();
+        let self_closing = !closing && rest.split('>').next().is_some_and(|attrs| attrs.trim_end().ends_with('/'));
+        if boundary && !self_closing {
+            count += 1;
+        }
+        from = after;
+    }
+    count
+}
+
+/// `lines` joined, tabs as two spaces, without the first line's indent.
+fn dedent(lines: &[&str]) -> String {
+    let depth = lines.first().map_or(0, |l| indent_width(l));
+    lines
         .iter()
-        .enumerate()
-        .map(|(k, l)| {
-            let l = if start + k == at { &l[..cut] } else { l };
+        .map(|l| {
             let l = l.replace('\t', "  ");
             let skip = l.len() - l.trim_start_matches(' ').len();
             l[skip.min(depth)..].to_string()
         })
         .collect::<Vec<_>>()
-        .join("\n");
-    Some(Block { id: block_marker(line)?.0.to_string(), start_line: start, end_line: end, text })
+        .join("\n")
 }
 
 /// The note titled `title` among `notes` and its block `^id`. Archived notes
@@ -407,6 +487,30 @@ mod tests {
         let content = "```\nfake ^h1\n```\n## Setup ^h1\nbody";
         let block = find_block(content, "h1").unwrap();
         assert_eq!((block.start_line, block.text.as_str()), (3, "## Setup"));
+    }
+
+    #[test]
+    fn a_marker_on_its_own_line_names_the_block_above() {
+        let table = "Intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n^tbl\n\nAfter";
+        let block = find_block(table, "tbl").unwrap();
+        assert_eq!((block.start_line, block.end_line, block.text.as_str()), (2, 7, "| a | b |\n| - | - |\n| 1 | 2 |"));
+
+        let code = "```js\nlet x = 1;\n\n```\n^code";
+        assert_eq!(find_block(code, "code").unwrap().text, "```js\nlet x = 1;\n\n```");
+
+        let callout = "::: tip Title\nBody\n\nMore\n:::\n\n^tip";
+        assert_eq!(find_block(callout, "tip").unwrap().start_line, 0);
+
+        let tags = "<grid 2>\n<col>\nA\n</col>\n</grid>\n^g";
+        assert_eq!(find_block(tags, "g").unwrap().text, "<grid 2>\n<col>\nA\n</col>\n</grid>");
+
+        let list = "Text\n\n- one\n  - two\n- three\n\n^lst";
+        assert_eq!(find_block(list, "lst").unwrap().text, "- one\n  - two\n- three");
+
+        let quote = "> said\n> twice\n^q";
+        assert_eq!(find_block(quote, "q").unwrap().text, "> said\n> twice");
+
+        assert_eq!(find_block("^lonely", "lonely"), None);
     }
 
     #[test]

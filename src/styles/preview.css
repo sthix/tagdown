@@ -347,6 +347,13 @@
 .preview .td-block-id { display: none; }
 /* [[Note#^id]] reads as the note's title, with a pilcrow for the block. */
 .preview .td-blockref::after { content: " ¶⟧"; }
+/* A block link whose note is there but whose block isn't (deleted, or its
+   marker removed). Clicking still opens the note. */
+.preview .td-blockref.is-missing-block {
+  color: var(--pv-ink-soft);
+  border-bottom: 1px dotted var(--pv-ink-soft);
+}
+.preview .td-blockref.is-missing-block::after { content: " ¶?⟧"; }
 /* The block a link just jumped to. */
 .preview .is-block-target { animation: td-block-target 1.8s ease-out; border-radius: 4px; }
 @keyframes td-block-target {

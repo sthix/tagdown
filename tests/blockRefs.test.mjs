@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 execFileSync('npx', [
   'tsc',
@@ -14,13 +15,18 @@ execFileSync('npx', [
   '--lib',
   'ES2022,DOM',
   '--outDir',
-  'dist-test',
+  'dist-test/refs',
   '--noEmit',
   'false',
   '--skipLibCheck',
 ], { stdio: 'inherit' });
 
-const { blockIdOf, blockIds, blockIdOfTarget, newBlockId, markerLine, ensureBlockId, blockReference } = await import(new URL('../dist-test/blockRefs.js', import.meta.url).href);
+// The app is bundled by Vite, so its imports have no extensions; Node needs them.
+const built = new URL('../dist-test/refs/blockRefs.js', import.meta.url);
+writeFileSync(built, readFileSync(built, 'utf8').replace(/(from '\.\/[\w/]+)'/g, "$1.js'"));
+
+const { blockIdOf, blockIds, blockIdOfTarget, newBlockId, markerLine, ensureBlockId, blockReference } = await import(built.href);
+const { splitBlocks } = await import(new URL('../dist-test/refs/tagdown/blocks.js', import.meta.url).href);
 const { tagdown } = await import(new URL('../src/tagdown/parser.js', import.meta.url).href);
 
 // A random source that always yields `id`, then anything.
@@ -71,6 +77,24 @@ test('copying a reference adds an id once and only to that block', () => {
   assert.equal(ensureBlockId('a\n\n', 2, new Set()), null);
   assert.equal(blockReference(' Plan ', 'ab12cd'), '[[Plan#^ab12cd]]');
   assert.equal(blockReference('Plan', 'ab12cd', true), '![[Plan#^ab12cd]]');
+});
+
+test('tables, callouts and code get the id on a line of their own', () => {
+  const table = '| a | b |\n| 1 | 2 |\nAfter';
+  // The table ends where the text starts, so a blank line follows the marker.
+  assert.equal(ensureBlockId(table, 2, new Set(), fixed('tb1234')).text, '| a | b |\n| 1 | 2 |\n\n^tb1234\n\nAfter');
+  const code = '```js\nx\n```';
+  const added = ensureBlockId(code, 5, new Set(), fixed('cd1234'));
+  assert.equal(added.text, '```js\nx\n```\n\n^cd1234');
+  assert.deepEqual(ensureBlockId(added.text, 5, new Set()), { text: added.text, id: 'cd1234', changed: false });
+  assert.equal(ensureBlockId('---\ntags: [a]\n---\nText', 5, new Set()), null);
+});
+
+test('a marker line belongs to the block above it', () => {
+  const source = '| a |\n| 1 |\n\n^tb1234\n\nNext';
+  assert.deepEqual(splitBlocks(source), [{ start: 0, end: 4 }, { start: 5, end: 6 }]);
+  assert.match(tagdown('```js\nx\n```\n^cd1234'), /<\/div><span class="td-block-id td-block-id-standalone" data-block-id="cd1234"><\/span>$/);
+  assert.equal(tagdown('text\n^p1'), '<p>text</p><span class="td-block-id td-block-id-standalone" data-block-id="p1"></span>');
 });
 
 test('the parser hides markers and keeps them as anchors', () => {

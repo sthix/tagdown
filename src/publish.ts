@@ -9,12 +9,16 @@
 //
 // Links between published notes become links between pages; links to notes
 // that aren't published become plain text, so nothing private leaks a title.
+// Embedded blocks show only when their note is published too.
 
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
 import { documentCss, renderDocument } from './export';
 import { fillQueries, invalidateQueries } from './queries';
+import { applyExternals } from './tagdown/renderer';
+import { blockTarget, fillBlockEmbeds, invalidateBlockEmbeds } from './blockEmbeds';
+import { blockIdOfTarget } from './blockRefs';
 import { normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import siteCss from './styles/site.css?inline';
 import './styles/publish.css';
@@ -40,10 +44,14 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
 
   // Pass 1: render every note.
   invalidateQueries();
+  invalidateBlockEmbeds();
   const pages: Page[] = [];
   for (const [i, entry] of notes.entries()) {
     progress(i, notes.length);
-    const html = await renderDocument(entry.note.title || 'Untitled', entry.content, (root) => fillQueries(root, { excludeId: entry.note.id, interactive: false }));
+    const html = await renderDocument(entry.note.title || 'Untitled', entry.content, async (root) => {
+      await fillQueries(root, { excludeId: entry.note.id, interactive: false });
+      await fillBlockEmbeds(root, (body) => applyExternals(body, 'light'));
+    });
     pages.push({ ...entry, slug: slugFor(entry.note.title || 'Untitled'), html, text: '', links: new Set() });
   }
   progress(notes.length, notes.length);
@@ -58,7 +66,10 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
     hasMath ||= !!root.querySelector('.katex');
     const pageUrl = (target: Page, anchor: string | null) => {
       let hash = '';
-      if (anchor) {
+      const blockId = anchor ? blockIdOfTarget(`#${anchor}`) : null;
+      if (blockId) {
+        hash = `#${blockAnchor(blockId)}`;
+      } else if (anchor) {
         const wanted = normalizeTitle(anchor);
         const holder = document.createElement('div');
         holder.innerHTML = target.html;
@@ -67,6 +78,17 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
       }
       return target === page ? (hash || '#') : `${target.slug}.html${hash}`;
     };
+    // An embed of an unpublished note's block would put its text on the site.
+    root.querySelectorAll<HTMLElement>('.td-transclusion').forEach((embed) => {
+      if (embed.dataset.noteId && byId.has(embed.dataset.noteId)) return;
+      embed.classList.add('is-missing');
+      embed.querySelector(':scope > .td-transclusion-body')?.replaceChildren();
+    });
+    // Blocks named with ^id get an anchor that [[Note#^id]] links land on.
+    root.querySelectorAll<HTMLElement>('.td-block-id[data-block-id]').forEach((marker) => {
+      const block = marker.closest('.td-transclusion') ? null : blockTarget(marker);
+      if (block && !block.id) block.id = blockAnchor(marker.dataset.blockId!);
+    });
     root.querySelectorAll<HTMLAnchorElement>('a.td-wikilink').forEach((link) => {
       const target = resolveTarget(link.dataset.target || '', published)?.page;
       if (target) {
@@ -314,4 +336,8 @@ export function openPublishDialog(options: DialogOptions) {
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function blockAnchor(id: string) {
+  return `block-${id.toLowerCase()}`;
 }

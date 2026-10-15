@@ -467,6 +467,7 @@ function inline(text) {
 /* Block references. A paragraph, list item, task or heading ending in ` ^id`
    can be linked as [[Note#^id]] and embedded as ![[Note#^id]]. */
 const BLOCK_MARKER_RE = /(^|[ \t])\^([A-Za-z0-9-]+)[ \t]*(?=\n|$)/gm;
+const STANDALONE_MARKER_RE = /(^|\n)[ \t]*\^([A-Za-z0-9-]+)[ \t]*$/;
 const BLOCK_TARGET_RE = /^([^#]*)#\^([A-Za-z0-9-]+)$/;
 const BLOCK_EMBED_RE = /!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]/g;
 const BLOCK_EMBED_LINE_RE = /^!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]$/;
@@ -640,6 +641,15 @@ function tryBlockText(text) {
 
   // Heading with optional {#anchor}: # Title {#install}
   // If no explicit anchor, generate one from a slug — also collected for TOC.
+  // A block id on a line of its own names the block above it (a table,
+  // callout, code block, list…), as in Obsidian.
+  const own = t.match(STANDALONE_MARKER_RE);
+  if (own) {
+    const span = `<span class="td-block-id td-block-id-standalone" data-block-id="${own[2]}"></span>`;
+    const rest = t.slice(0, own.index).replace(/\s+$/, '');
+    return rest ? (tryBlockText(rest) ?? `<p>${inline(rest)}</p>`) + span : span;
+  }
+
   // A block embed on its own: ![[Note#^id]]
   const embed = t.match(BLOCK_EMBED_LINE_RE);
   if (embed) return blockEmbed(esc(embed[1].trim()), embed[2] && esc(embed[2].trim()), 'div');

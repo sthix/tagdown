@@ -19,8 +19,8 @@ import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from '.
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
-import { blockIds, blockReference, ensureBlockId } from './blockRefs';
-import { fillBlockEmbeds } from './blockEmbeds';
+import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './blockRefs';
+import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
@@ -1262,7 +1262,7 @@ function scrollToBlock(id: string) {
   const wanted = id.toLowerCase();
   const marker = Array.from(editorRoot.querySelectorAll<HTMLElement>('.preview [data-block-id]'))
     .find((el) => el.dataset.blockId?.toLowerCase() === wanted && !el.closest('.td-transclusion'));
-  const block = marker?.closest<HTMLElement>('li, p, h1, h2, h3, h4, h5, h6, .td-block');
+  const block = marker ? blockTarget(marker) : null;
   if (!block) {
     showNotice(`No block ^${id} in this note`);
     return;
@@ -1392,6 +1392,17 @@ function markWikilinks(el: HTMLElement) {
     link.classList.toggle('is-missing', !note);
     const title = splitTarget(target).title;
     link.title = note ? `Open “${note.title}”` : isDayKey(title) ? `Start the journal page for ${formatDay(title)}` : `Create note “${title}”`;
+    const id = blockIdOfTarget(target);
+    // Embeds say so themselves when their block is gone.
+    if (note && id && !link.classList.contains('td-transclusion-source')) {
+      const mark = (found: boolean) => {
+        link.classList.toggle('is-missing-block', !found);
+        if (!found) link.title = `No block ^${id} in “${note.title}” any more. Opens the note.`;
+      };
+      const known = cachedBlock(title, id);
+      if (known !== undefined) mark(!!known);
+      void lookupBlock(title, id).then((ref) => mark(!!ref));
+    }
   });
 }
 
@@ -2193,7 +2204,10 @@ async function presentNote() {
     source: content,
     fromLine,
     theme: getEffectiveTheme(),
-    decorate: (root) => fillQueries(root, { excludeId: noteId, interactive: false }),
+    decorate: async (root) => {
+      await fillQueries(root, { excludeId: noteId, interactive: false });
+      await fillBlockEmbeds(root, (body) => applyExternals(body, getEffectiveTheme()));
+    },
   });
 }
 
@@ -2242,10 +2256,12 @@ async function showVersionHistory() {
   });
 }
 
-/** Exports show a snapshot of each query block's current results. */
+/** Exports show a snapshot of each query block's current results and embedded block. */
 async function exportQueries(root: HTMLElement) {
   invalidateQueries();
+  invalidateBlockEmbeds();
   await fillQueries(root, { excludeId: selectedNote?.id ?? null, interactive: false });
+  await fillBlockEmbeds(root, (body) => applyExternals(body, 'light'));
 }
 
 async function exportNoteHtml() {

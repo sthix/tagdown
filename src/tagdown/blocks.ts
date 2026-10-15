@@ -114,7 +114,25 @@ export function splitBlocks(source: string): SourceBlock[] {
     }
     blocks.push({ start, end: i });
   }
-  return blocks;
+  return attachStandaloneMarkers(lines, blocks);
+}
+
+const STANDALONE_MARKER = /^\s*\^[A-Za-z0-9-]+\s*$/;
+
+/**
+ * A `^id` line of its own names the block above it, so it belongs to that
+ * block: it moves and is edited with it. One blank line may sit between.
+ */
+function attachStandaloneMarkers(lines: string[], blocks: SourceBlock[]): SourceBlock[] {
+  const out: SourceBlock[] = [];
+  for (const block of blocks) {
+    const prev = out[out.length - 1];
+    const isMarker = block.end - block.start === 1 && STANDALONE_MARKER.test(lines[block.start]);
+    const isFrontmatter = prev?.start === 0 && lines[0]?.trim() === '---';
+    if (isMarker && prev && !isFrontmatter && block.start - prev.end <= 1) prev.end = block.end;
+    else out.push({ ...block });
+  }
+  return out;
 }
 
 const MARK = (index: number) => `TDBLOCKMARK${index}X`;

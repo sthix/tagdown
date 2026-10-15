@@ -4,6 +4,11 @@
 // the block's line, so it moves and survives edits with the block. Ids are only
 // written when someone copies a reference to a block; notes are never rewritten
 // in bulk. The vault finds blocks by id in `links.rs`.
+//
+// Blocks that can't end in a marker (tables, callouts, code, components) get
+// it on a line of their own after them, also as in Obsidian.
+
+import { splitBlocks } from './tagdown/blocks';
 
 const MARKER = /(^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
@@ -11,6 +16,8 @@ const HEADING = /^#{1,6}\s/;
 const FENCE = /^\s*(```|~~~)/;
 // Lines that aren't paragraph text: tables, callouts, tags, math, rules.
 const NOT_TEXT = /^\s*(?:\||:::|<|\$\$|---)/;
+const STANDALONE = /^\s*\^[A-Za-z0-9-]+\s*$/;
+const TABLE_ROW = /^\s*\|/;
 
 /** The id a line's `^id` marker gives it, or null. */
 export function blockIdOf(line: string): string | null {
@@ -67,19 +74,41 @@ export function markerLine(lines: string[], line: number): number | null {
 
 /**
  * Make sure the block under the caret in `text` has an id. Returns the text
- * (with ` ^id` appended to the block's marker line when it had none), the id,
- * and whether anything changed; null when the caret isn't in a block that can
- * carry an id. `taken` holds the ids already used in the note.
+ * (with ` ^id` appended to the block's marker line when it had none, or a
+ * `^id` line added below a table, callout or code block), the id, and whether
+ * anything changed; null when the caret is on a blank line or in the
+ * frontmatter. `taken` holds the ids already used in the note.
  */
 export function ensureBlockId(text: string, caret: number, taken: Set<string>, random?: () => number): { text: string; id: string; changed: boolean } | null {
   const lines = text.split('\n');
   const line = text.slice(0, caret).split('\n').length - 1;
+  // The frontmatter is the note's metadata, not a block.
+  const frontmatterEnd = lines[0]?.trim() === '---' ? lines.findIndex((l, i) => i > 0 && l.trim() === '---') : -1;
+  if (line <= frontmatterEnd) return null;
   const at = markerLine(lines, line);
-  if (at === null) return null;
+  if (at === null) return ensureStandaloneId(text, lines, line, taken, random);
   const existing = blockIdOf(lines[at]);
   if (existing) return { text, id: existing, changed: false };
   const id = newBlockId(taken, random);
   lines[at] = `${lines[at].replace(/[ \t]+$/, '')} ^${id}`;
+  return { text: lines.join('\n'), id, changed: true };
+}
+
+function ensureStandaloneId(text: string, lines: string[], line: number, taken: Set<string>, random?: () => number) {
+  if (!lines[line]?.trim()) return null;
+  const block = splitBlocks(text).find((b) => line >= b.start && line < b.end);
+  if (!block) return null;
+  // A pipe table ends at its last row, even with text right below it.
+  let end = block.end;
+  if (TABLE_ROW.test(lines[line])) {
+    end = line;
+    while (end < lines.length && TABLE_ROW.test(lines[end])) end++;
+  }
+  const marker = [end - 1, end, lines[end]?.trim() ? -1 : end + 1].find((i) => i >= 0 && STANDALONE.test(lines[i] ?? ''));
+  if (marker !== undefined) return { text, id: blockIdOf(lines[marker])!, changed: false };
+  const id = newBlockId(taken, random);
+  const next = lines[end];
+  lines.splice(end, 0, '', `^${id}`, ...(next?.trim() ? [''] : []));
   return { text: lines.join('\n'), id, changed: true };
 }
 

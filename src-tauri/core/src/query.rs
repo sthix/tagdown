@@ -3,7 +3,10 @@
 //
 // A query is a search (the same syntax as everywhere else: words, "phrases",
 // tag:, title:, -exclusions) plus display options:
-//   show:notes | show:tasks        what to list (notes by default)
+//   show:notes | tasks | table     what to list (notes by default); a table has
+//                                  a column per property, editable in the app
+//   columns:status,due,updated     the table's columns (title always comes first);
+//                                  updated, created, folder and tags are the note's own
 //   status:open | done | all       which tasks (open by default)
 //   sort:updated | created | title order (most recently edited first by default)
 //   sort:due | sort:-priority      by a property, ascending (or descending with -)
@@ -26,7 +29,7 @@ use serde::Serialize;
 use crate::{
     links::normalize_title,
     models::{FolderRecord, Note},
-    properties::{Property, PropertyValue},
+    properties::{parse_scalar, Property, PropertyValue},
     search_index::SearchIndex,
     tasks::{parse_tasks, Task, TaskFilter},
 };
@@ -39,7 +42,11 @@ const MAX_LIMIT: usize = 500;
 pub enum Show {
     Notes,
     Tasks,
+    Table,
 }
+
+/// Columns a table shows when the query doesn't name them, besides the ones it filters or sorts by.
+const TABLE_COLUMNS: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sort {
@@ -72,6 +79,10 @@ struct Spec {
     folder: Option<String>,
     limit: usize,
     properties: Vec<PropertyFilter>,
+    /// `columns:` as written, if given.
+    columns: Option<Vec<String>>,
+    /// `tag:` searches that aren't excluded, for new notes in a table.
+    tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -82,6 +93,16 @@ pub struct QueryNote {
     pub folder: Option<String>,
     pub tags: Vec<String>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub properties: Vec<Property>,
+}
+
+/// What a note added from a table starts with, so it matches the query.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewNote {
+    pub folder_id: Option<String>,
+    pub tags: Vec<String>,
     pub properties: Vec<Property>,
 }
 
@@ -93,8 +114,11 @@ pub struct QueryOutput {
     pub tasks: Vec<Task>,
     /// Matches before `limit` was applied.
     pub total: usize,
-    /// Properties the query filters or sorts by, to show with each note.
+    /// For notes: properties the query filters or sorts by, to show with each
+    /// note. For a table: its columns after the title.
     pub columns: Vec<String>,
+    /// For a table: what a note added to it starts with.
+    pub new_note: Option<NewNote>,
 }
 
 /// Split a query into tokens, keeping "quoted phrases" (and `key:"quoted value"`)
@@ -150,7 +174,7 @@ fn property_filter(token: &str) -> Option<PropertyFilter> {
 }
 
 fn parse(raw: &str) -> Result<Spec, String> {
-    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new() };
+    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new() };
     let mut filter = Vec::new();
     for token in tokens(raw) {
         if let Some(has) = token.strip_prefix("has:").map(|k| (false, k)).or_else(|| token.strip_prefix("-has:").map(|k| (true, k))) {
@@ -176,8 +200,10 @@ fn parse(raw: &str) -> Result<Spec, String> {
             "show" => spec.show = match value {
                 "notes" => Show::Notes,
                 "tasks" => Show::Tasks,
-                _ => return Err(format!("show: must be notes or tasks, not \"{value}\"")),
+                "table" => Show::Table,
+                _ => return Err(format!("show: must be notes, tasks or table, not \"{value}\"")),
             },
+            "columns" => spec.columns = Some(value.split(',').map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect()),
             "status" => spec.status = match value {
                 "open" => TaskFilter::Open,
                 "done" => TaskFilter::Done,
@@ -196,7 +222,11 @@ fn parse(raw: &str) -> Result<Spec, String> {
             },
             "limit" => spec.limit = value.parse::<usize>().map_err(|_| format!("limit: must be a number, not \"{value}\""))?.clamp(1, MAX_LIMIT),
             "folder" => spec.folder = Some(value.to_string()),
-            // tag:, title:, and anything else belong to the search.
+            "tag" => {
+                spec.tags.push(value.trim_start_matches('#').to_string());
+                filter.push(token);
+            }
+            // title:, -tag: and anything else belong to the search.
             _ => filter.push(token),
         }
     }
@@ -219,6 +249,9 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
         if !columns.iter().any(|c| c.eq_ignore_ascii_case(key)) {
             columns.push(key.clone());
         }
+    }
+    if let Some(explicit) = &spec.columns {
+        columns = explicit.clone();
     }
     let folder_id = match &spec.folder {
         Some(name) => Some(
@@ -264,17 +297,50 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
     }
 
     let folder_name = |id: &Option<String>| id.as_ref().and_then(|id| folders.iter().find(|f| &f.id == id)).map(|f| f.name.clone());
+    if spec.show == Show::Table && spec.columns.is_none() {
+        // The properties the listed notes use most, after the ones the query names.
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        for (note, _) in selected.iter().take(spec.limit) {
+            for p in note.properties.iter().filter(|p| !matches!(p.value, PropertyValue::Raw(_))) {
+                match counts.iter_mut().find(|(k, _)| k.eq_ignore_ascii_case(&p.key)) {
+                    Some((_, n)) => *n += 1,
+                    None => counts.push((p.key.clone(), 1)),
+                }
+            }
+        }
+        counts.sort_by(|a, b| b.1.cmp(&a.1));
+        for (key, _) in counts {
+            if columns.len() >= TABLE_COLUMNS {
+                break;
+            }
+            if !columns.iter().any(|c| c.eq_ignore_ascii_case(&key)) {
+                columns.push(key);
+            }
+        }
+    }
+    let new_note = (spec.show == Show::Table).then(|| NewNote {
+        folder_id: folder_id.clone(),
+        tags: spec.tags.clone(),
+        properties: spec.properties.iter().filter(|f| !f.negate).filter_map(|f| match &f.matcher {
+            Match::Equals(want) => Some(Property {
+                key: f.key.clone(),
+                value: date_value(want, today).filter(|_| want.starts_with("today")).map_or_else(|| parse_scalar(want), PropertyValue::Date),
+            }),
+            _ => None,
+        }).collect(),
+    });
     Ok(match spec.show {
-        Show::Notes => QueryOutput {
-            show: Show::Notes,
+        Show::Notes | Show::Table => QueryOutput {
+            show: spec.show,
             total: selected.len(),
             notes: selected
                 .into_iter()
                 .take(spec.limit)
-                .map(|(n, _)| QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, properties: n.properties })
+                .map(|(n, _)| QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, created_at: n.created_at, properties: n.properties })
                 .collect(),
             tasks: Vec::new(),
             columns,
+            new_note,
         },
         Show::Tasks => {
             let tasks: Vec<Task> = selected
@@ -282,7 +348,7 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
                 .flat_map(|(n, content)| parse_tasks(n, content))
                 .filter(|t| spec.status.wants(t.done))
                 .collect();
-            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new() }
+            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new(), new_note: None }
         }
     })
 }
@@ -468,9 +534,34 @@ mod tests {
     }
 
     #[test]
+    fn tables_pick_columns_and_say_how_new_rows_start() {
+        use PropertyValue::*;
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let folders = vec![FolderRecord { id: "work".into(), name: "Work".into(), parent_id: None, sort_order: 0, icon: None }];
+        let notes = vec![
+            (with(note("a", "Atlas", &[], Some("work"), 2), &[("status", Text("active".into())), ("owner", Text("Sam".into())), ("priority", Number(1.0))]), String::new()),
+            (with(note("b", "Beacon", &[], Some("work"), 1), &[("status", Text("active".into())), ("priority", Number(2.0)), ("src", Raw("\n  a: b".into()))]), String::new()),
+        ];
+        let out = run_at("show:table status=active folder:Work", notes.clone(), None, &folders, None, today).unwrap();
+        assert_eq!(out.show, Show::Table);
+        assert_eq!(out.columns, vec!["status", "priority", "owner"], "named first, then the most used; raw YAML left out");
+        assert_eq!(out.notes.len(), 2);
+        assert_eq!(out.new_note, Some(NewNote { folder_id: Some("work".into()), tags: vec![], properties: vec![Property { key: "status".into(), value: Text("active".into()) }] }));
+
+        let out = run_at("show:table columns:owner,updated priority=2 due=today -status=done", notes.clone(), None, &folders, None, today).unwrap();
+        assert_eq!(out.columns, vec!["owner", "updated"]);
+        let starts = out.new_note.unwrap().properties;
+        assert_eq!(starts, vec![
+            Property { key: "priority".into(), value: Number(2.0) },
+            Property { key: "due".into(), value: Date(today) },
+        ], "negated filters don't seed new notes");
+        assert_eq!(run_at("columns:", notes, None, &folders, None, today).unwrap().columns, Vec::<String>::new());
+    }
+
+    #[test]
     fn explains_bad_options() {
         let (notes, index, folders) = vault();
-        assert_eq!(run("show:table", notes.clone(), Some(&index), &folders, None).unwrap_err(), "show: must be notes or tasks, not \"table\"");
+        assert_eq!(run("show:grid", notes.clone(), Some(&index), &folders, None).unwrap_err(), "show: must be notes, tasks or table, not \"grid\"");
         assert!(run("has:", notes.clone(), Some(&index), &folders, None).unwrap_err().contains("property name"));
         assert!(run("folder:Nope", notes, Some(&index), &folders, None).unwrap_err().contains("no folder named"));
     }

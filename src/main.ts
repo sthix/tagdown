@@ -15,7 +15,7 @@ import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
 import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
-import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from './queries';
+import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask, type TableActions } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
@@ -1291,28 +1291,103 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
   renderPropertiesPanel(host, {
     properties: selectedNote.properties ?? [],
     keySuggestions: () => vaultPropertyKeys(),
-    valueSuggestions: (key) => {
-      const values = new Set<string>();
-      for (const note of libraryNotes) {
-        for (const p of note.properties ?? []) {
-          if (p.key !== key) continue;
-          if (p.type === 'text' && p.value) values.add(p.value);
-          if (p.type === 'list') p.value.forEach((item) => values.add(item));
-        }
-      }
-      return [...values].slice(0, 50);
-    },
-    knownType: (key) => {
-      const counts = new Map<PropertyType, number>();
-      for (const note of libraryNotes) for (const p of note.properties ?? []) if (p.key === key) counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
-      return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    },
+    valueSuggestions: propertyValueSuggestions,
+    knownType: propertyKnownType,
     save: saveProperty,
     decorate: markWikilinks,
     openLink: (target) => void followWikilink(target),
     focus,
   });
 }
+
+/** Values the vault uses for the property `key`. */
+function propertyValueSuggestions(key: string): string[] {
+  const values = new Set<string>();
+  for (const note of libraryNotes) {
+    for (const p of note.properties ?? []) {
+      if (p.key.toLowerCase() !== key.toLowerCase()) continue;
+      if (p.type === 'text' && p.value) values.add(p.value);
+      if (p.type === 'list') p.value.forEach((item) => values.add(item));
+    }
+  }
+  return [...values].slice(0, 50);
+}
+
+/** The type the vault mostly gives the property `key`. */
+function propertyKnownType(key: string): PropertyType | null {
+  const counts = new Map<PropertyType, number>();
+  for (const note of libraryNotes) for (const p of note.properties ?? []) if (p.key.toLowerCase() === key.toLowerCase()) counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+// ---- Table views: <query show:table /> ----
+
+/** Refill the open note's query blocks with fresh results. */
+async function refreshQueries() {
+  invalidateQueries();
+  const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (preview) await fillQueries(preview, { excludeId: selectedNote?.id ?? null, table: tableActions });
+}
+
+/** Rewrite the `<query … />` reading `oldQuery` in the open note (a table's sort or columns). */
+function replaceQuery(oldQuery: string, newQuery: string) {
+  if (blockEdit) commitBlockEdit();
+  let replaced = false;
+  const next = content.replace(/<\s*query\b([^>]*?)\s*\/\s*>/gi, (whole, inner: string) => {
+    if (replaced || inner.trim() !== oldQuery) return whole;
+    replaced = true;
+    return `<query ${newQuery} />`;
+  });
+  if (!replaced) return;
+  content = next;
+  syncSourceTextarea();
+  scheduleSave();
+  const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (preview) paintPreview(preview);
+}
+
+const tableActions: TableActions = {
+  editProperty: async (noteId, key, value) => {
+    try {
+      const note = await invoke<Note>('set_property', { id: noteId, key, value, renameFrom: null });
+      libraryNotes = libraryNotes.map((n) => (n.id === noteId ? note : n));
+      if (selectedNote?.id === noteId) {
+        selectedNote = note;
+        paintProperties();
+      }
+      await refreshQueries();
+      scheduleListRefresh();
+      return true;
+    } catch (error) {
+      await message(String(error), { title: 'Could not change the property', kind: 'warning' });
+      return false;
+    }
+  },
+  editQuery: replaceQuery,
+  createRow: async (newNote, title) => {
+    try {
+      await settlePendingWork();
+      const folderId = newNote.folderId ?? (isUserFolder(selectedNote?.folderId ?? null) ? selectedNote!.folderId : null);
+      const created = await invoke<Note>('create_note', { folderId });
+      const tags = newNote.tags.length ? `${newNote.tags.map((tag) => `#${tag}`).join(' ')}\n` : '';
+      await invoke<Note>('save_note', { id: created.id, content: `# ${title}\n\n${tags}` });
+      for (const { key, ...value } of newNote.properties) {
+        await invoke<Note>('set_property', { id: created.id, key, value, renameFrom: null });
+      }
+      await reloadFolders();
+      await reloadNotes();
+      await refreshQueries();
+      return true;
+    } catch (error) {
+      await message(String(error), { title: 'Could not add the note', kind: 'warning' });
+      return false;
+    }
+  },
+  openLink: (target) => void followWikilink(target),
+  decorate: markWikilinks,
+  valueSuggestions: propertyValueSuggestions,
+  knownType: propertyKnownType,
+};
 
 /** Property names across the vault, most used first. */
 function vaultPropertyKeys(): string[] {
@@ -1338,7 +1413,7 @@ async function saveProperty(key: string, value: PropertyValue | null, renameFrom
     invalidateQueries();
     paintProperties(isNew ? { key, part: 'value' } : undefined);
     const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
-    if (preview) void fillQueries(preview, { excludeId: id });
+    if (preview) void fillQueries(preview, { excludeId: id, table: tableActions });
     scheduleListRefresh();
     return true;
   } catch (error) {
@@ -1491,7 +1566,7 @@ function paintPreview(el: HTMLElement) {
   resolveLocalImages(el);
   markDocTitle(el);
   markWikilinks(el);
-  void fillQueries(el, { excludeId: selectedNote?.id ?? null });
+  void fillQueries(el, { excludeId: selectedNote?.id ?? null, table: tableActions });
   void fillBlockEmbeds(el, decorateEmbed);
   void applyExternals(el, getEffectiveTheme());
 }
@@ -1943,7 +2018,7 @@ function renderEditor() {
     // the pressed element was re-rendered away.
     suppressPreviewClick = false;
     // Ticking a task in a query block leaves an open block alone.
-    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note]')) return;
+    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note], .td-query-table, .td-qt-new')) return;
     event.preventDefault();
     suppressPreviewClick = true;
     const hint = textAroundPoint(event.clientX, event.clientY);
@@ -1962,7 +2037,7 @@ function renderEditor() {
         .then(async () => {
           await reloadNotes();
           const preview = editorRoot.querySelector<HTMLElement>('.preview');
-          if (preview) await fillQueries(preview, { excludeId: selectedNote?.id ?? null });
+          if (preview) await fillQueries(preview, { excludeId: selectedNote?.id ?? null, table: tableActions });
         })
         .catch(async (error) => {
           queryTask.checked = !queryTask.checked;
@@ -2035,7 +2110,7 @@ function renderEditor() {
 }
 
 function isInteractive(target: HTMLElement) {
-  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks');
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-new');
 }
 
 const wikilinkOptions = {

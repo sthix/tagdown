@@ -100,7 +100,13 @@ function row(property: Property, index: number, options: PanelOptions): HTMLElem
   wrap.append(key);
 
   const cell = el('div', 'prop-value');
-  cell.append(valueControl(property, index, options));
+  cell.append(propertyField(property, {
+    save: (next) => options.save(property.key, next),
+    decorate: options.decorate,
+    openLink: options.openLink,
+    suggestions: () => options.valueSuggestions(property.key),
+    listId: `td-prop-values-${index}`,
+  }));
   wrap.append(cell);
 
   const remove = el('button', 'prop-remove');
@@ -163,34 +169,56 @@ function typeButton(property: Property, options: PanelOptions): HTMLElement {
   return holder;
 }
 
-function valueControl(property: Property, index: number, options: PanelOptions): HTMLElement {
-  const save = (next: PropertyValue) => options.save(property.key, next);
+export type FieldOptions = {
+  /** Write the new value; resolves false when that failed. */
+  save: (value: PropertyValue) => Promise<boolean>;
+  decorate: (el: HTMLElement) => void;
+  openLink: (target: string) => void;
+  /** Values to suggest while typing. */
+  suggestions: () => string[];
+  /** Unique id for the suggestions list. */
+  listId: string;
+  /** The note doesn't have this property yet: number and date fields start empty. */
+  blank?: boolean;
+  /** Shown for an empty text or list (“Empty” by default). */
+  emptyLabel?: string;
+};
+
+/**
+ * An editable field for one property value: a checkbox, a number or date
+ * input, or text and lists shown rendered (links work) and edited on click.
+ */
+export function propertyField(property: Property, field: FieldOptions): HTMLElement {
   switch (property.type) {
     case 'checkbox': {
       const box = el('input');
       box.type = 'checkbox';
       box.checked = property.value;
       box.setAttribute('aria-label', property.key);
-      box.addEventListener('change', () => void save({ type: 'checkbox', value: box.checked }));
+      box.addEventListener('change', () => {
+        void field.save({ type: 'checkbox', value: box.checked }).then((ok) => { if (!ok) box.checked = !box.checked; });
+      });
       return box;
     }
     case 'number':
     case 'date': {
       const input = el('input', 'prop-input');
       input.type = property.type;
-      input.value = String(property.value);
+      const shown = field.blank ? '' : String(property.value);
+      input.value = shown;
+      input.classList.toggle('is-blank', !!field.blank);
       input.setAttribute('aria-label', property.key);
       if (property.type === 'number') input.step = 'any';
       const type = property.type;
       const commit = () => {
         const next = parseInput(type, input.value);
-        if (!next) { input.value = String(property.value); return; }
-        if (valueText(next) !== valueText(property)) void save(next);
+        if (!next) { input.value = shown; return; }
+        if (field.blank || valueText(next) !== valueText(property)) void field.save(next);
       };
       input.addEventListener('change', commit);
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
-        if (event.key === 'Escape') { input.value = String(property.value); input.blur(); }
+        if (event.key === 'Escape') { input.value = shown; input.blur(); }
       });
       return input;
     }
@@ -201,12 +229,12 @@ function valueControl(property: Property, index: number, options: PanelOptions):
       return code;
     }
     default:
-      return textControl(property, index, options);
+      return textField(property, field);
   }
 }
 
 /** Text and lists: shown rendered (links work), edited in a text field. */
-function textControl(property: Property & ({ type: 'text' } | { type: 'list' }), index: number, options: PanelOptions): HTMLElement {
+function textField(property: Property & ({ type: 'text' } | { type: 'list' }), field: FieldOptions): HTMLElement {
   const holder = el('div', 'prop-text');
   const show = () => {
     holder.innerHTML = '';
@@ -217,17 +245,19 @@ function textControl(property: Property & ({ type: 'text' } | { type: 'list' }),
     const items = property.type === 'list' ? property.value : property.value ? [property.value] : [];
     if (!items.length) {
       view.classList.add('is-empty');
-      view.textContent = 'Empty';
+      view.textContent = field.emptyLabel ?? 'Empty';
     } else {
       view.innerHTML = items.map((item) => `<span class="prop-item">${inlineHtml(item)}</span>`).join('');
       view.classList.toggle('is-list', property.type === 'list');
-      options.decorate(view);
+      field.decorate(view);
     }
     view.addEventListener('click', (event) => {
       const link = (event.target as HTMLElement).closest<HTMLElement>('.td-wikilink');
       if (link) {
+        // Inside a note's preview, its own link handling mustn't run as well.
         event.preventDefault();
-        options.openLink(link.dataset.target || '');
+        event.stopPropagation();
+        field.openLink(link.dataset.target || '');
         return;
       }
       edit();
@@ -244,10 +274,10 @@ function textControl(property: Property & ({ type: 'text' } | { type: 'list' }),
     input.spellcheck = false;
     input.setAttribute('aria-label', property.key);
     if (property.type === 'list') input.placeholder = 'Comma, separated, items';
-    const suggestions = options.valueSuggestions(property.key);
+    const suggestions = field.suggestions();
     if (suggestions.length) {
       const list = el('datalist');
-      list.id = `td-prop-values-${index}`;
+      list.id = field.listId;
       list.append(...suggestions.map((v) => Object.assign(document.createElement('option'), { value: v })));
       holder.append(list);
       input.setAttribute('list', list.id);
@@ -258,7 +288,7 @@ function textControl(property: Property & ({ type: 'text' } | { type: 'list' }),
       done = true;
       const next = keep ? parseInput(property.type, input.value) : null;
       if (next && valueText(next) !== valueText(property)) {
-        if (await options.save(property.key, next)) return;
+        if (await field.save(next)) return;
       }
       show();
     };

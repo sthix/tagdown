@@ -234,6 +234,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: '## Due this week\n\n<query status=active due=..today+7 sort:due />\n\n## Unowned projects\n\n<query tag:project -has:owner />'
       },
       {
+        title: 'Table views',
+        description: 'show:table lists the matching notes as a table with a column per property. Edit a cell to change that note’s property, click a header to sort, × hides a column and + adds one (the query’s sort: and columns: change with it), and + New note adds a note that already matches the filters. columns:status,due,updated picks the columns; updated, created, folder and tags are the note’s own.',
+        syntax: '<query tag:project show:table columns:status,owner,due sort:due />'
+      },
+      {
         title: 'Math (KaTeX)',
         description: 'Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.',
         syntax: 'Inline math like $E = mc^2$ or:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$'

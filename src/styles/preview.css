@@ -921,6 +921,85 @@
   text-decoration: none;
 }
 .preview .td-query-note:hover { color: var(--pv-accent); text-decoration: underline; }
+.preview .td-qt-scroll { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.preview .td-query-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+.preview .td-query-table th {
+  position: relative;
+  padding: 4px 8px 6px;
+  border-bottom: .5px solid var(--pv-rule);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-align: left;
+  white-space: nowrap;
+}
+.preview .td-query-table td {
+  padding: 3px 8px;
+  border-bottom: .5px solid var(--pv-rule-soft);
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+.preview .td-query-table tr:last-child td { border-bottom: 0; }
+.preview .td-query-table .td-qt-title { min-width: 120px; }
+.preview .td-query-table .td-qt-builtin { color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.preview .td-query-table td[data-type="number"] { font-variant-numeric: tabular-nums; }
+.preview .td-qt-head {
+  display: inline-flex; align-items: center; gap: 3px;
+  border: 0; padding: 2px 4px; margin: -2px -4px;
+  border-radius: 5px; background: none;
+  color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
+}
+.preview .td-qt-head:hover { background: var(--chip-bg); color: var(--ink); }
+.preview .td-qt-arrow { color: var(--pv-accent); }
+.preview .td-qt-hide {
+  margin-left: 2px; border: 0; padding: 0 3px; border-radius: 4px;
+  background: none; color: var(--ink-3); font-size: 12px; line-height: 1;
+  opacity: 0; cursor: pointer;
+}
+.preview .td-query-table th:hover .td-qt-hide, .preview .td-qt-hide:focus-visible { opacity: 1; }
+.preview .td-qt-hide:hover { background: var(--chip-bg); color: var(--ink); }
+.preview .td-qt-add { width: 1%; }
+.preview .td-qt-add > button {
+  width: 20px; height: 20px; border: 0; border-radius: 5px; padding: 0;
+  background: none; color: var(--ink-3); font-size: 14px; line-height: 1; cursor: pointer;
+}
+.preview .td-qt-add > button:hover { background: var(--chip-bg); color: var(--ink); }
+.preview .td-qt-menu {
+  position: absolute; top: calc(100% + 2px); right: 0; z-index: 20;
+  min-width: 160px; max-height: 260px; overflow: auto; padding: 5px;
+  background: var(--bg-dialog); border-radius: 10px; box-shadow: var(--shadow-lg);
+  text-transform: none; letter-spacing: 0;
+}
+.preview .td-qt-menu button {
+  display: flex; justify-content: space-between; gap: 12px; width: 100%;
+  border: 0; border-radius: 6px; padding: 5px 8px;
+  background: none; color: var(--ink); font: 13px var(--font-ui); text-align: left; cursor: pointer;
+}
+.preview .td-qt-menu button span { color: var(--ink-3); font-size: 11px; }
+.preview .td-qt-menu button:hover, .preview .td-qt-menu button:focus-visible { background: var(--chip-bg); outline: none; }
+/* Editable cells reuse the properties panel's fields, a little tighter. */
+.preview .td-query-table .prop-display { min-height: 24px; padding: 1px 4px; }
+.preview .td-query-table .prop-input { height: 24px; padding: 0 4px; color: var(--ink); }
+.preview .td-query-table .prop-input[type="number"] { width: 5.5em; }
+.preview .td-query-table .prop-input[type="date"] { width: 9.5em; }
+.preview .td-query-table .prop-text { min-width: 6em; }
+/* A cell the note has no value for: quiet until it's pointed at. */
+.preview .td-query-table .prop-input.is-blank:not(:focus):not(:hover) { color: transparent; }
+.preview .td-query-table .prop-input.is-blank:not(:focus):not(:hover)::-webkit-calendar-picker-indicator { opacity: 0; }
+.preview .td-query-table input[type="checkbox"] { margin: 0 4px; accent-color: var(--accent-soft); }
+.preview .td-qt-new { margin-top: 4px; }
+.preview .td-qt-new button {
+  height: 24px; border: 0; border-radius: 6px; padding: 0 8px 0 6px;
+  background: none; color: var(--ink-3); font: 12px var(--font-ui); cursor: pointer;
+}
+.preview .td-qt-new button:hover { background: var(--chip-bg); color: var(--ink); }
+.preview .td-qt-new .prop-input { max-width: 280px; }
 .preview .td-query-props { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .preview .td-query-prop {
   padding: 0 7px; border-radius: 9px;

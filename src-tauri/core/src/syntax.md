@@ -400,6 +400,14 @@ Typed fields under a note’s title (Add property, or ⌘K). They live in the no
 <query tag:project -has:owner />
 ```
 
+### Table views
+
+show:table lists the matching notes as a table with a column per property. Edit a cell to change that note’s property, click a header to sort, × hides a column and + adds one (the query’s sort: and columns: change with it), and + New note adds a note that already matches the filters. columns:status,due,updated picks the columns; updated, created, folder and tags are the note’s own.
+
+```tagdown
+<query tag:project show:table columns:status,owner,due sort:due />
+```
+
 ### Math (KaTeX)
 
 Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.

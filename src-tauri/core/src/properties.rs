@@ -88,7 +88,8 @@ fn raw_value(entry: &str) -> String {
     entry.split_once(':').map_or("", |(_, v)| v).trim_start_matches(' ').to_string()
 }
 
-fn parse_scalar(value: &str) -> PropertyValue {
+/// A one-line value as YAML reads it: `2` is a number, `"2"` text, and so on.
+pub fn parse_scalar(value: &str) -> PropertyValue {
     if value.starts_with('"') || value.starts_with('\'') {
         return PropertyValue::Text(unquote(value));
     }

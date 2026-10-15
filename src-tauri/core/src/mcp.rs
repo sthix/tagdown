@@ -197,7 +197,10 @@ impl Server {
                 let shown = out.notes.len().max(out.tasks.len());
                 let mut text = String::new();
                 for n in &out.notes {
-                    text.push_str(&format!("- \"{}\" (id: {}{})\n", n.title, n.id, n.folder.as_ref().map(|f| format!(", folder: {f}")).unwrap_or_default()));
+                    // The properties the query names (or a table's columns), so a table reads as one.
+                    let props: Vec<String> = out.columns.iter().filter_map(|c| n.properties.iter().find(|p| p.key.eq_ignore_ascii_case(c))).map(|p| format!("{}: {}", p.key, p.value.display())).collect();
+                    let props = if props.is_empty() { String::new() } else { format!(" — {}", props.join("; ")) };
+                    text.push_str(&format!("- \"{}\" (id: {}{}){props}\n", n.title, n.id, n.folder.as_ref().map(|f| format!(", folder: {f}")).unwrap_or_default()));
                 }
                 for t in &out.tasks {
                     text.push_str(&format!("- [{}] {} — \"{}\" (id: {}, line {})\n", if t.done { "x" } else { " " }, t.text, t.note_title, t.note_id, t.line));
@@ -319,7 +322,7 @@ fn tools() -> Value {
         {
             "name": "run_query",
             "title": "Run query",
-            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks, status:open|done|all, sort:updated|created|title, folder:Name, limit:N. Empty lists recent notes.",
+            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks|table, status:open|done|all, sort:updated|created|title|<property>|-<property>, folder:Name, limit:N, columns:a,b, and property filters key=value, key!=value, key=lo..hi (numbers or dates; today+N), has:key. Empty lists recent notes.",
             "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "e.g. tag:project show:tasks" } } },
             "annotations": read_only,
         },

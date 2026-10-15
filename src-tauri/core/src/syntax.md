@@ -249,12 +249,11 @@ Vault :: A local folder of .md files
 
 ### Explicit defs tag
 
-Use <defs> when you want definition-list parsing in a specific block.
+Wrap entries in <defs> to make a list even from a single entry, which auto-detection leaves as plain text.
 
 ```tagdown
 <defs>
-Term :: Description
-Second term :: Another description
+API :: Application programming interface
 </defs>
 ```
 

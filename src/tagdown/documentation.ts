@@ -152,8 +152,8 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Explicit defs tag',
-        description: 'Use <defs> when you want definition-list parsing in a specific block.',
-        syntax: '<defs>\nTerm :: Description\nSecond term :: Another description\n</defs>'
+        description: 'Wrap entries in <defs> to make a list even from a single entry, which auto-detection leaves as plain text.',
+        syntax: '<defs>\nAPI :: Application programming interface\n</defs>'
       }
     ]
   },

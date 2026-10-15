@@ -131,6 +131,7 @@ impl Vault {
             created: now,
             updated: now,
             journal,
+            extra: Vec::new(),
         };
         self.write_note(&self.path_for_new_note(&meta), &write_frontmatter(&meta, content))?;
         Ok(note_from_meta(meta, content))
@@ -221,7 +222,7 @@ impl Vault {
         for title in ["Welcome to Tagdown", "Tagdown Cheat Sheet", "Your First Note"] {
             let now = Utc::now();
             let id = Uuid::new_v4().to_string();
-            let meta = NoteFrontmatter { id: id.clone(), title: title.into(), tags: Vec::new(), starred: false, folder_id: None, created: now, updated: now, journal: None };
+            let meta = NoteFrontmatter { id: id.clone(), title: title.into(), tags: Vec::new(), starred: false, folder_id: None, created: now, updated: now, journal: None, extra: Vec::new() };
             let content = format!("# {}\n\nStart writing in Tagdown.", title);
             fs::write(root.join(format!("note-{id}.{NOTE_EXT}")), write_frontmatter(&meta, &content)).map_err(|e| e.to_string())?;
         }

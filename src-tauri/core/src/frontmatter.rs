@@ -22,21 +22,54 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
     let mut created = None;
     let mut updated = None;
     let mut journal = None;
+    let mut extra: Vec<String> = Vec::new();
+    // What the previous top-level line was, so indented or `- ` lines after
+    // it are read as part of the same entry.
+    enum Owner { None, Tags, Extra, Known }
+    let mut owner = Owner::None;
 
     for line in meta.lines() {
-        let Some((key, value)) = line.split_once(':') else { continue; };
+        if is_continuation(line) {
+            match owner {
+                // Comments and blank lines are kept on their own; anything
+                // else under a managed key is rewritten with that key.
+                _ if is_comment_or_blank(line) => extra.push(line.to_string()),
+                Owner::Extra => if let Some(entry) = extra.last_mut() {
+                    entry.push('\n');
+                    entry.push_str(line);
+                },
+                Owner::Tags => if let Some(item) = line.trim_start().strip_prefix('-') {
+                    let tag = item.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+                    if !tag.is_empty() { tags.push(tag); }
+                },
+                Owner::Known | Owner::None => {}
+            }
+            continue;
+        }
+        let Some((key, value)) = line.split_once(':') else {
+            extra.push(line.to_string());
+            owner = Owner::Extra;
+            continue;
+        };
         let key = key.trim();
         let value = value.trim();
+        owner = Owner::Known;
         match key {
             "id" => id = Some(value.to_string()),
             "title" => title = Some(value.to_string()),
-            "tags" => tags = parse_tags(value),
+            "tags" => {
+                tags = parse_tags(value);
+                owner = Owner::Tags;
+            }
             "starred" => starred = value == "true",
             "folder_id" => if value != "null" && !value.is_empty() { folder_id = Some(value.to_string()); },
             "created" => created = Some(parse_date(value)?),
             "updated" => updated = Some(parse_date(value)?),
             "journal" => journal = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok(),
-            _ => {}
+            _ => {
+                extra.push(line.to_string());
+                owner = Owner::Extra;
+            }
         }
     }
 
@@ -49,6 +82,7 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
         created: created.ok_or("frontmatter missing created")?,
         updated: updated.ok_or("frontmatter missing updated")?,
         journal,
+        extra,
     }, content))
 }
 
@@ -60,8 +94,9 @@ pub fn write_frontmatter(meta: &NoteFrontmatter, content: &str) -> String {
     };
     // Only journal pages carry a `journal:` line, so other notes stay as they were.
     let journal = meta.journal.map(|day| format!("journal: {}\n", day.format("%Y-%m-%d"))).unwrap_or_default();
+    let extra: String = meta.extra.iter().map(|entry| format!("{entry}\n")).collect();
     format!(
-        "---\nid: {}\ntitle: {}\ntags: {}\nstarred: {}\nfolder_id: {}\ncreated: {}\nupdated: {}\n{journal}---\n\n{}",
+        "---\nid: {}\ntitle: {}\ntags: {}\nstarred: {}\nfolder_id: {}\ncreated: {}\nupdated: {}\n{journal}{extra}---\n\n{}",
         meta.id,
         meta.title.replace('\n', " "),
         tags,
@@ -71,6 +106,19 @@ pub fn write_frontmatter(meta: &NoteFrontmatter, content: &str) -> String {
         meta.updated.to_rfc3339(),
         content.trim_start()
     )
+}
+
+/// Lines that belong to the entry above them: indented values, YAML list
+/// items, comments and blank lines.
+fn is_continuation(line: &str) -> bool {
+    line.starts_with([' ', '\t'])
+        || line == "-"
+        || line.starts_with("- ")
+        || is_comment_or_blank(line)
+}
+
+fn is_comment_or_blank(line: &str) -> bool {
+    line.starts_with('#') || line.trim().is_empty()
 }
 
 fn parse_tags(value: &str) -> Vec<String> {
@@ -175,6 +223,37 @@ mod tests {
         let (meta, content) = split_frontmatter(raw).unwrap();
         assert_eq!(meta.journal, NaiveDate::from_ymd_opt(2026, 10, 13));
         assert_eq!(write_frontmatter(&meta, &content), raw);
+    }
+
+    #[test]
+    fn custom_entries_survive_a_save() {
+        let raw = "---\nid: abc\ntitle: Atlas\ntags: []\nstarred: false\nfolder_id: null\ncreated: 2026-10-13T09:14:22+00:00\nupdated: 2026-10-13T10:14:22+00:00\nstatus: active\n# reviewed weekly\nattendees:\n  - Alex\n  - Sam\nsource:\n  url: https://example.com\n  id: not-the-note-id\n---\n\n# Atlas\n";
+        let (meta, content) = split_frontmatter(raw).unwrap();
+        assert_eq!(meta.id, "abc");
+        assert_eq!(meta.extra, vec![
+            "status: active",
+            "# reviewed weekly",
+            "attendees:\n  - Alex\n  - Sam",
+            "source:\n  url: https://example.com\n  id: not-the-note-id",
+        ]);
+        assert_eq!(write_frontmatter(&meta, &content), raw);
+    }
+
+    #[test]
+    fn custom_entries_follow_the_managed_ones() {
+        let raw = "---\nauthor: Ursula\nid: abc\ntitle: Book\ntags: []\nstarred: false\nfolder_id: null\ncreated: 2026-10-13T09:14:22+00:00\nupdated: 2026-10-13T10:14:22+00:00\n---\n\n# Book\n";
+        let (meta, content) = split_frontmatter(raw).unwrap();
+        let written = write_frontmatter(&meta, &content);
+        assert!(written.contains("updated: 2026-10-13T10:14:22+00:00\nauthor: Ursula\n---"));
+        assert_eq!(split_frontmatter(&written).unwrap().0.extra, vec!["author: Ursula"]);
+    }
+
+    #[test]
+    fn reads_block_list_tags() {
+        let raw = "---\nid: abc\ntitle: T\ntags:\n  - one\n  - \"two\"\nstarred: false\nfolder_id: null\ncreated: 2026-10-13T09:14:22+00:00\nupdated: 2026-10-13T10:14:22+00:00\n---\n\n# T\n";
+        let (meta, _) = split_frontmatter(raw).unwrap();
+        assert_eq!(meta.tags, vec!["one", "two"]);
+        assert!(meta.extra.is_empty());
     }
 
     #[test]

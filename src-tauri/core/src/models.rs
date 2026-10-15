@@ -103,4 +103,7 @@ pub struct NoteFrontmatter {
     pub created: DateTime<Utc>,
     pub updated: DateTime<Utc>,
     pub journal: Option<NaiveDate>,
+    /// Frontmatter entries Tagdown doesn't manage, kept verbatim (one entry
+    /// per item, continuation lines included) so saving never drops them.
+    pub extra: Vec<String>,
 }

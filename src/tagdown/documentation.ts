@@ -131,7 +131,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       {
         title: 'GitHub-style aliases',
         description: 'note maps to info, warning/caution to warn, important to tip, danger to error.',
-        syntax: '::: warning Heads up\nAlias for ::: warn.\n:::'
+        syntax: '::: warning Heads up\nSame as `::: warn`.\n:::'
       }
     ]
   },

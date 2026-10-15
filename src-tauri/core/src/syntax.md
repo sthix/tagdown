@@ -219,7 +219,7 @@ note maps to info, warning/caution to warn, important to tip, danger to error.
 
 ```tagdown
 ::: warning Heads up
-Alias for ::: warn.
+Same as `::: warn`.
 :::
 ```
 

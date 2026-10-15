@@ -65,6 +65,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: 'See [[Welcome]] or [[Welcome|the intro]].'
       },
       {
+        title: 'Block references',
+        description: 'End a paragraph, list item, task or heading with ^id to name it, then link to it with [[Title#^id]] or show its current text with ![[Title#^id]]. The ^id marker is hidden in the preview. "Copy link to block" (in the / menu and ⌘K) adds an id and copies the link for you.',
+        syntax: '- [ ] Ship the beta ^beta1\n\nSee [[Welcome#^beta1]].'
+      },
+      {
         title: 'Smart typography',
         description: 'Straight quotes curl, -- becomes en-dash, --- becomes em-dash, ... becomes ellipsis.',
         syntax: '"Hello" --- this is a test... 1990--2020.'

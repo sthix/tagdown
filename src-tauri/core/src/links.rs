@@ -1,7 +1,12 @@
-// Wikilinks: `[[Title]]`, `[[Title#Heading]]`, `[[Title|label]]`.
+// Wikilinks: `[[Title]]`, `[[Title#Heading]]`, `[[Title|label]]`, and block
+// references `[[Title#^id]]` (embedded with `![[Title#^id]]`).
 //
 // A link points at a note by title, compared case-insensitively. Links inside
 // fenced code blocks and inline code are text, not links.
+//
+// A block is addressed by a plain-text marker at the end of its line, the way
+// Obsidian writes them: `Some paragraph ^ab12cd`, `- [ ] a task ^ab12cd`. The
+// marker travels with the text, so the id survives edits and moves.
 
 use serde::Serialize;
 
@@ -20,6 +25,25 @@ pub struct Wikilink {
     pub target: String,
     pub anchor: Option<String>,
     pub label: Option<String>,
+}
+
+impl Wikilink {
+    /// The block id of a `[[Title#^id]]` link.
+    pub fn block_id(&self) -> Option<&str> {
+        self.anchor.as_deref().and_then(|a| a.strip_prefix('^')).filter(|id| is_block_id(id))
+    }
+}
+
+/// A block found by its `^id` marker.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Block {
+    pub id: String,
+    /// Line range `[start, end)` in the content.
+    pub start_line: usize,
+    pub end_line: usize,
+    /// The block's source, dedented, with its own `^id` marker removed.
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -120,6 +144,113 @@ pub fn rename_links(content: &str, old_title: &str, new_title: &str) -> Option<S
     }
     out.push_str(&content[at..]);
     Some(out)
+}
+
+fn is_block_id(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+/// The `^id` marker ending `line` (after whitespace), and the byte where the
+/// whitespace before it starts.
+pub fn block_marker(line: &str) -> Option<(&str, usize)> {
+    let trimmed = line.trim_end();
+    let caret = trimmed.rfind('^')?;
+    let id = &trimmed[caret + 1..];
+    if !is_block_id(id) {
+        return None;
+    }
+    let before = &trimmed[..caret];
+    if caret > 0 && !before.ends_with([' ', '\t']) {
+        return None;
+    }
+    Some((id, before.trim_end().len()))
+}
+
+fn is_list_item(line: &str) -> bool {
+    let rest = line.trim_start();
+    if ["- ", "* ", "+ "].iter().any(|m| rest.starts_with(m)) {
+        return true;
+    }
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    digits > 0 && (rest[digits..].starts_with(". ") || rest[digits..].starts_with(") "))
+}
+
+fn is_heading(line: &str) -> bool {
+    let hashes = line.chars().take_while(|c| *c == '#').count();
+    (1..=6).contains(&hashes) && line[hashes..].starts_with(' ')
+}
+
+/// A line that ends a paragraph above it, or isn't paragraph text at all.
+fn breaks_paragraph(line: &str) -> bool {
+    let t = line.trim_start();
+    t.is_empty() || is_heading(line) || is_list_item(line) || line.starts_with([' ', '\t'])
+        || ["```", "~~~", ":::", "$$", "|", "<", "---"].iter().any(|p| t.starts_with(p))
+}
+
+/// The block in `content` marked `^id` (compared case-insensitively), outside
+/// code fences. A list item or task brings the lines nested under it; a
+/// paragraph is the run of text lines ending in the marker; a heading is its
+/// line.
+pub fn find_block(content: &str, id: &str) -> Option<Block> {
+    let lines: Vec<&str> = content.split('\n').collect();
+    let mut in_fence: Option<&str> = None;
+    let mut at = None;
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        let fence = ["```", "~~~"].into_iter().find(|f| trimmed.starts_with(f));
+        match (in_fence, fence) {
+            (None, Some(f)) => { in_fence = Some(f); continue; }
+            (Some(open), Some(f)) if open == f => { in_fence = None; continue; }
+            (Some(_), _) => continue,
+            _ => {}
+        }
+        if block_marker(line).is_some_and(|(found, _)| found.eq_ignore_ascii_case(id)) {
+            at = Some(i);
+            break;
+        }
+    }
+    let at = at?;
+    let line = lines[at];
+    let (start, end) = if is_list_item(line) {
+        let depth = indent_width(line);
+        let children = lines[at + 1..]
+            .iter()
+            .take_while(|l| !l.trim().is_empty() && indent_width(l) > depth)
+            .count();
+        (at, at + 1 + children)
+    } else if is_heading(line) || breaks_paragraph(line) {
+        (at, at + 1)
+    } else {
+        let mut start = at;
+        while start > 0 && !breaks_paragraph(lines[start - 1]) {
+            start -= 1;
+        }
+        (start, at + 1)
+    };
+    let (_, cut) = block_marker(line)?;
+    let depth = indent_width(lines[start]);
+    let text = lines[start..end]
+        .iter()
+        .enumerate()
+        .map(|(k, l)| {
+            let l = if start + k == at { &l[..cut] } else { l };
+            let l = l.replace('\t', "  ");
+            let skip = l.len() - l.trim_start_matches(' ').len();
+            l[skip.min(depth)..].to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(Block { id: block_marker(line)?.0.to_string(), start_line: start, end_line: end, text })
+}
+
+/// The note titled `title` among `notes` and its block `^id`. Archived notes
+/// are left out.
+pub fn resolve_block(notes: Vec<(Note, String)>, title: &str, id: &str) -> Option<(Note, Block)> {
+    let wanted = normalize_title(title);
+    notes
+        .into_iter()
+        .filter(|(note, _)| note.folder_id.as_deref() != Some("archive") && normalize_title(&note.title) == wanted)
+        .find_map(|(note, content)| find_block(&content, id).map(|block| (note, block)))
 }
 
 /// Notes in `notes` that link to the note `id`, most recently edited first.
@@ -234,6 +365,56 @@ mod tests {
             "[[New Title]] and [[New Title#Part|label]] but not [[Older]] or `[[Old Title]]`"
         );
         assert_eq!(rename_links("no links here", "Old Title", "New"), None);
+    }
+
+    #[test]
+    fn block_links_carry_their_id() {
+        let links = parse_wikilinks("[[Plan#^ab12cd]] ![[Plan#^x-1|quoted]] [[Plan#Setup]] [[Plan#^]]");
+        let ids: Vec<_> = links.iter().map(|l| l.block_id()).collect();
+        assert_eq!(ids, vec![Some("ab12cd"), Some("x-1"), None, None]);
+        assert_eq!(rename_links("![[Plan#^ab12cd]]", "plan", "Roadmap").unwrap(), "![[Roadmap#^ab12cd]]");
+    }
+
+    #[test]
+    fn block_markers_need_a_space_before_them() {
+        assert_eq!(block_marker("Text ^ab12cd"), Some(("ab12cd", 4)));
+        assert_eq!(block_marker("- [ ] task\t^id-2  "), Some(("id-2", 10)));
+        assert_eq!(block_marker("^solo"), Some(("solo", 0)));
+        assert_eq!(block_marker("x^2"), None);
+        assert_eq!(block_marker("2^10 ^"), None);
+        assert_eq!(block_marker("a ^b^"), None);
+        assert_eq!(block_marker("[[Note#^ab]]"), None);
+    }
+
+    #[test]
+    fn finds_paragraphs_by_their_last_line() {
+        let content = "# Title\n\nFirst line\nsecond line ^para1\n\nOther";
+        let block = find_block(content, "PARA1").unwrap();
+        assert_eq!(block, Block { id: "para1".into(), start_line: 2, end_line: 4, text: "First line\nsecond line".into() });
+        assert_eq!(find_block(content, "nope"), None);
+    }
+
+    #[test]
+    fn finds_list_items_with_their_children() {
+        let content = "- one\n  - [ ] two ^t2\n    - three\n  - four\n- five";
+        let block = find_block(content, "t2").unwrap();
+        assert_eq!((block.start_line, block.end_line), (1, 3));
+        assert_eq!(block.text, "- [ ] two\n  - three");
+    }
+
+    #[test]
+    fn finds_headings_and_skips_code() {
+        let content = "```\nfake ^h1\n```\n## Setup ^h1\nbody";
+        let block = find_block(content, "h1").unwrap();
+        assert_eq!((block.start_line, block.text.as_str()), (3, "## Setup"));
+    }
+
+    #[test]
+    fn a_moved_block_keeps_its_id() {
+        let before = "Intro\n\n- keep me ^k1\n\nOutro";
+        let after = "- keep me, edited ^k1\n\nIntro\n\nOutro";
+        assert_eq!(find_block(before, "k1").unwrap().text, "- keep me");
+        assert_eq!(find_block(after, "k1").unwrap().text, "- keep me, edited");
     }
 
     #[test]

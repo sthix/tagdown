@@ -342,6 +342,41 @@
 .preview .td-wikilink.is-missing { color: var(--pv-ink-soft); border-bottom-color: var(--pv-rule); }
 .preview .td-wikilink.is-missing:hover { color: var(--pv-accent); border-bottom-color: var(--pv-accent); }
 
+/* ---- Block references ---- */
+/* `^id` markers are anchors only; the text reads as if they weren't there. */
+.preview .td-block-id { display: none; }
+/* [[Note#^id]] reads as the note's title, with a pilcrow for the block. */
+.preview .td-blockref::after { content: " ¶⟧"; }
+/* The block a link just jumped to. */
+.preview .is-block-target { animation: td-block-target 1.8s ease-out; border-radius: 4px; }
+@keyframes td-block-target {
+  0%, 35% { background: var(--accent-tint-strong); box-shadow: 0 0 0 4px var(--accent-tint-strong); }
+  100% { background: transparent; box-shadow: 0 0 0 4px transparent; }
+}
+/* ![[Note#^id]]: the block's current text, read-only, with its note as source. */
+.preview .td-transclusion {
+  display: block;
+  margin: 0.6em 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--pv-rule);
+}
+.preview .td-transclusion-body { display: block; }
+.preview .td-transclusion-body > :first-child { margin-top: 0.2em; }
+.preview .td-transclusion-body > :last-child { margin-bottom: 0.2em; }
+.preview .td-transclusion-source {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--ink-3);
+  border-bottom: 0;
+}
+.preview .td-transclusion-source::before, .preview .td-transclusion-source::after { content: none; }
+.preview .td-transclusion-source:hover { color: var(--pv-accent); background: none; }
+.preview .td-transclusion-note { color: var(--pv-ink-soft); font-size: 0.92em; }
+.preview .td-transclusion.is-missing { border-left-style: dashed; }
+/* Too deep, or an embed of itself: just the link. */
+.preview .td-transclusion.is-cut .td-transclusion-body { display: none; }
+
 /* ---- Footnotes ---- */
 .preview .td-fn-ref { font-size: 0.7em; margin-left: 2px; }
 .preview .td-fn-ref a {

@@ -19,6 +19,8 @@ import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask } from '.
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
+import { blockIds, blockReference, ensureBlockId } from './blockRefs';
+import { fillBlockEmbeds } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
@@ -419,6 +421,8 @@ function paletteActions(): PaletteAction[] {
       { id: 'export-pdf', label: 'Print or save as PDF…', shortcut: '⌘P', icon: uiIcon('printer', 15), run: exportNotePdf },
       { id: 'publish', label: 'Publish as website…', hint: 'Notes as web pages for any host', icon: uiIcon('globe', 15), run: showPublish },
       { id: 'present', label: 'Present as slides', hint: 'Each --- starts a new slide', shortcut: '⌥⌘P', icon: uiIcon('play', 15), run: presentNote },
+      { id: 'block-link', label: 'Copy link to block', hint: 'A [[link]] to the block at the caret', icon: uiIcon('share', 15), run: () => copyBlockReference(false) },
+      { id: 'block-embed', label: 'Copy block embed', hint: 'Shows the block’s current text in another note', icon: uiIcon('share', 15), run: () => copyBlockReference(true) },
       { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
       { id: 'history', label: 'Show version history', hint: 'Restore an earlier version of this note', shortcut: '⌘⇧H', icon: uiIcon('clock', 15), run: showVersionHistory },
     ] : []),
@@ -1222,12 +1226,18 @@ async function followWikilink(target: string) {
   // A link to a date is a link to that day's journal page.
   if (!note && isDayKey(title)) {
     await openJournal(title);
-    if (anchor) scrollToHeading(anchor);
+    if (anchor) scrollToAnchor(anchor);
     return;
   }
   if (!note) note = await createNoteTitled(title);
   if (note.id !== selectedNote?.id) await revealNote(note.id);
-  if (anchor) scrollToHeading(anchor);
+  if (anchor) scrollToAnchor(anchor);
+}
+
+/** `#Heading` scrolls to a heading, `#^id` to the block marked `^id`. */
+function scrollToAnchor(anchor: string) {
+  if (anchor.startsWith('^')) scrollToBlock(anchor.slice(1));
+  else scrollToHeading(anchor);
 }
 
 /** A link to a note that doesn't exist yet creates it, next to the current one. */
@@ -1246,6 +1256,90 @@ function scrollToHeading(anchor: string) {
   const headings = Array.from(editorRoot.querySelectorAll<HTMLElement>('.preview :is(h1, h2, h3, h4, h5, h6)'));
   const heading = headings.find((h) => h.id === anchor || normalizeTitle(h.textContent || '') === wanted);
   heading?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+function scrollToBlock(id: string) {
+  const wanted = id.toLowerCase();
+  const marker = Array.from(editorRoot.querySelectorAll<HTMLElement>('.preview [data-block-id]'))
+    .find((el) => el.dataset.blockId?.toLowerCase() === wanted && !el.closest('.td-transclusion'));
+  const block = marker?.closest<HTMLElement>('li, p, h1, h2, h3, h4, h5, h6, .td-block');
+  if (!block) {
+    showNotice(`No block ^${id} in this note`);
+    return;
+  }
+  block.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  block.classList.remove('is-block-target');
+  void block.offsetWidth; // restart the highlight
+  block.classList.add('is-block-target');
+  block.addEventListener('animationend', () => block.classList.remove('is-block-target'), { once: true });
+}
+
+// ---- Block references ----
+
+/** The note line the caret was last on, in the block editor or the source. */
+let caretLine: number | null = null;
+
+function rememberCaret(textarea: HTMLTextAreaElement) {
+  const line = textarea.value.slice(0, textarea.selectionStart).split('\n').length - 1;
+  if (textarea.id === 'source') caretLine = line;
+  else if (blockEdit?.el === textarea) caretLine = blockEdit.start + line;
+}
+
+/**
+ * Copy `[[Title#^id]]` (or its `![[…]]` embed) for the block at the caret,
+ * first giving the block an id when it has none. Only that block's line changes.
+ */
+async function copyBlockReference(embed = false) {
+  if (!selectedNote) return;
+  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const editing = blockEdit?.el ?? (source && document.activeElement === source ? source : null);
+  let id: string | null = null;
+  if (editing) {
+    const caret = editing.selectionStart;
+    const result = ensureBlockId(editing.value, caret, blockIds(content));
+    if (result?.changed) {
+      editing.value = result.text;
+      editing.setSelectionRange(caret, caret);
+      editing.dispatchEvent(new Event('input'));
+    }
+    id = result?.id ?? null;
+  } else if (caretLine !== null) {
+    const offset = content.split('\n').slice(0, caretLine).join('\n').length + (caretLine ? 1 : 0);
+    const result = ensureBlockId(content, offset, blockIds(content));
+    if (result?.changed) {
+      content = result.text;
+      syncSourceTextarea();
+      scheduleSave();
+      const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+      if (preview) paintPreview(preview);
+    }
+    id = result?.id ?? null;
+  }
+  if (!id) {
+    await message('Click into a paragraph, list item, task or heading first, then copy the reference again.', { title: 'No block to link to', kind: 'info' });
+    return;
+  }
+  const reference = blockReference(selectedNote.title || 'Untitled', id, embed);
+  await copyText(reference);
+  showNotice(`Copied ${reference}`);
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Older WebKit without clipboard access outside a gesture.
+    const active = document.activeElement as HTMLElement | null;
+    const scratch = document.createElement('textarea');
+    scratch.value = text;
+    scratch.style.position = 'fixed';
+    scratch.style.opacity = '0';
+    document.body.append(scratch);
+    scratch.select();
+    document.execCommand('copy');
+    scratch.remove();
+    active?.focus({ preventScroll: true });
+  }
 }
 
 async function loadBacklinks(id: string) {
@@ -1314,7 +1408,14 @@ function paintPreview(el: HTMLElement) {
   markDocTitle(el);
   markWikilinks(el);
   void fillQueries(el, { excludeId: selectedNote?.id ?? null });
+  void fillBlockEmbeds(el, decorateEmbed);
   void applyExternals(el, getEffectiveTheme());
+}
+
+function decorateEmbed(body: HTMLElement) {
+  resolveLocalImages(body);
+  markWikilinks(body);
+  void applyExternals(body, getEffectiveTheme());
 }
 
 // The document header already shows the note title in large type; hide the
@@ -1550,6 +1651,7 @@ function commitBlockEdit() {
 
 function renderEditor() {
   blockEdit = null;
+  caretLine = null;
   const title = selectedNote?.title || 'Untitled';
   const preview = '<div class="preview td-note-root"></div>';
   const textarea = `<textarea id="source" spellcheck="${getPreference('spellcheck')}" placeholder="${SLASH_HINT}" aria-label="Tagdown source">${escapeHtml(content)}</textarea>`;
@@ -1808,7 +1910,7 @@ function renderEditor() {
     if (target.matches('.td-task input[type="checkbox"]')) {
       const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
       if (!preview) return;
-      const all = Array.from(preview.querySelectorAll<HTMLInputElement>('.td-task input[type="checkbox"]'));
+      const all = Array.from(preview.querySelectorAll<HTMLInputElement>('.td-task input[type="checkbox"]')).filter((box) => !box.closest('.td-transclusion'));
       const idx = all.indexOf(target as HTMLInputElement);
       if (idx >= 0) toggleTaskAt(idx);
       return;
@@ -1862,6 +1964,11 @@ function attachEditingAids(textarea: HTMLTextAreaElement) {
   attachSlashCommands(textarea);
   attachListEditing(textarea);
   attachImageInput(textarea);
+  for (const type of ['keyup', 'mouseup', 'input', 'focus']) textarea.addEventListener(type, () => rememberCaret(textarea));
+  textarea.addEventListener('tagdown:pick', (event) => {
+    const pick = (event as CustomEvent<string>).detail;
+    if (pick === 'block-link' || pick === 'block-embed') void copyBlockReference(pick === 'block-embed');
+  });
 }
 
 let pickingImages = false;
@@ -1885,7 +1992,8 @@ function attachImageInput(textarea: HTMLTextAreaElement) {
     event.stopPropagation();
     void add(files);
   });
-  textarea.addEventListener('tagdown:pick', () => {
+  textarea.addEventListener('tagdown:pick', (event) => {
+    if ((event as CustomEvent<string>).detail !== 'image') return;
     pickingImages = true;
     pickImages()
       .then((paths) => insertFigures(textarea, paths))
@@ -2167,6 +2275,15 @@ async function exportNotePdf() {
   }
 }
 
+/** A message the status line shows for a few seconds over the save state. */
+let notice: { text: string; until: number } | null = null;
+
+function showNotice(text: string) {
+  notice = { text, until: Date.now() + 4000 };
+  renderStatus();
+  window.setTimeout(renderStatus, 4100);
+}
+
 function renderStatus() {
   const countsEl = document.querySelector<HTMLSpanElement>('#counts');
   const savedEl = document.querySelector<HTMLSpanElement>('#saved');
@@ -2174,8 +2291,9 @@ function renderStatus() {
   if (countsEl) countsEl.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
   if (!savedEl) return;
   const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Ready' ? 'idle' : 'saved';
+  const shown = notice && Date.now() < notice.until ? notice.text : state === 'idle' ? 'Saved to vault' : savedMessage;
   savedEl.className = `save-state is-${state}`;
-  savedEl.innerHTML = `<i aria-hidden="true"></i><span>${state === 'idle' ? 'Saved to vault' : escapeHtml(savedMessage)}</span>`;
+  savedEl.innerHTML = `<i aria-hidden="true"></i><span>${escapeHtml(shown)}</span>`;
 }
 
 function wordCount(value: string) {

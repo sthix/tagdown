@@ -30,7 +30,7 @@ export type SlashCommand = {
   keywords?: string[];
   /** The Markdown you could type instead, shown on the right. */
   shortcut?: string;
-} & ({ line: string } | { block: string } | { inline: string | (() => string) } | { pick: 'image' });
+} & ({ line: string } | { block: string } | { inline: string | (() => string) } | { pick: 'image' | 'block-link' | 'block-embed' });
 
 const day = (offset: number) => () => `[[${shiftDay(todayKey(), offset)}]]`;
 
@@ -71,6 +71,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'defs', label: 'Definition list', description: 'Term :: definition pairs', group: 'Code & math', icon: '::', keywords: ['glossary', 'terms', 'key value'], block: '{{Term}} :: Definition' },
 
   { id: 'link', label: 'Link to note', description: 'Wikilink to another note', group: 'Links & dates', icon: '[[', keywords: ['wikilink', 'page', 'reference', 'ref'], shortcut: '[[', inline: '[[{{}}]]' },
+  { id: 'block-link', label: 'Copy link to block', description: 'Copy a [[link]] to this block for another note', group: 'Links & dates', icon: '¶', keywords: ['block', 'reference', 'anchor', 'copy'], pick: 'block-link' },
+  { id: 'block-embed', label: 'Copy block embed', description: 'Copy an embed that shows this block elsewhere', group: 'Links & dates', icon: '❐', keywords: ['block', 'reference', 'transclude', 'quote', 'copy'], pick: 'block-embed' },
   { id: 'today', label: 'Today', description: `Link to today’s journal page`, group: 'Links & dates', icon: '☀', keywords: ['date', 'journal', 'now'], inline: day(0) },
   { id: 'tomorrow', label: 'Tomorrow', description: 'Link to tomorrow’s journal page', group: 'Links & dates', icon: '→', keywords: ['date', 'journal', 'next'], inline: day(1) },
   { id: 'yesterday', label: 'Yesterday', description: 'Link to yesterday’s journal page', group: 'Links & dates', icon: '←', keywords: ['date', 'journal', 'previous'], inline: day(-1) },

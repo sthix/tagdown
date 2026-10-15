@@ -396,11 +396,21 @@ function inline(text) {
     return ` MATH${mathSpans.length - 1} `;
   });
 
-  // 3. Wikilinks [[Note]] or [[Note|alias]] — internal references for notes apps
+  // 3a. Block embeds ![[Note#^id]] — a placeholder the app fills with the
+  //     block's current text.
+  s = s.replace(BLOCK_EMBED_RE, (_, target, alias) => blockEmbed(target.trim(), alias?.trim(), 'span'));
+
+  // 3b. A block id marker at a line end (`text ^ab12cd`) is an anchor for
+  //     `[[Note#^ab12cd]]`, not text.
+  s = s.replace(BLOCK_MARKER_RE, (_, lead, id) => `<span class="td-block-id" data-block-id="${id}"></span>`);
+
+  // 3c. Wikilinks [[Note]] or [[Note|alias]] — internal references for notes apps.
+  //     A block link [[Note#^id]] reads as the note's title.
   s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => {
     const t = target.trim();
-    const label = (alias || target).trim();
-    return `<a class="td-wikilink" href="#${encodeURIComponent(t)}" data-target="${esc(t)}">${label}</a>`;
+    const block = t.match(BLOCK_TARGET_RE);
+    const label = (alias || (block && block[1].trim()) || target).trim();
+    return `<a class="td-wikilink${block ? ' td-blockref' : ''}" href="#${encodeURIComponent(t)}" data-target="${caretSafe(esc(t))}">${label}</a>`;
   });
 
   // 4. Footnote references [^id]
@@ -452,6 +462,27 @@ function inline(text) {
   s = s.replace(/ CODE(\d+) /g, (_, n) => `<code>${codeSpans[+n]}</code>`);
 
   return s;
+}
+
+/* Block references. A paragraph, list item, task or heading ending in ` ^id`
+   can be linked as [[Note#^id]] and embedded as ![[Note#^id]]. */
+const BLOCK_MARKER_RE = /(^|[ \t])\^([A-Za-z0-9-]+)[ \t]*(?=\n|$)/gm;
+const BLOCK_TARGET_RE = /^([^#]*)#\^([A-Za-z0-9-]+)$/;
+const BLOCK_EMBED_RE = /!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]/g;
+const BLOCK_EMBED_LINE_RE = /^!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]$/;
+
+/* A `^` in an attribute would look like superscript to inline(); spell it as an entity. */
+function caretSafe(s) {
+  return s.replace(/\^/g, '&#94;');
+}
+
+/* The placeholder for an embedded block. `target` and `alias` are escaped already. */
+function blockEmbed(target, alias, tag) {
+  const title = target.match(BLOCK_TARGET_RE)[1].trim();
+  const attr = caretSafe(target);
+  return `<${tag} class="td-transclusion" data-target="${attr}">`
+    + `<a class="td-wikilink td-transclusion-source" href="#${encodeURIComponent(target)}" data-target="${attr}">${alias || title}</a>`
+    + `<${tag} class="td-transclusion-body"></${tag}></${tag}>`;
 }
 
 /* Smart typography: curly quotes, en/em dashes, ellipsis. Tags are protected
@@ -609,11 +640,15 @@ function tryBlockText(text) {
 
   // Heading with optional {#anchor}: # Title {#install}
   // If no explicit anchor, generate one from a slug — also collected for TOC.
+  // A block embed on its own: ![[Note#^id]]
+  const embed = t.match(BLOCK_EMBED_LINE_RE);
+  if (embed) return blockEmbed(esc(embed[1].trim()), embed[2] && esc(embed[2].trim()), 'div');
+
   const h = t.match(/^(#{1,6})\s+(.*?)(?:\s*\{#([\w-]+)\})?\s*$/);
   if (h && !t.includes('\n')) {
     const lvl = h[1].length;
     const title = h[2];
-    const id = h[3] || slugify(title);
+    const id = h[3] || slugify(title.replace(BLOCK_MARKER_RE, ''));
     _state.headings.push({ level: lvl, text: title, id });
     return `<h${lvl} id="${esc(id)}">${inline(title)}</h${lvl}>`;
   }

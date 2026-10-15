@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::{
     commands::search::SearchState,
-    links::{self, normalize_title, Backlink},
+    links::{self, normalize_title, Backlink, Block},
     models::Note,
     AppState,
 };
@@ -29,6 +29,21 @@ fn is_live(note: &Note) -> bool {
 pub async fn backlinks(id: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<Backlink>, String> {
     let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
     Ok(links::backlinks(notes, &id))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockRef {
+    note: Note,
+    block: Block,
+}
+
+/// The block `^id` in the note titled `title`, for `![[Title#^id]]` embeds;
+/// `None` when either is gone.
+#[tauri::command]
+pub async fn block_ref(title: String, id: String, state: State<'_, Mutex<AppState>>) -> Result<Option<BlockRef>, String> {
+    let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
+    Ok(links::resolve_block(notes, &title, &id).map(|(note, block)| BlockRef { note, block }))
 }
 
 /// Point links at a note's new title after it was renamed.

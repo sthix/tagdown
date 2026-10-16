@@ -282,7 +282,10 @@
 }
 .journal-cal-day {
   position: relative;
+  justify-self: center;
+  width: 26px;
   height: 26px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;

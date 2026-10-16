@@ -92,6 +92,32 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - The **`tagdown` CLI** searches, reads, creates, and appends to notes from the terminal.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
+## How it compares
+
+Tagdown sits between Obsidian and Notion: plain Markdown files you own, with rich document components, live queries, slides, and publishing built in rather than added through plugins or paid tiers.
+
+| | Tagdown | Obsidian | Logseq | Notion |
+| --- | :---: | :---: | :---: | :---: |
+| Notes are plain Markdown files on disk | ✅ | ✅ | ⚠️ original app only; new DB version uses SQLite | ❌ cloud database |
+| Works fully offline, no account | ✅ | ✅ | ✅ | ⚠️ account required; pages offline one by one |
+| Open source | ✅ MIT | ❌ | ✅ AGPL | ❌ |
+| Wikilinks and backlinks | ✅ | ✅ | ✅ | ⚠️ @-mentions |
+| Nested tags | ✅ | ✅ | ✅ | ⚠️ properties |
+| Daily journal | ✅ | ✅ | ✅ | ⚠️ templates |
+| Callouts, tabs, grids, cards | ✅ built in | ⚠️ callouts; rest via plugins | ⚠️ admonitions | ✅ blocks |
+| Math and Mermaid diagrams | ✅ | ✅ | ⚠️ Mermaid via plugin | ✅ |
+| Live queries over notes and tasks | ✅ built in | ⚠️ Bases / Dataview | ✅ | ✅ databases |
+| Version history | ✅ local, free | ⚠️ File recovery; full history with paid Sync | ⚠️ via git | ⚠️ limited on free plan |
+| Present as slides | ✅ | ✅ | ✅ | ❌ |
+| Publish as a website | ✅ free static site | ⚠️ paid Publish | ✅ static export | ✅ Notion Sites |
+| CLI and MCP server for AI assistants | ✅ built in | ⚠️ official CLI; MCP via community | ⚠️ CLI in DB version; MCP via community | ✅ hosted MCP |
+| Mobile apps | ❌ | ✅ | ✅ | ✅ |
+| Sync and real-time collaboration | ❌ bring your own sync | ⚠️ paid Sync, no live co-editing | ⚠️ sync in beta for sponsors | ✅ |
+| Plugin ecosystem | ❌ | ✅ | ✅ | ⚠️ integrations |
+| Platforms | macOS | macOS, Windows, Linux, mobile | macOS, Windows, Linux, mobile | Web, desktop, mobile |
+
+✅ built in · ⚠️ partial, paid, or via plugins · ❌ not available. Based on each product's public features as of October 2026; corrections are welcome as issues or PRs.
+
 ## Download
 
 Grab the latest **`.dmg`** from [Releases](https://github.com/sthix/tagdown/releases/latest). It's a universal build for Apple silicon and Intel Macs. Open it and drag **Tagdown Editor** into Applications.

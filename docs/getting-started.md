@@ -1,6 +1,8 @@
 # Getting started
 
-Tagdown Editor is built from source for now. You need a Mac set up for Tauri development.
+The quickest way in is the prebuilt `.dmg` from [Releases](https://github.com/sthix/tagdown/releases/latest), a universal build for Apple silicon and Intel Macs. It isn't signed with an Apple Developer ID yet, so the first launch needs one extra step: see [Opening the app the first time](https://github.com/sthix/tagdown#opening-the-app-the-first-time).
+
+To build from source instead, you need a Mac set up for Tauri development.
 
 ## Prerequisites
 

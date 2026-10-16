@@ -1,0 +1,134 @@
+# Builds a universal (Apple silicon + Intel) macOS .dmg.
+#
+# - Push a tag like v0.1.0 → builds and attaches the .dmg to a *draft*
+#   GitHub Release named after the tag. Review the draft, then publish it.
+# - Run manually (Actions → Release → Run workflow) → builds only and
+#   uploads the .dmg as a workflow artifact, no release is touched.
+#
+# Code signing and notarization are optional. Without the Apple secrets
+# below the app is ad-hoc signed, which runs fine after the Gatekeeper
+# workaround in the README. Add all of these repository secrets to ship a
+# signed and notarized build instead:
+#
+#   APPLE_CERTIFICATE           base64 of the "Developer ID Application" .p12
+#   APPLE_CERTIFICATE_PASSWORD  password of that .p12
+#   APPLE_SIGNING_IDENTITY      e.g. "Developer ID Application: Name (TEAMID)"
+#   APPLE_ID                    Apple ID email used for notarization
+#   APPLE_PASSWORD              app-specific password for that Apple ID
+#   APPLE_TEAM_ID               10-character team ID
+#
+# See "Releasing" in docs/development.md for how to create them.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          app_version=$(jq -r .version src-tauri/tauri.conf.json)
+          if [ "${GITHUB_REF_NAME}" != "v${app_version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match tauri.conf.json version ${app_version}. Bump the version (tauri.conf.json, Cargo.toml, package.json) or retag."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Tauri treats a *set but empty* APPLE_* variable as "configured" and
+      # fails, so only export the secrets that actually exist. With no
+      # certificate, fall back to ad-hoc signing ("-").
+      - name: Configure code signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          export_env() {
+            {
+              echo "$1<<__TAGDOWN_EOF__"
+              echo "$2"
+              echo "__TAGDOWN_EOF__"
+            } >> "$GITHUB_ENV"
+          }
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ]; then
+            echo "Signing with a Developer ID certificate."
+            export_env APPLE_CERTIFICATE "$APPLE_CERTIFICATE"
+            export_env APPLE_CERTIFICATE_PASSWORD "$APPLE_CERTIFICATE_PASSWORD"
+            [ -n "$APPLE_SIGNING_IDENTITY" ] && export_env APPLE_SIGNING_IDENTITY "$APPLE_SIGNING_IDENTITY"
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+              echo "Notarization enabled."
+              export_env APPLE_ID "$APPLE_ID"
+              export_env APPLE_PASSWORD "$APPLE_PASSWORD"
+              export_env APPLE_TEAM_ID "$APPLE_TEAM_ID"
+            else
+              echo "::warning::Signed but not notarized: APPLE_ID, APPLE_PASSWORD or APPLE_TEAM_ID is missing."
+            fi
+          else
+            echo "::notice::No Developer ID certificate configured, building an ad-hoc signed app."
+            export_env APPLE_SIGNING_IDENTITY "-"
+          fi
+
+      - name: Build and attach to draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target universal-apple-darwin --bundles dmg
+          tagName: ${{ github.ref_name }}
+          releaseName: Tagdown Editor ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+          releaseBody: |
+            Download **Tagdown.Editor_*_universal.dmg** below. It runs on Apple silicon and Intel Macs.
+
+            Open the .dmg and drag **Tagdown Editor** into Applications.
+
+            If macOS says the app "can't be opened" or "is damaged", see [Opening the app the first time](https://github.com/sthix/tagdown#opening-the-app-the-first-time).
+
+      - name: Build only
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: --target universal-apple-darwin --bundles dmg
+
+      - name: Upload .dmg as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tagdown-editor-macos-universal
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

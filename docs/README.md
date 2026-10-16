@@ -11,7 +11,7 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 
 | Guide | What's in it |
 | --- | --- |
-| [Getting started](getting-started.md) | Install, run, and build the app; what happens on first launch |
+| [Getting started](getting-started.md) | Download or build the app; what happens on first launch |
 | [Writing notes](writing-notes.md) | The workspace, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, the toolbar, themes and accents |
 | [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
 | [Organizing your vault](organizing.md) | Folders, tags, pinning, the archive, search, and wikilinks |
@@ -21,7 +21,7 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 | [Sharing your notes](sharing.md) | HTML and PDF export, slides, and publishing a static website |
 | [Command line and AI assistants](cli-and-mcp.md) | The `tagdown` CLI and its MCP server for Claude and other assistants |
 | [Keyboard shortcuts](keyboard-shortcuts.md) | Every shortcut on one page |
-| [Development](development.md) | Architecture, project layout, tests, and contributing |
+| [Development](development.md) | Architecture, project layout, tests, releasing, and contributing |
 
 ## At a glance
 

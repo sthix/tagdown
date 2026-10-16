@@ -55,6 +55,31 @@ node --test tests/*.mjs
 
 The Tagdown reference has one source: `src/tagdown/documentation.ts`. It feeds the in-app **Settings → Tagdown Reference** and, through `npm run gen:syntax`, the generated `src-tauri/core/src/syntax.md` that the CLI and MCP server hand out. Run `npm run gen:syntax` after changing the reference; a test fails when the generated file is out of date.
 
+## Releasing
+
+`.github/workflows/release.yml` builds a universal (Apple silicon + Intel) `.dmg` on GitHub Actions.
+
+1. Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`, and commit.
+2. Tag the commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`. The tag must match the `tauri.conf.json` version, or the build stops.
+3. The workflow attaches the `.dmg` to a **draft** release named after the tag. Check it under **Releases**, edit the notes, and publish.
+
+To try the build without releasing anything, run the workflow by hand (**Actions → Release → Run workflow**). The `.dmg` shows up as a workflow artifact.
+
+### Signing and notarization
+
+Without Apple credentials the app is ad-hoc signed, and users get past Gatekeeper with **Open Anyway** (see the README). With an [Apple Developer Program](https://developer.apple.com/programs/) membership, add these repository secrets (**Settings → Secrets and variables → Actions**) and the next build is signed and notarized, with no Gatekeeper warning:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Your **Developer ID Application** certificate exported from Keychain Access as `.p12`, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `APPLE_CERTIFICATE_PASSWORD` | The password you set when exporting the `.p12` |
+| `APPLE_SIGNING_IDENTITY` | The certificate name, e.g. `Developer ID Application: Jane Doe (AB12CD34EF)`; `security find-identity -v -p codesigning` lists it |
+| `APPLE_ID` | The Apple ID email of your developer account |
+| `APPLE_PASSWORD` | An [app-specific password](https://support.apple.com/102654) for that Apple ID, not your account password |
+| `APPLE_TEAM_ID` | Your 10-character team ID from [developer.apple.com/account](https://developer.apple.com/account) |
+
+The certificate pair turns on signing; the three `APPLE_ID…` secrets add notarization. Once a signed build ships, drop the Gatekeeper steps from the README.
+
 ## Conventions
 
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org): `feat(scope): …`, `fix: …`, `docs: …`, `style(ui): …`.

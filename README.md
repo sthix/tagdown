@@ -92,7 +92,27 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - The **`tagdown` CLI** searches, reads, creates, and appends to notes from the terminal.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
-## Getting started
+## Download
+
+Grab the latest **`.dmg`** from [Releases](https://github.com/sthix/tagdown/releases/latest). It's a universal build for Apple silicon and Intel Macs. Open it and drag **Tagdown Editor** into Applications.
+
+### Opening the app the first time
+
+The app isn't signed with an Apple Developer ID yet, so macOS blocks the first launch with a message like *"Apple could not verify 'Tagdown Editor' is free of malware"*. To open it anyway:
+
+1. Try to open **Tagdown Editor** once and dismiss the warning.
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the Tagdown Editor message.
+3. Confirm with **Open**. macOS remembers the choice, so later launches just work.
+
+If macOS instead says the app *"is damaged and can't be opened"*, remove the download quarantine flag in Terminal:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Tagdown Editor.app"
+```
+
+Prefer to check the code first? Build it yourself as described below.
+
+## Building from source
 
 You need Node.js 20+, Rust stable, and the [Tauri prerequisites for macOS](https://v2.tauri.app/start/prerequisites/).
 
@@ -135,7 +155,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 
 | | |
 | --- | --- |
-| [Getting started](docs/getting-started.md) | Install, run, build, first launch |
+| [Getting started](docs/getting-started.md) | Download, build from source, first launch |
 | [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes and accents |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
 | [Organizing your vault](docs/organizing.md) | Folders, tags, pinning, archive, search, wikilinks |
@@ -145,7 +165,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
 | [Command line and AI assistants](docs/cli-and-mcp.md) | The `tagdown` CLI and MCP server |
 | [Keyboard shortcuts](docs/keyboard-shortcuts.md) | Every shortcut on one page |
-| [Development](docs/development.md) | Architecture, layout, tests |
+| [Development](docs/development.md) | Architecture, layout, tests, releasing |
 
 ## Tech stack
 

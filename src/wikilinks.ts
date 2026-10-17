@@ -1,9 +1,17 @@
 // Wikilinks in the editor: resolving `[[Title#Heading|label]]` targets to notes
-// and the `[[` autocomplete for note titles.
+// and the `[[` autocomplete for note titles. Like the backend (`links.rs`), a
+// target names a note by title first, then by its file, as Obsidian writes them.
 
 import { formatDay, shiftDay, todayKey } from './journal';
 
-export type LinkableNote = { id: string; title: string; folderId: string | null; journal?: string | null };
+export type LinkableNote = {
+  id: string;
+  title: string;
+  folderId: string | null;
+  journal?: string | null;
+  /** The note's file relative to the vault, `/`-separated. */
+  path?: string;
+};
 type Suggestion = LinkableNote & { hint?: string };
 
 export function normalizeTitle(title: string) {
@@ -17,9 +25,29 @@ export function splitTarget(target: string): { title: string; anchor: string | n
   return { title: target.slice(0, at).trim(), anchor: target.slice(at + 1).trim() || null };
 }
 
+/** A note path or a link target naming one: lowercase, `/`-separated, without `.md` or a leading `./` or `/`. */
+export function normalizePath(path: string) {
+  const p = path.trim().replaceAll('\\', '/').toLowerCase().replace(/^(\.\/)*/, '').replace(/^\/*/, '');
+  return p.endsWith('.md') ? p.slice(0, -3) : p;
+}
+
+/**
+ * The note a link target names: the note with that title; else the note whose
+ * path in the vault it is (`[[blog/post]]` for `blog/post.md`); else the one
+ * note whose path ends in it (`[[post]]`). A file name two notes share names neither.
+ */
 export function resolveTarget<T extends LinkableNote>(target: string, notes: T[]): T | null {
-  const wanted = normalizeTitle(splitTarget(target).title);
-  return notes.find((note) => normalizeTitle(note.title) === wanted) ?? null;
+  const name = splitTarget(target).title;
+  const wanted = normalizeTitle(name);
+  const titled = notes.find((note) => normalizeTitle(note.title) === wanted);
+  if (titled) return titled;
+  const path = normalizePath(name);
+  if (!path) return null;
+  const withPaths = notes.filter((note) => note.path).map((note) => ({ note, path: normalizePath(note.path!) }));
+  const exact = withPaths.find((entry) => entry.path === path);
+  if (exact) return exact.note;
+  const ending = withPaths.filter((entry) => entry.path.endsWith(`/${path}`));
+  return ending.length === 1 ? ending[0].note : null;
 }
 
 // ---- Autocomplete ----

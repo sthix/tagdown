@@ -1,8 +1,10 @@
 // Wikilinks: `[[Title]]`, `[[Title#Heading]]`, `[[Title|label]]`, and block
 // references `[[Title#^id]]` (embedded with `![[Title#^id]]`).
 //
-// A link points at a note by title, compared case-insensitively. Links inside
-// fenced code blocks and inline code are text, not links.
+// A link points at a note by title, compared case-insensitively, or, the way
+// Obsidian writes them, by the note's file: `[[blog/post]]` or `[[post]]` (see
+// `LinkTargets`). Links inside fenced code blocks and inline code are text,
+// not links.
 //
 // A block is addressed by a plain-text marker at the end of its line, the way
 // Obsidian writes them: `Some paragraph ^ab12cd`, `- [ ] a task ^ab12cd`. The
@@ -58,6 +60,73 @@ pub struct Backlink {
 
 pub fn normalize_title(title: &str) -> String {
     title.trim().to_lowercase()
+}
+
+/// A note path or a link target naming one, as compared: lowercase,
+/// `/`-separated, without `.md` or a leading `./` or `/`.
+pub fn normalize_path(path: &str) -> String {
+    let path = path.trim().replace('\\', "/").to_lowercase();
+    let path = path.trim_start_matches("./").trim_start_matches('/');
+    path.strip_suffix(".md").unwrap_or(path).to_string()
+}
+
+/// Which notes a link target names. A target names the notes with that title
+/// first; failing that, the note whose path in the vault it is (`[[blog/post]]`
+/// for `blog/post.md`); failing that, the one note whose path ends in it
+/// (`[[post]]`, `[[sub/post]]`). A file name two notes share names neither.
+#[derive(Debug, Default)]
+pub struct LinkTargets {
+    by_title: HashMap<String, Vec<String>>,
+    by_path: HashMap<String, String>,
+    /// Paths and ids by the last segment of the path.
+    by_name: HashMap<String, Vec<(String, String)>>,
+}
+
+impl LinkTargets {
+    pub fn new<'a>(notes: impl IntoIterator<Item = &'a Note>) -> Self {
+        let mut targets = Self::default();
+        for note in notes {
+            targets.by_title.entry(normalize_title(&note.title)).or_default().push(note.id.clone());
+            let path = normalize_path(&note.path);
+            if path.is_empty() {
+                continue;
+            }
+            let name = path.rsplit('/').next().unwrap_or(&path).to_string();
+            targets.by_name.entry(name).or_default().push((path.clone(), note.id.clone()));
+            targets.by_path.insert(path, note.id.clone());
+        }
+        targets
+    }
+
+    /// Ids of the notes `target` names (several when they share its title).
+    pub fn resolve(&self, target: &str) -> Vec<&str> {
+        match self.by_title.get(&normalize_title(target)) {
+            Some(ids) => ids.iter().map(String::as_str).collect(),
+            None => self.by_file(target).into_iter().collect(),
+        }
+    }
+
+    pub fn links_to(&self, target: &str, id: &str) -> bool {
+        self.resolve(target).contains(&id)
+    }
+
+    /// The note `target` names by its file, titles aside.
+    pub fn by_file(&self, target: &str) -> Option<&str> {
+        let path = normalize_path(target);
+        if path.is_empty() {
+            return None;
+        }
+        if let Some(id) = self.by_path.get(&path) {
+            return Some(id);
+        }
+        let name = path.rsplit('/').next().unwrap_or(&path);
+        let suffix = format!("/{path}");
+        let mut found = self.by_name.get(name)?.iter().filter(|(p, _)| p.ends_with(&suffix));
+        match (found.next(), found.next()) {
+            (Some((_, id)), None) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 /// Every wikilink in `content`, skipping code.
@@ -120,10 +189,16 @@ fn line_wikilinks(line: &str, base: usize) -> Vec<Wikilink> {
 }
 
 /// `content` with links to `old_title` pointed at `new_title`, keeping their
-/// anchors and labels; `None` when nothing links to `old_title`.
-pub fn rename_links(content: &str, old_title: &str, new_title: &str) -> Option<String> {
+/// anchors and labels; `None` when nothing links to `old_title`. Links whose
+/// target `keep` accepts are left alone: a link naming the note by its file
+/// (`[[my-note]]` for `my-note.md`) still finds it after the rename, and
+/// rewriting it would break it in other apps that read the vault.
+pub fn rename_links(content: &str, old_title: &str, new_title: &str, keep: &dyn Fn(&str) -> bool) -> Option<String> {
     let old = normalize_title(old_title);
-    let links: Vec<Wikilink> = parse_wikilinks(content).into_iter().filter(|l| normalize_title(&l.target) == old).collect();
+    let links: Vec<Wikilink> = parse_wikilinks(content)
+        .into_iter()
+        .filter(|l| normalize_title(&l.target) == old && !keep(&l.target))
+        .collect();
     if links.is_empty() {
         return None;
     }
@@ -323,55 +398,61 @@ fn dedent(lines: &[&str]) -> String {
         .join("\n")
 }
 
-/// The note titled `title` among `notes` and its block `^id`. Archived notes
+/// The note `target` names among `notes` and its block `^id`. Archived notes
 /// are left out.
-pub fn resolve_block(notes: Vec<(Note, String)>, title: &str, id: &str) -> Option<(Note, Block)> {
-    let wanted = normalize_title(title);
-    notes
-        .into_iter()
-        .filter(|(note, _)| note.folder_id.as_deref() != Some("archive") && normalize_title(&note.title) == wanted)
+pub fn resolve_block(notes: Vec<(Note, String)>, target: &str, id: &str) -> Option<(Note, Block)> {
+    let live: Vec<(Note, String)> = notes.into_iter().filter(|(note, _)| is_live(note)).collect();
+    let targets = LinkTargets::new(live.iter().map(|(note, _)| note));
+    let wanted: Vec<String> = targets.resolve(target).into_iter().map(str::to_string).collect();
+    live.into_iter()
+        .filter(|(note, _)| wanted.contains(&note.id))
         .find_map(|(note, content)| find_block(&content, id).map(|block| (note, block)))
+}
+
+fn is_live(note: &Note) -> bool {
+    note.folder_id.as_deref() != Some("archive")
 }
 
 /// Notes in `notes` that link to the note `id`, most recently edited first.
 /// Archived notes are left out.
 pub fn backlinks(notes: Vec<(Note, String)>, id: &str) -> Vec<Backlink> {
-    let Some(title) = notes.iter().find(|(note, _)| note.id == id).map(|(note, _)| note.title.clone()) else {
+    if !notes.iter().any(|(note, _)| note.id == id) {
         return Vec::new();
-    };
+    }
+    let targets = LinkTargets::new(notes.iter().map(|(note, _)| note).filter(|note| is_live(note) || note.id == id));
+    let links_here = |target: &str| targets.links_to(target, id);
     let mut backlinks: Vec<Backlink> = notes
-        .into_iter()
-        .filter(|(note, _)| note.id != id && note.folder_id.as_deref() != Some("archive"))
+        .iter()
+        .filter(|(note, _)| note.id != id && is_live(note))
         .filter_map(|(note, content)| {
-            let mut mentions = property_mentions(&note, &title);
-            mentions.extend(self::mentions(&content, &title));
+            let mut mentions = property_mentions(note, &links_here);
+            mentions.extend(self::mentions(content, &links_here));
             mentions.truncate(MENTIONS_PER_NOTE);
-            (!mentions.is_empty()).then_some(Backlink { note, mentions })
+            (!mentions.is_empty()).then(|| Backlink { note: note.clone(), mentions })
         })
         .collect();
     backlinks.sort_by(|a, b| b.note.updated_at.cmp(&a.note.updated_at));
     backlinks
 }
 
-/// The note's properties that link to `title`, as `key: value` lines.
-pub fn property_mentions(note: &Note, title: &str) -> Vec<String> {
-    let wanted = normalize_title(title);
+/// The note's properties with a link whose target `wanted` accepts, as
+/// `key: value` lines.
+pub fn property_mentions(note: &Note, wanted: &dyn Fn(&str) -> bool) -> Vec<String> {
     note.properties
         .iter()
-        .filter(|p| p.value.texts().iter().any(|t| parse_wikilinks(t).iter().any(|l| normalize_title(&l.target) == wanted)))
+        .filter(|p| p.value.texts().iter().any(|t| parse_wikilinks(t).iter().any(|l| wanted(&l.target))))
         .map(|p| format!("{}: {}", p.key, p.value.display()))
         .collect()
 }
 
-/// Source lines of `content` that link to `title`, each with the lines indented
-/// under it (tasks nested under a link, say), re-indented two spaces under the
-/// linking line.
-pub fn mentions(content: &str, title: &str) -> Vec<String> {
-    let wanted = normalize_title(title);
+/// Source lines of `content` with a link whose target `wanted` accepts, each
+/// with the lines indented under it (tasks nested under a link, say),
+/// re-indented two spaces under the linking line.
+pub fn mentions(content: &str, wanted: &dyn Fn(&str) -> bool) -> Vec<String> {
     let mut mentions: Vec<String> = Vec::new();
     // Links before this byte were already shown, on a linking line or nested under one.
     let mut covered = 0;
-    for link in parse_wikilinks(content).into_iter().filter(|l| normalize_title(&l.target) == wanted) {
+    for link in parse_wikilinks(content).into_iter().filter(|l| wanted(&l.target)) {
         if link.start < covered {
             continue;
         }
@@ -440,6 +521,15 @@ pub(crate) fn strip_line_marker(line: &str) -> &str {
 mod tests {
     use super::*;
 
+    fn titled(title: &str) -> impl Fn(&str) -> bool {
+        let wanted = normalize_title(title);
+        move |target| normalize_title(target) == wanted
+    }
+
+    fn note(id: &str, title: &str, path: &str) -> Note {
+        Note { id: id.into(), title: title.into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0, journal: None, properties: vec![], path: path.into() }
+    }
+
     #[test]
     fn parses_targets_anchors_and_labels_outside_code() {
         let content = "See [[Alpha]], [[Beta#Setup|the setup]] and `[[Not a link]]`.\n```\n[[Fenced]]\n```\n[[ Gamma | g ]]";
@@ -453,10 +543,10 @@ mod tests {
     fn renames_links_case_insensitively_and_keeps_anchor_and_label() {
         let content = "[[old title]] and [[Old Title#Part|label]] but not [[Older]] or `[[Old Title]]`";
         assert_eq!(
-            rename_links(content, "Old Title", "New Title").unwrap(),
+            rename_links(content, "Old Title", "New Title", &|_| false).unwrap(),
             "[[New Title]] and [[New Title#Part|label]] but not [[Older]] or `[[Old Title]]`"
         );
-        assert_eq!(rename_links("no links here", "Old Title", "New"), None);
+        assert_eq!(rename_links("no links here", "Old Title", "New", &|_| false), None);
     }
 
     #[test]
@@ -464,7 +554,7 @@ mod tests {
         let links = parse_wikilinks("[[Plan#^ab12cd]] ![[Plan#^x-1|quoted]] [[Plan#Setup]] [[Plan#^]]");
         let ids: Vec<_> = links.iter().map(|l| l.block_id()).collect();
         assert_eq!(ids, vec![Some("ab12cd"), Some("x-1"), None, None]);
-        assert_eq!(rename_links("![[Plan#^ab12cd]]", "plan", "Roadmap").unwrap(), "![[Roadmap#^ab12cd]]");
+        assert_eq!(rename_links("![[Plan#^ab12cd]]", "plan", "Roadmap", &|_| false).unwrap(), "![[Roadmap#^ab12cd]]");
     }
 
     #[test]
@@ -536,7 +626,7 @@ mod tests {
     #[test]
     fn properties_that_link_count_as_backlinks() {
         use crate::properties::{Property, PropertyValue};
-        let mut linking = Note { id: "a".into(), title: "Meeting".into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0, journal: None, properties: vec![] };
+        let mut linking = Note { id: "a".into(), title: "Meeting".into(), preview: String::new(), tags: vec![], starred: false, folder_id: None, created_at: Default::default(), updated_at: Default::default(), word_count: 0, journal: None, properties: vec![], path: String::new() };
         linking.properties = vec![
             Property { key: "owner".into(), value: PropertyValue::Text("[[Sam]]".into()) },
             Property { key: "attendees".into(), value: PropertyValue::List(vec!["Alex".into(), "[[sam|S.]]".into()]) },
@@ -551,15 +641,77 @@ mod tests {
     #[test]
     fn mentions_are_linking_lines_without_markers() {
         let content = "# Notes\n\n- [ ] Read [[Über Alles|this]] and [[über alles]].\n## See [[Über Alles]]\nUnrelated [[Other]].\n";
-        assert_eq!(mentions(content, "über alles"), vec!["Read [[Über Alles|this]] and [[über alles]].", "See [[Über Alles]]"]);
+        assert_eq!(mentions(content, &titled("über alles")), vec!["Read [[Über Alles|this]] and [[über alles]].", "See [[Über Alles]]"]);
     }
 
     #[test]
     fn mentions_keep_the_lines_nested_under_the_link() {
         let content = "[[Page]]\n  - [ ] Call back\n    - [ ] about [[Page]]\nNot nested\n\n- [[Page]] list item\n  - [x] done\n- sibling";
         assert_eq!(
-            mentions(content, "page"),
+            mentions(content, &titled("page")),
             vec!["[[Page]]\n  - [ ] Call back\n    - [ ] about [[Page]]", "[[Page]] list item\n  - [x] done"]
         );
+    }
+
+    #[test]
+    fn targets_name_notes_by_title_then_path_then_file_name() {
+        let notes = [
+            note("acwi", "Die Ein-Fonds-Lösung", "blog/msci-acwi-imi-fm.md"),
+            note("universe", "Das Investment-Universum", "investment-universum.md"),
+            note("blog-index", "Blog home", "blog/index.md"),
+            note("wiki-index", "Index page", "wiki/index.md"),
+            note("titled", "msci-acwi-imi-fm", "elsewhere.md"),
+        ];
+        let targets = LinkTargets::new(&notes);
+        // Title first, case-insensitively, even when a file has that name.
+        assert_eq!(targets.resolve("MSCI-ACWI-IMI-FM"), vec!["titled"]);
+        assert_eq!(targets.resolve("die ein-fonds-lösung"), vec!["acwi"]);
+        // The path in the vault, with or without `.md` or a leading slash.
+        assert_eq!(targets.resolve("blog/msci-acwi-imi-fm"), vec!["acwi"]);
+        assert_eq!(targets.resolve("/Blog/MSCI-ACWI-IMI-FM.md"), vec!["acwi"]);
+        assert_eq!(targets.resolve("blog/index"), vec!["blog-index"]);
+        // A file name, or the end of a path, when only one note has it.
+        assert_eq!(targets.resolve("investment-universum"), vec!["universe"]);
+        assert_eq!(targets.resolve("index"), Vec::<&str>::new());
+        assert_eq!(targets.resolve("log/index"), Vec::<&str>::new());
+        assert_eq!(targets.resolve("missing"), Vec::<&str>::new());
+        assert_eq!(targets.by_file("msci-acwi-imi-fm"), Some("acwi"));
+    }
+
+    #[test]
+    fn links_by_path_count_as_backlinks() {
+        let target = note("acwi", "Die Ein-Fonds-Lösung", "blog/msci-acwi-imi-fm.md");
+        let notes = vec![
+            (note("a", "Start", "start.md"), "See [[blog/msci-acwi-imi-fm|Die Ein-Fonds-Lösung]].".to_string()),
+            (note("b", "Other", "other.md"), "- [[msci-acwi-imi-fm#Kosten]]\n- [[Die Ein-Fonds-Lösung]]".to_string()),
+            (note("c", "Unrelated", "c.md"), "[[blog/other-post]]".to_string()),
+            (target, "# Die Ein-Fonds-Lösung".to_string()),
+        ];
+        let found = backlinks(notes, "acwi");
+        let mut found: Vec<_> = found.iter().map(|b| (b.note.id.as_str(), b.mentions.clone())).collect();
+        found.sort();
+        assert_eq!(found, vec![
+            ("a", vec!["See [[blog/msci-acwi-imi-fm|Die Ein-Fonds-Lösung]].".to_string()]),
+            ("b", vec!["[[msci-acwi-imi-fm#Kosten]]".to_string(), "[[Die Ein-Fonds-Lösung]]".to_string()]),
+        ]);
+    }
+
+    #[test]
+    fn block_embeds_resolve_by_path() {
+        let notes = vec![(note("p", "Plan", "work/plan-2026.md"), "- ship it ^s1".to_string())];
+        let (found, block) = resolve_block(notes, "work/plan-2026", "s1").unwrap();
+        assert_eq!((found.id.as_str(), block.text.as_str()), ("p", "- ship it"));
+    }
+
+    #[test]
+    fn renaming_leaves_links_that_name_the_file() {
+        // `notes.md` has no heading, so its title is its file name; adding one renames it.
+        let targets = LinkTargets::new([&note("n", "notes", "notes.md")]);
+        let keep = |target: &str| targets.by_file(target) == Some("n");
+        let content = "[[notes]] [[Notes#Part]] [[notes.md]]";
+        assert_eq!(rename_links(content, "notes", "Meeting notes", &keep), None);
+        // Without the file to fall back on, the title link follows.
+        let none = |_: &str| false;
+        assert_eq!(rename_links(content, "notes", "Meeting notes", &none).unwrap(), "[[Meeting notes]] [[Meeting notes#Part]] [[notes.md]]");
     }
 }

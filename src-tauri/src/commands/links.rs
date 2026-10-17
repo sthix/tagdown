@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::{
     commands::search::SearchState,
-    links::{self, normalize_title, Backlink, Block},
+    links::{self, normalize_title, Backlink, Block, LinkTargets},
     models::Note,
     AppState,
 };
@@ -38,8 +38,8 @@ pub struct BlockRef {
     block: Block,
 }
 
-/// The block `^id` in the note titled `title`, for `![[Title#^id]]` embeds;
-/// `None` when either is gone.
+/// The block `^id` in the note the link target `title` names, for
+/// `![[Title#^id]]` embeds; `None` when either is gone.
 #[tauri::command]
 pub async fn block_ref(title: String, id: String, state: State<'_, Mutex<AppState>>) -> Result<Option<BlockRef>, String> {
     let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
@@ -74,19 +74,22 @@ pub async fn rename_links(
     if others().any(|(note, _)| normalize_title(&note.title) == old) {
         return Ok(RenameOutcome { applied: true, updated: 0 });
     }
+    // Links naming the note by its file still find it: leave them as they are.
+    let targets = LinkTargets::new(others().map(|(note, _)| note).chain(notes.iter().map(|(note, _)| note).filter(|note| note.id == id)));
+    let keep = |target: &str| targets.by_file(target) == Some(id.as_str());
     let mut updated = 0;
     // The renamed note itself is skipped: its editor owns its content.
     for (note, content) in notes.iter().filter(|(note, _)| note.id != id) {
         let mut changed = false;
         let mut body = content.clone();
-        if let Some(next) = links::rename_links(content, &old_title, &new_title) {
+        if let Some(next) = links::rename_links(content, &old_title, &new_title, &keep) {
             let saved = state.vault.rewrite_content(&note.id, &next)?;
             search.index(&saved, &next);
             body = next;
             changed = true;
         }
-        if !links::property_mentions(note, &old_title).is_empty() {
-            if let Some(saved) = state.vault.rename_property_links(&note.id, &old_title, &new_title)? {
+        if !links::property_mentions(note, &|target| normalize_title(target) == old && !keep(target)).is_empty() {
+            if let Some(saved) = state.vault.rename_property_links(&note.id, &old_title, &new_title, &keep)? {
                 search.index(&saved, &body);
                 changed = true;
             }

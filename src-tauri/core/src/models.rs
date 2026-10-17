@@ -31,6 +31,10 @@ pub struct Note {
     /// Custom frontmatter entries as typed values.
     #[serde(default)]
     pub properties: Vec<Property>,
+    /// The note's file relative to the vault, `/`-separated (`blog/post.md`).
+    /// Wikilinks can name a note by it, as Obsidian writes them.
+    #[serde(default)]
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -117,7 +117,7 @@ impl Vault {
                 Some(folder) => meta.folder_id.as_deref() == Some(folder),
             };
             if !wanted { continue; }
-            notes.push(note_from_meta(meta, &content));
+            notes.push(self.note_at(&path, meta, &content));
         }
         sort_notes(&mut notes, sort);
         Ok(notes)
@@ -128,7 +128,7 @@ impl Vault {
         let mut notes = Vec::new();
         for path in self.note_paths() {
             let Ok((meta, content)) = self.read_note(&path) else { continue; };
-            let note = note_from_meta(meta, &content);
+            let note = self.note_at(&path, meta, &content);
             notes.push((note, content));
         }
         Ok(notes)
@@ -160,7 +160,7 @@ impl Vault {
         let path = self.folder_dir(meta.folder_id.as_deref())?.join(format!("note-{}.{NOTE_EXT}", meta.id));
         self.write_note(&path, &write_frontmatter(&meta, content))?;
         self.remember(&meta.id, &path);
-        Ok(note_from_meta(meta, content))
+        Ok(self.note_at(&path, meta, content))
     }
 
     /// Mark a note as the journal page for `day`, or as no journal page.
@@ -169,7 +169,7 @@ impl Vault {
         let (mut meta, content) = self.read_note(&path)?;
         meta.journal = journal;
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
-        Ok(note_from_meta(meta, &content))
+        Ok(self.note_at(&path, meta, &content))
     }
 
     pub fn save_note(&self, id: &str, content: String) -> Result<Note, String> {
@@ -180,7 +180,7 @@ impl Vault {
         meta.tags = next_tags(&meta.tags, &previous, &content);
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
-        Ok(note_from_meta(meta, &content))
+        Ok(self.note_at(&path, meta, &content))
     }
 
     /// Replace a note's body without touching its edit time, for changes the
@@ -192,7 +192,7 @@ impl Vault {
         meta.title = title_of(&path, content);
         meta.tags = next_tags(&meta.tags, &previous, content);
         self.write_note(&path, &write_frontmatter(&meta, content))?;
-        Ok(note_from_meta(meta, content))
+        Ok(self.note_at(&path, meta, content))
     }
 
     /// File a note in a folder (or the vault's top level): its file moves into
@@ -211,8 +211,9 @@ impl Vault {
             self.tracker.record(&target, &text);
             fs::rename(&path, &target).map_err(|e| e.to_string())?;
             self.remember(&meta.id, &target);
+            return Ok(self.note_at(&target, meta, &content));
         }
-        Ok(note_from_meta(meta, &content))
+        Ok(self.note_at(&path, meta, &content))
     }
 
     /// Set (`Some`) or remove (`None`) the property `key` of a note, or rename
@@ -223,17 +224,18 @@ impl Vault {
         set_property(&mut meta.extra, key, value.as_ref(), rename_from)?;
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
-        Ok(note_from_meta(meta, &content))
+        Ok(self.note_at(&path, meta, &content))
     }
 
     /// Point links to `old_title` in a note's properties at `new_title`,
-    /// without touching its edit time; `None` when nothing linked there.
-    pub fn rename_property_links(&self, id: &str, old_title: &str, new_title: &str) -> Result<Option<Note>, String> {
+    /// without touching its edit time; `None` when nothing linked there. Links
+    /// whose target `keep` accepts stay as they are (see `links::rename_links`).
+    pub fn rename_property_links(&self, id: &str, old_title: &str, new_title: &str, keep: &dyn Fn(&str) -> bool) -> Result<Option<Note>, String> {
         let path = self.note_path(id)?;
         let (mut meta, content) = self.read_note(&path)?;
         let mut changed = false;
         for entry in meta.extra.iter_mut() {
-            if let Some(next) = crate::links::rename_links(entry, old_title, new_title) {
+            if let Some(next) = crate::links::rename_links(entry, old_title, new_title, keep) {
                 *entry = next;
                 changed = true;
             }
@@ -242,7 +244,7 @@ impl Vault {
             return Ok(None);
         }
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
-        Ok(Some(note_from_meta(meta, &content)))
+        Ok(Some(self.note_at(&path, meta, &content)))
     }
 
     pub fn star_note(&self, id: &str, starred: bool) -> Result<Note, String> {
@@ -251,7 +253,7 @@ impl Vault {
         meta.starred = starred;
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
-        Ok(note_from_meta(meta, &content))
+        Ok(self.note_at(&path, meta, &content))
     }
 
     pub fn delete_note(&self, id: &str) -> Result<(), String> {
@@ -281,6 +283,19 @@ impl Vault {
 
     pub fn note_file_path(&self, id: &str) -> Result<PathBuf, String> {
         self.note_path(id)
+    }
+
+    /// The note read from the file at `path`.
+    pub(crate) fn note_at(&self, path: &Path, meta: NoteFrontmatter, content: &str) -> Note {
+        let mut note = note_from_meta(meta, content);
+        note.path = self.relative_path(path);
+        note
+    }
+
+    /// `path` relative to the vault, `/`-separated.
+    pub fn relative_path(&self, path: &Path) -> String {
+        let relative = path.strip_prefix(&self.root).unwrap_or(path);
+        relative.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
     }
 
     fn seed_notes(root: &Path) -> Result<(), String> {
@@ -455,7 +470,7 @@ pub(crate) fn free_path(dir: &Path, name: &str) -> PathBuf {
         .expect("some name is free")
 }
 
-pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
+fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
     Note {
         id: meta.id,
         title: meta.title,
@@ -468,6 +483,7 @@ pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
         word_count: word_count(content),
         journal: meta.journal,
         properties: parse_properties(&meta.extra),
+        path: String::new(),
     }
 }
 

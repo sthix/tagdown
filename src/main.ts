@@ -51,6 +51,8 @@ type Note = {
   journal?: string | null;
   /** Custom frontmatter entries, typed. */
   properties?: Property[];
+  /** The note's file relative to the vault, `/`-separated. */
+  path?: string;
 };
 
 type Folder = {
@@ -1533,12 +1535,13 @@ async function loadBacklinks(id: string) {
 function backlinksHtml() {
   if (!selectedNote || backlinks?.id !== selectedNote.id) return '<section class="backlinks" data-backlinks hidden></section>';
   const { items } = backlinks;
-  const self = normalizeTitle(selectedNote.title);
+  const self = selectedNote;
+  const candidates = [self, ...libraryNotes.filter((note) => note.id !== self.id)];
   const mention = (line: string) => {
     const holder = document.createElement('div');
     holder.innerHTML = renderPreview(line);
     holder.querySelectorAll<HTMLElement>('.td-wikilink').forEach((link) => {
-      if (normalizeTitle(splitTarget(link.dataset.target || '').title) === self) link.classList.add('is-self');
+      if (resolveTarget(link.dataset.target || '', candidates)?.id === self.id) link.classList.add('is-self');
     });
     // Tasks nested under the link show their state; ticking them happens in their note.
     holder.querySelectorAll('input').forEach((box) => box.setAttribute('disabled', ''));

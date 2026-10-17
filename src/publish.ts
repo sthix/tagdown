@@ -23,7 +23,7 @@ import { normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import siteCss from './styles/site.css?inline';
 import './styles/publish.css';
 
-type Note = { id: string; title: string; preview: string; tags: string[]; folderId: string | null; updatedAt: string };
+type Note = { id: string; title: string; preview: string; tags: string[]; folderId: string | null; updatedAt: string; path?: string };
 type SiteNote = { note: Note; content: string; folder: string | null };
 type SiteFile = { path: string; content: string };
 type Scope = { kind: 'all' } | { kind: 'folder'; id: string; name: string } | { kind: 'tag'; tag: string };
@@ -57,7 +57,7 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
   progress(notes.length, notes.length);
 
   // Pass 2: point links at pages, now that every page has a name.
-  const published = pages.map((p) => ({ id: p.note.id, title: p.note.title, folderId: p.note.folderId, page: p }));
+  const published = pages.map((p) => ({ id: p.note.id, title: p.note.title, folderId: p.note.folderId, path: p.note.path, page: p }));
   const byId = new Map(pages.map((p) => [p.note.id, p]));
   let hasMath = false;
   for (const page of pages) {

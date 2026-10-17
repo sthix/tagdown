@@ -51,7 +51,8 @@ impl Library {
         Ok(self.vault.notes_with_content()?.into_iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE)).collect())
     }
 
-    /// Find a note by id, or by title (ignoring case). Archived notes only match by id.
+    /// Find a note by id, by title (ignoring case), or by its file as a wikilink
+    /// names it. Archived notes only match by id.
     pub fn resolve(&self, reference: &str) -> Result<(Note, String), String> {
         let reference = reference.trim();
         let notes = self.vault.notes_with_content()?;
@@ -61,6 +62,13 @@ impl Library {
         let wanted = normalize_title(reference);
         let live = notes.into_iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE));
         let (exact, rest): (Vec<_>, Vec<_>) = live.partition(|(n, _)| normalize_title(&n.title) == wanted);
+        if exact.is_empty() {
+            // A file in the vault, the way a wikilink can name a note: `blog/post`.
+            let by_file = links::LinkTargets::new(rest.iter().map(|(n, _)| n)).by_file(reference).map(str::to_string);
+            if let Some(found) = by_file.and_then(|id| rest.iter().find(|(n, _)| n.id == id)) {
+                return Ok(found.clone());
+            }
+        }
         match exact.len() {
             1 => Ok(exact.into_iter().next().unwrap()),
             0 => {

@@ -485,6 +485,7 @@ mod tests {
             word_count: 0,
             journal: None,
             properties: Vec::new(),
+            path: String::new(),
         }
     }
 

@@ -18,7 +18,7 @@ use std::{
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::{json, Value};
 
-use crate::{search_index::SearchIndex, vault::{is_hidden, note_from_meta, Vault}};
+use crate::{search_index::SearchIndex, vault::{is_hidden, Vault}};
 
 /// Own writes remembered per file. Autosave can write several times before
 /// the first event is handled, so one fingerprint is not enough.
@@ -147,7 +147,7 @@ fn handle_change(emit: &impl Fn(&'static str, Value), vault: &Vault, search: Opt
                 return false;
             }
             let Ok((meta, content)) = vault.read_note(path) else { return false };
-            let note = note_from_meta(meta, &content);
+            let note = vault.note_at(path, meta, &content);
             if let Some(index) = search {
                 let result = if note.folder_id.as_deref() == Some("archive") { index.remove(&note.id) } else { index.upsert(&note, &content) };
                 if let Err(e) = result {

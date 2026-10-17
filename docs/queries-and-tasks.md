@@ -55,6 +55,8 @@ Three views show the matching notes with their properties, and each can add a no
 
 **`show:table`** lists the notes with a column per property. Edit a cell to change that note's property, click a header to sort, × hides a column and + adds one. These rewrite the query in the note, so the view stays plain text.
 
+To change several notes at once, tick their rows (shift-click ticks every row between the last one and this one, the header box ticks all). A bar above the table then sets a column's value on all of them, or **Clear** removes it from them.
+
 ```tagdown
 <query tag:project show:table columns:status,owner,due sort:due />
 ```

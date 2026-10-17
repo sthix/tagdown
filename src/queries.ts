@@ -12,6 +12,7 @@ import { propertyField } from './propertiesPanel';
 import { getOption, nextSort, setOption, withColumns } from './queryText';
 import { boardLanes, laneKey, movedValue, propertyOf, type Lane } from './boardLanes';
 import { resolveLocalImages } from './localImages';
+import { pickRows, selectionFor, type TableSelection } from './tableSelection';
 
 type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string };
 export type NewNote = { folderId: string | null; tags: string[]; properties: Property[] };
@@ -73,6 +74,8 @@ type FillOptions = {
 export type TableActions = {
   /** Set (or with null, remove) a property of a listed note; resolves false when that failed. */
   editProperty: (noteId: string, key: string, value: PropertyValue | null) => Promise<boolean>;
+  /** The same, for several notes at once (rows selected in a table). */
+  editMany: (noteIds: string[], key: string, value: PropertyValue | null) => Promise<boolean>;
   /** Replace the query's text in the note (sorting, columns). */
   editQuery: (oldQuery: string, newQuery: string) => void;
   /** Add a note titled `title` that starts as `newNote` says. */
@@ -346,8 +349,25 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
   table.className = `td-query-table${actions ? ' is-editable' : ''}`;
 
   const typeOf = (column: string) => columnType(output, column, actions);
+  const order = output.notes.map((note) => note.id);
+  const selection = actions ? selectionFor(query, order) : null;
+  const repaint = () => paintTable(body, output, actions, query);
 
   const head = table.createTHead().insertRow();
+  if (selection) {
+    const th = document.createElement('th');
+    th.className = 'td-qt-pick';
+    const all = pickBox(`Select all ${order.length} notes`);
+    all.checked = order.length > 0 && selection.ids.size === order.length;
+    all.indeterminate = selection.ids.size > 0 && !all.checked;
+    all.addEventListener('change', () => {
+      selection.ids = all.checked ? new Set(order) : new Set();
+      selection.anchor = null;
+      repaint();
+    });
+    th.append(all);
+    head.append(th);
+  }
   const header = (label: string, column: string) => {
     const th = document.createElement('th');
     th.scope = 'col';
@@ -386,6 +406,20 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
   const rows = table.createTBody();
   output.notes.forEach((note, r) => {
     const tr = rows.insertRow();
+    if (selection) {
+      const picked = selection.ids.has(note.id);
+      tr.classList.toggle('is-selected', picked);
+      const box = pickBox(`Select ${note.title || 'Untitled'}`);
+      box.checked = picked;
+      box.addEventListener('click', (event) => {
+        selection.ids = pickRows(order, selection.ids, r, selection.anchor, event.shiftKey, box.checked);
+        selection.anchor = r;
+        repaint();
+      });
+      const cell = tr.insertCell();
+      cell.className = 'td-qt-pick';
+      cell.append(box);
+    }
     const title = tr.insertCell();
     title.className = 'td-qt-title';
     title.innerHTML = `<a class="td-query-note" href="#" data-open-note="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</a>`;
@@ -422,8 +456,67 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
   scroller.className = 'td-qt-scroll';
   scroller.append(table);
   body.replaceChildren(scroller);
+  if (selection?.ids.size) body.prepend(bulkBar(columns, selection, actions!, typeOf, repaint));
   if (!output.notes.length) body.insertAdjacentHTML('beforeend', '<p class="td-query-empty">No notes match.</p>');
   if (actions && output.newNote) body.append(newRowButton(output.newNote, actions));
+}
+
+function pickBox(label: string) {
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.setAttribute('aria-label', label);
+  return box;
+}
+
+/** Above a table with rows ticked: set (or clear) one of its columns on all of them. */
+function bulkBar(columns: string[], selection: TableSelection, actions: TableActions, typeOf: (column: string) => Exclude<PropertyType, 'raw'>, repaint: () => void): HTMLElement {
+  const bar = document.createElement('div');
+  bar.className = 'td-qt-bulk';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Selected notes');
+  const count = selection.ids.size;
+  bar.innerHTML = `<strong>${count} selected</strong>`;
+  const editable = columns.filter((column) => !(column.toLowerCase() in BUILT_IN));
+  const done = document.createElement('button');
+  done.type = 'button';
+  done.className = 'td-qt-bulk-button';
+  done.textContent = 'Deselect';
+  done.addEventListener('click', () => { selection.ids = new Set(); selection.anchor = null; repaint(); });
+  if (!editable.length) {
+    bar.insertAdjacentHTML('beforeend', '<span class="td-qt-bulk-hint">Add a column to set it on all of them.</span>');
+    bar.append(done);
+    return bar;
+  }
+  const column = editable.find((c) => c === selection.column) ?? editable[0];
+  selection.column = column;
+  const ids = () => [...selection.ids];
+  const pick = document.createElement('select');
+  pick.className = 'td-qt-bulk-column';
+  pick.setAttribute('aria-label', 'Property to set');
+  pick.innerHTML = editable.map((c) => `<option${c === column ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  pick.addEventListener('change', () => { selection.column = pick.value; repaint(); });
+  const label = document.createElement('label');
+  label.className = 'td-qt-bulk-set';
+  label.append('Set ', pick, ' to');
+  const field = document.createElement('span');
+  field.className = 'td-qt-bulk-field';
+  field.append(propertyField({ key: column, ...defaultValue(typeOf(column)) }, {
+    save: (value) => actions.editMany(ids(), column, value),
+    decorate: actions.decorate,
+    openLink: actions.openLink,
+    suggestions: () => actions.valueSuggestions(column),
+    listId: 'td-qt-bulk-values',
+    blank: true,
+    emptyLabel: `New ${column} for all ${count}`,
+  }));
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'td-qt-bulk-button';
+  clear.textContent = 'Clear';
+  clear.title = `Remove “${column}” from the ${count} selected notes`;
+  clear.addEventListener('click', () => void actions.editMany(ids(), column, null));
+  bar.append(label, field, clear, done);
+  return bar;
 }
 
 /** The type a column's empty cells take: what its filled cells use, else what the vault uses. */

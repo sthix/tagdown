@@ -2515,9 +2515,10 @@ function replaceQuery(oldQuery: string, newQuery: string) {
   if (preview) paintPreview(preview);
 }
 
-const tableActions: TableActions = {
-  editProperty: async (noteId, key, given) => {
-    try {
+/** Set (or with null, remove) a property on notes listed in a table, then refresh the views once. */
+async function setRowProperty(noteIds: string[], key: string, given: PropertyValue | null) {
+  try {
+    for (const noteId of noteIds) {
       const value = await linkFieldValue(key, given, libraryNotes.find((n) => n.id === noteId) ?? null);
       const note = await invoke<Note>('set_property', { id: noteId, key, value, renameFrom: null });
       libraryNotes = libraryNotes.map((n) => (n.id === noteId ? note : n));
@@ -2525,14 +2526,20 @@ const tableActions: TableActions = {
         selectedNote = note;
         paintProperties();
       }
-      await refreshQueries();
-      scheduleListRefresh();
-      return true;
-    } catch (error) {
-      await message(String(error), { title: 'Could not change the property', kind: 'warning' });
-      return false;
     }
-  },
+    return true;
+  } catch (error) {
+    await message(String(error), { title: 'Could not change the property', kind: 'warning' });
+    return false;
+  } finally {
+    await refreshQueries();
+    scheduleListRefresh();
+  }
+}
+
+const tableActions: TableActions = {
+  editProperty: (noteId, key, given) => setRowProperty([noteId], key, given),
+  editMany: (noteIds, key, given) => setRowProperty(noteIds, key, given),
   editQuery: replaceQuery,
   createRow: async (newNote, title) => {
     try {
@@ -3297,7 +3304,7 @@ function renderEditor() {
     // the pressed element was re-rendered away.
     suppressPreviewClick = false;
     // Ticking a task in a query block leaves an open block alone.
-    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note], .td-query-table, .td-qt-new, .td-qb, .td-qc')) return;
+    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note], .td-query-table, .td-qt-bulk, .td-qt-new, .td-qb, .td-qc')) return;
     event.preventDefault();
     suppressPreviewClick = true;
     const hint = textAroundPoint(event.clientX, event.clientY);
@@ -3412,7 +3419,7 @@ function renderEditor() {
 }
 
 function isInteractive(target: HTMLElement) {
-  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-new, .td-qb, .td-qc');
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-bulk, .td-qt-new, .td-qb, .td-qc');
 }
 
 const wikilinkOptions = {

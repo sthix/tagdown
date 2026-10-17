@@ -1255,3 +1255,28 @@
 .graph-kind svg { color: var(--ink-3); }
 .graph-kind .type-emoji { line-height: 1; }
 .graph-more { margin-left: auto; color: var(--ink-3); }
+
+/* ---- Selecting table rows to set a property on all of them ---- */
+.preview .td-query-table .td-qt-pick { width: 26px; min-width: 26px; padding-right: 0; text-align: center; }
+.preview .td-qt-pick input { margin: 0; accent-color: var(--marker-strong); cursor: pointer; opacity: .35; transition: opacity .12s ease; }
+.preview .td-query-table tr:hover .td-qt-pick input, .preview .td-qt-pick input:checked, .preview .td-qt-pick input:indeterminate, .preview .td-qt-pick input:focus-visible { opacity: 1; }
+.preview .td-query-table tr.is-selected td { background: var(--hover-overlay); }
+.preview .td-qt-bulk {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin: 0 0 8px; padding: 6px 8px 6px 12px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--bg-raised); color: var(--ink-2); font: 12.5px var(--font-ui);
+}
+.preview .td-qt-bulk strong { color: var(--ink); font-weight: 600; }
+.preview .td-qt-bulk-set { display: inline-flex; align-items: center; gap: 6px; }
+.preview .td-qt-bulk-column { height: 24px; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--bg-field); color: var(--ink); font: 12.5px var(--font-ui); }
+.preview .td-qt-bulk-field { flex: 1; min-width: 140px; }
+.preview .td-qt-bulk-field .prop-display { min-height: 24px; padding: 1px 6px; border: 1px dashed var(--rule-strong); border-radius: 6px; }
+.preview .td-qt-bulk-field .prop-input { height: 24px; padding: 0 6px; color: var(--ink); }
+.preview .td-qt-bulk-hint { color: var(--ink-3); }
+.preview .td-qt-bulk-button {
+  height: 24px; padding: 0 10px;
+  border: 1px solid var(--rule-strong); border-radius: 6px;
+  background: var(--bg-button); color: var(--ink); font: 500 12px var(--font-ui); cursor: pointer;
+}
+.preview .td-qt-bulk-button:hover { background: var(--bg-button-hover); }

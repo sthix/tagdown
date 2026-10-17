@@ -78,5 +78,6 @@ Results show highlighted excerpts. The same syntax works in [queries](queries-an
 - `[[Note title]]` links to another note by title (case-insensitive). Typing `[[` opens autocomplete.
 - Clicking a link opens the note. If no note has that title yet, Tagdown creates it.
 - `[[Note title#Heading]]` jumps to a heading; `[[Note title|label]]` shows a different label.
-- When you rename a note, links to it in other notes are updated automatically.
+- A link can also name a note by its file, the way Obsidian writes them: `[[blog/my-post]]` for `blog/my-post.md`, or just `[[my-post]]` when no other note has that file name. A note whose title matches wins over a file match.
+- When you rename a note, links to it by title are updated automatically. Links that name it by its file still find it, so they're left as they are.
 - Below each note, **Linked mentions** lists the notes that link to it, with the lines that mention it.

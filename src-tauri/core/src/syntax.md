@@ -88,7 +88,7 @@ Water is H~2~O and Einstein wrote E = mc^2^.
 
 ### Wikilinks
 
-Reference another note with [[Title]] or [[Title|display label]].
+Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. A title match comes first.
 
 ```tagdown
 See [[Welcome]] or [[Welcome|the intro]].

@@ -61,7 +61,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Wikilinks',
-        description: 'Reference another note with [[Title]] or [[Title|display label]].',
+        description: 'Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. A title match comes first.',
         syntax: 'See [[Welcome]] or [[Welcome|the intro]].'
       },
       {

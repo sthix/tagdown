@@ -71,7 +71,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 - **Local-first vaults** of plain `.md` files (`~/Documents/Tagdown` by default, or any folder, Obsidian vaults included), whose folders on disk are Tagdown's folders. Keep several and switch between them.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
-- **Wikilinks** with autocomplete. Links follow renames automatically and show up as *Linked mentions* under the target note.
+- **Wikilinks** with autocomplete, by title or, Obsidian-style, by file path. Links follow renames automatically and show up as *Linked mentions* under the target note.
 - **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Live queries** such as `<query tag:project show:tasks />`; tick tasks right in the list. ⌘⇧T shows every open task.
@@ -154,7 +154,7 @@ npm run build
 npm run tauri:build
 ```
 
-On first launch the app creates a vault at `~/Documents/Tagdown` with a few starter notes. More in [Getting started](docs/getting-started.md).
+On first launch the app creates a vault at `~/Documents/Tagdown` with a few starter notes. To use another folder, or an existing Obsidian vault, choose **Open folder as vault…** in Settings. More in [Getting started](docs/getting-started.md).
 
 ## Command line and AI assistants
 
@@ -184,7 +184,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | [Getting started](docs/getting-started.md) | Download, build from source, first launch |
 | [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes and accents |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
-| [Organizing your vault](docs/organizing.md) | Folders, tags, pinning, archive, search, wikilinks |
+| [Organizing your vault](docs/organizing.md) | Vaults, folders, tags, pinning, archive, search, wikilinks |
 | [Journal](docs/journal.md) | Daily pages, date links, journal template |
 | [Queries and tasks](docs/queries-and-tasks.md) | Live queries and the open-tasks view |
 | [Version history](docs/version-history.md) | Snapshots and restoring |
@@ -216,7 +216,7 @@ node --test tests/*.mjs
 
 ## Current status
 
-Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), vault, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
+Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), multiple vaults with folders on disk, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
 See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
 

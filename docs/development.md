@@ -35,8 +35,8 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   └── tagdown/            # parser, renderer, blocks, slides, syntax reference data
 ├── src-tauri/
 │   ├── src/commands/       # Tauri commands called from the UI
-│   └── core/src/           # vault, frontmatter, search_index, links, history,
-│                           # tasks, query, watcher, site, library, mcp
+│   └── core/src/           # vault, vaults, folders, frontmatter, search_index,
+│                           # links, history, tasks, query, watcher, site, library, mcp
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data
 ├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides, syntax
 └── docs/                   # this documentation

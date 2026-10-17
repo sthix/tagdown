@@ -16,7 +16,7 @@ Weekly check-ins live in [[Weekly planning]], or [[Weekly planning|the weekly no
 
 - The first `# ` heading is the note's title.
 - `#tags` anywhere in the text tag the note. Use `/` to nest them: `#project/atlas` sits under `project` in the sidebar.
-- `[[Title]]` links to another note; `[[Title|label]]` shows a different label; `[[Title#heading]]` jumps to a heading.
+- `[[Title]]` links to another note; `[[Title|label]]` shows a different label; `[[Title#heading]]` jumps to a heading. A link can also name a note by its file, `[[folder/file]]` or `[[file]]`, as Obsidian writes them.
 
 ## Inline formatting
 

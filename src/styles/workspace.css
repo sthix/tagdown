@@ -1,0 +1,260 @@
+/* ---- Workspace: panes side by side, each with its own tabs ---- */
+.workspace {
+  height: 100%;
+  min-width: 0;
+  display: flex;
+}
+.pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane > .editor-root { flex: 1; height: auto; }
+
+.pane-divider {
+  position: relative;
+  flex: 0 0 1px;
+  background: var(--line);
+  cursor: col-resize;
+  z-index: 30;
+}
+/* A wider grab area than the hairline itself. */
+.pane-divider::after { content: ""; position: absolute; inset: 0 -4px; }
+.pane-divider:hover,
+.pane-divider.is-dragging { background: var(--marker-strong); }
+body.is-resizing-panes { cursor: col-resize; user-select: none; }
+body.is-resizing-panes iframe { pointer-events: none; }
+
+/* With splits, the pane you're in is the one whose current tab carries the marker. */
+.workspace.has-splits .pane:not(.is-active) .editor-topbar { opacity: .82; }
+.workspace.has-splits .pane.is-active .tab.is-current::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--marker-strong);
+}
+
+/* Focus mode clears the traffic lights in the first pane only, and shows the way out there. */
+.exit-focus { display: none; }
+#app.is-focus .pane:first-child .exit-focus { display: inline-flex; }
+#app.is-focus .editor-topbar { padding-left: 12px; }
+#app.is-focus .pane:first-child .editor-topbar { padding-left: 84px; }
+
+/* ---- Tabs, in the top bar ---- */
+.editor-topbar { gap: 6px; padding-left: 12px; }
+.tabstrip {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabstrip::-webkit-scrollbar { display: none; }
+.tab {
+  position: relative;
+  flex: 0 1 190px;
+  min-width: 76px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 9px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+  user-select: none;
+  transition: background-color .12s ease, color .12s ease;
+}
+.tab:hover { background: var(--hover-overlay); color: var(--ink-2); }
+.tab.is-current {
+  background: var(--bg-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-raised);
+  font-weight: 600;
+}
+.tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-tint-strong); }
+.tab.is-blank .tab-title { font-style: italic; font-weight: 500; }
+.tab.is-dragging { opacity: .45; }
+.tab-icon { display: inline-flex; flex-shrink: 0; color: var(--ink-4); }
+.tab.is-current .tab-icon { color: var(--ink-3); }
+.tab-icon .folder-svg, .tab-icon .ui-icon { width: 12px; height: 12px; }
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tab-close {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: none;
+  color: var(--ink-3);
+  opacity: 0;
+  cursor: pointer;
+}
+.tab:hover .tab-close, .tab.is-current .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--pressed-overlay); color: var(--ink); }
+/* Where a dragged tab will land. */
+.tab.drop-before::before,
+.tab.drop-after::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: -2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--marker-strong);
+}
+.tab.drop-after::before { left: auto; right: -2px; }
+.tab-new { flex-shrink: 0; margin-right: auto; color: var(--ink-3); }
+
+/* ---- Dropping a note or tab on a pane ---- */
+.pane-drop {
+  position: absolute;
+  inset: 48px 0 0;
+  z-index: 60;
+  pointer-events: none;
+}
+.pane-drop[hidden] { display: none; }
+.pane-drop-zone {
+  position: absolute;
+  inset: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--marker) 22%, transparent);
+  box-shadow: inset 0 0 0 2px var(--marker-strong);
+  transition: left .14s var(--ease-out), right .14s var(--ease-out);
+}
+.pane-drop[data-zone="left"] .pane-drop-zone { right: 50%; }
+.pane-drop[data-zone="right"] .pane-drop-zone { left: 50%; }
+.pane-drop-zone span {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-dialog);
+  box-shadow: var(--shadow-lg);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ---- Top bar in a narrow pane: rarer actions move to the ⋯ menu ---- */
+.export-menu hr, .context-menu hr { margin: 5px 6px; border: 0; border-top: .5px solid var(--line); }
+.export-menu button[hidden] { display: none; }
+.export-menu [data-export="present"], .export-menu [data-export="history"] { display: none; }
+@container (max-width: 700px) {
+  .topbar-extra { display: none; }
+  .export-menu [data-export="present"], .export-menu [data-export="history"] { display: flex; }
+}
+@container (max-width: 480px) {
+  .topbar-split { display: none; }
+  .tab { min-width: 56px; }
+}
+
+/* ---- Where the note lives, in the meta line ---- */
+.doc-location { display: inline-flex; align-items: center; }
+.doc-location .crumb .folder-svg { width: 13px; height: 13px; }
+
+/* ---- New tab page ---- */
+.empty-recent { width: 100%; margin-top: 34px; }
+.empty-recent h3 {
+  margin: 0 0 6px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.empty-recent-row {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.empty-recent-row:hover, .empty-recent-row:focus-visible { background: var(--hover-overlay); color: var(--ink); outline: none; }
+.empty-recent-row span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.empty-recent-row time { color: var(--ink-4); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.empty-recent-row .folder-svg { flex-shrink: 0; color: var(--ink-3); }
+
+/* ---- Notes open in a tab somewhere, in the note list ---- */
+.note-card.is-open h3::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--marker-strong);
+  vertical-align: middle;
+}
+
+/* ---- Right-click menu ---- */
+.context-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 220px;
+  padding: 5px;
+  background: var(--bg-dialog);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-ui);
+  animation: menu-in .12s var(--ease-out) both;
+}
+.context-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.context-menu button > span { flex: 1; }
+.context-menu button .ui-icon, .context-menu button .folder-svg { flex-shrink: 0; width: 14px; height: 14px; color: var(--ink-2); }
+.context-menu-gap { flex: 0 0 14px !important; }
+.context-menu kbd { color: var(--ink-3); font-family: var(--font-ui); font-size: 11px; }
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible { background: var(--marker-soft); outline: none; }
+.context-menu button:disabled { color: var(--ink-4); cursor: default; }
+.context-menu button:disabled .ui-icon { color: var(--ink-4); }
+.context-menu button.is-danger { color: #d4574a; }
+
+/* Tabs get the room first: a long status message shortens instead. */
+.editor-topbar .topbar-right { flex-shrink: 1; min-width: 0; }
+.editor-topbar .topbar-right > * { flex-shrink: 0; }
+.editor-topbar .topbar-right > #saved { flex-shrink: 1; min-width: 0; }
+.editor-topbar .save-state span { overflow: hidden; text-overflow: ellipsis; }

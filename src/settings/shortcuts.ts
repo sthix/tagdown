@@ -16,6 +16,18 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Tabs and panes',
+    shortcuts: [
+      { keys: ['⌘T'], action: 'New tab' },
+      { keys: ['⌘W'], action: 'Close tab' },
+      { keys: ['⌃⇥', '⌃⇧⇥'], action: 'Next / previous tab' },
+      { keys: ['⌘-click'], action: 'Open a note or link in a new tab' },
+      { keys: ['⌥⌘-click'], action: 'Open it in a pane beside' },
+      { keys: ['⌥⌘\\'], action: 'Split right' },
+      { keys: ['⌃⌘←', '⌃⌘→'], action: 'Focus the pane on that side' },
+    ],
+  },
+  {
     title: 'Views',
     shortcuts: [
       { keys: ['⌘1'], action: 'Source' },
@@ -32,6 +44,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['⌘P'], action: 'Print or save as PDF' },
       { keys: ['⌥⌘P'], action: 'Present as slides' },
       { keys: ['⌥⌘←', '⌥⌘→'], action: 'Previous / next journal day' },
+      { keys: ['⌘⇧I'], action: 'Fold or show properties' },
     ],
   },
   {

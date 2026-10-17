@@ -23,7 +23,7 @@
 }
 .editor-topbar button,
 .editor-topbar .mode-switch { -webkit-app-region: no-drag; }
-#app.is-focus .editor-topbar { padding-left: 84px; }
+
 .crumbs {
   flex: 1;
   min-width: 0;
@@ -95,7 +95,58 @@
 /* ---- Properties: custom frontmatter entries as typed fields ---- */
 .doc-properties { margin-top: 10px; font-size: 13px; }
 .doc-properties.is-empty { margin-top: 4px; }
-.props { display: grid; grid-template-columns: 24px minmax(72px, max-content) minmax(0, 1fr) 22px; column-gap: 6px; }
+.props { display: grid; grid-template-columns: 24px minmax(72px, max-content) minmax(0, 1fr) auto; column-gap: 6px; }
+/* The header: fold toggle, and when folded a single line of key/value chips. */
+.props-head { display: flex; align-items: center; gap: 6px; min-width: 0; height: 26px; margin-bottom: 2px; }
+.doc-properties.is-folded .props-head { margin-bottom: 0; }
+.props-toggle {
+  flex-shrink: 0;
+  height: 24px; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; border-radius: 6px; padding: 0 7px 0 5px;
+  background: none; color: var(--ink-3); font: 600 11.5px var(--font-ui); letter-spacing: .01em;
+  cursor: pointer;
+}
+.props-toggle:hover, .props-toggle:focus-visible { background: var(--chip-bg); color: var(--ink); outline: none; }
+.props-chevron { display: inline-flex; transition: transform .16s var(--ease-out); }
+.props-toggle[aria-expanded="true"] .props-chevron { transform: rotate(90deg); }
+.props-count { min-width: 16px; padding: 0 5px; border-radius: 8px; background: var(--chip-bg); color: var(--ink-3); font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.props-summary {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 4px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+.prop-chip {
+  flex-shrink: 0; max-width: 240px;
+  height: 22px; display: inline-flex; align-items: center; gap: 5px;
+  border: 0; border-radius: 11px; padding: 0 9px;
+  background: var(--chip-bg); color: var(--ink-2); font: 12px var(--font-ui);
+  white-space: nowrap; cursor: pointer;
+}
+.prop-chip:hover, .prop-chip:focus-visible { background: var(--pressed-overlay); color: var(--ink); outline: none; }
+.prop-chip-key { color: var(--ink-3); }
+.prop-chip-value { overflow: hidden; text-overflow: ellipsis; }
+.props-summary-note { color: var(--ink-3); font-size: 12px; }
+.props-head-add {
+  flex-shrink: 0; width: 22px; height: 22px; margin-left: auto;
+  display: inline-grid; place-items: center;
+  border: 0; border-radius: 6px; padding: 0;
+  background: none; color: var(--ink-3); font-size: 15px; line-height: 1;
+  opacity: 0; cursor: pointer;
+}
+.doc-properties:hover .props-head-add, .props-head-add:focus-visible { opacity: 1; }
+.props-head-add:hover { background: var(--chip-bg); color: var(--ink); }
+.props-foot { display: flex; align-items: center; gap: 4px; }
+.props-hidden-toggle {
+  margin-top: 2px; height: 24px; display: inline-flex; align-items: center; gap: 5px;
+  border: 0; border-radius: 6px; padding: 0 8px 0 6px;
+  background: none; color: var(--ink-3); font: 12px var(--font-ui);
+  cursor: pointer; opacity: .75;
+}
+.props-hidden-toggle:hover, .props-hidden-toggle:focus-visible { opacity: 1; background: var(--chip-bg); color: var(--ink); outline: none; }
+.prop-row.is-hidden-prop > :not(.prop-actions) { opacity: .55; }
+.prop-actions { gap: 2px; }
 .prop-row { display: contents; }
 .prop-row > * { min-height: 28px; display: flex; align-items: center; }
 .prop-type { position: relative; justify-content: center; }
@@ -147,14 +198,15 @@
 .prop-display .td-wikilink { color: var(--accent-soft); text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
 .prop-display .td-wikilink.is-missing { color: var(--ink-3); }
 .prop-raw { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; color: var(--ink-3); font-size: 12px; }
-.prop-remove {
-  width: 22px; height: 22px; justify-content: center;
+.prop-remove, .prop-hide {
+  width: 22px; height: 22px; display: inline-grid; place-items: center;
   border: 0; border-radius: 6px; padding: 0;
   background: none; color: var(--ink-3); font-size: 15px; line-height: 1;
   opacity: 0; cursor: pointer;
 }
-.prop-row:hover .prop-remove, .prop-remove:focus-visible { opacity: 1; }
-.prop-remove:hover { background: var(--chip-bg); color: var(--ink); }
+.prop-row:hover .prop-remove, .prop-remove:focus-visible,
+.prop-row:hover .prop-hide, .prop-hide:focus-visible, .prop-row.is-hidden-prop .prop-hide { opacity: 1; }
+.prop-remove:hover, .prop-hide:hover { background: var(--chip-bg); color: var(--ink); }
 .prop-add {
   margin-top: 2px; height: 24px;
   border: 0; border-radius: 6px; padding: 0 8px 0 6px;

@@ -20,7 +20,8 @@ import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget 
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
 import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './blockRefs';
-import { renderPropertiesPanel } from './propertiesPanel';
+import { propertiesFolded, renderPropertiesPanel, setPropertiesFolded } from './propertiesPanel';
+import { showContextMenu, type MenuItem } from './contextMenu';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
@@ -34,6 +35,7 @@ import './styles/editor.css';
 import './styles/preview.css';
 import './styles/settings.css';
 import './styles/palette.css';
+import './styles/workspace.css';
 
 type SortOrder = 'updatedDesc' | 'createdDesc' | 'titleAsc' | 'titleDesc' | 'wordCountDesc';
 type QuickFilter = 'all' | 'pinned' | 'untagged' | 'recent';
@@ -127,12 +129,14 @@ let showAllTags = false;
 // map of the last preview render.
 type BlockEdit = { el: HTMLTextAreaElement; start: number; lineCount: number; originalCount: number; restoreIfEmpty: string | null };
 let blockEdit: BlockEdit | null = null;
+// Every note in the vault, archived ones too, as of the last full reload.
+const knownNotes = new Map<string, Note>();
 let previewBlocks: SourceBlock[] = [];
 let suppressPreviewClick = false;
-// Links follow a renamed note: the title other notes link to, and a pending sync.
-let linkNoteId: string | null = null;
-let linkTitle = '';
-let linkSyncTimer: number | undefined;
+// Links follow a renamed note: for each open note, the title other notes link
+// to, and pending syncs (with the title to sync to).
+const linkTitles = new Map<string, string>();
+const linkSyncs = new Map<string, { timer: number; title: string }>();
 // "Linked mentions" for the open note, once loaded.
 let backlinks: { id: string; items: Backlink[] } | null = null;
 const TAG_PREVIEW_LIMIT = 6;
@@ -143,12 +147,15 @@ let journalMonth: CalendarMonth = monthOf(todayKey());
 initializeTheme();
 applyPreferences();
 
-// Images in notes are stored relative to the vault.
-void invoke<string>('vault_path').then((path) => {
+// Images in notes are stored relative to the vault; the open tabs are remembered per vault.
+const vaultPath = invoke<string>('vault_path').then((path) => {
   setVaultRoot(path);
-  const preview = document.querySelector<HTMLDivElement>('#editor-root .preview');
-  if (preview && !blockEdit) paintPreview(preview);
-}).catch(() => {});
+  forEachPane(() => {
+    const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+    if (preview && !blockEdit) paintPreview(preview);
+  });
+  return path;
+}).catch(() => '');
 
 // Other vaults, for the palette; a switch saves what's pending first.
 let vaults: VaultEntry[] = [];
@@ -163,6 +170,7 @@ for (const type of ['dragover', 'drop'] as const) {
 }
 
 onPreferenceChange((name) => {
+  if (name === 'hiddenProperties' || name === 'propertiesFold') forEachPane(() => paintProperties());
   if (name !== 'spellcheck') return;
   document.querySelectorAll<HTMLTextAreaElement>('#source, .td-block-editor').forEach((textarea) => {
     textarea.spellcheck = getPreference('spellcheck');
@@ -171,12 +179,12 @@ onPreferenceChange((name) => {
 
 // Re-render the live preview when the user toggles dark/light so KaTeX and
 // Mermaid pick up the new theme. Other DOM is theme-agnostic via CSS variables.
-onThemePreferenceChange(() => {
-  const lp = document.querySelector<HTMLDivElement>('#editor-root .preview');
+onThemePreferenceChange(() => forEachPane(() => {
+  const lp = editorRoot.querySelector<HTMLDivElement>('.preview');
   if (!lp) return;
   if (blockEdit) commitBlockEdit();
   else paintPreview(lp);
-});
+}));
 
 app.innerHTML = `
   <aside class="sidebar">
@@ -215,14 +223,16 @@ app.innerHTML = `
       </header>
       <div id="notes"></div>
     </section>
-    <section class="editor-pane"><div id="editor-root"></div></section>
+    <section class="editor-pane"><div class="workspace" id="workspace"></div></section>
   </main>
 `;
 
 const folderEl = document.querySelector<HTMLDivElement>('#folders')!;
 const noteEl = document.querySelector<HTMLDivElement>('#notes')!;
 const tagEl = document.querySelector<HTMLDivElement>('#tags')!;
-const editorRoot = document.querySelector<HTMLDivElement>('#editor-root')!;
+const workspaceEl = document.querySelector<HTMLDivElement>('#workspace')!;
+// The open pane's editor; see "Panes and tabs".
+let editorRoot: HTMLDivElement;
 const noteListTitleEl = document.querySelector<HTMLHeadingElement>('#note-list-title')!;
 const noteListCountEl = document.querySelector<HTMLSpanElement>('#note-list-count')!;
 const scopeIconEl = document.querySelector<HTMLSpanElement>('.scope-icon')!;
@@ -230,6 +240,10 @@ const tagCountEl = document.querySelector<HTMLSpanElement>('#tag-count')!;
 
 async function boot() {
   initSettings();
+  activePane = createPane();
+  panes = [activePane];
+  load(activePane);
+  layoutPanes();
   bindChrome();
   await reloadFolders();
   await reloadTags();
@@ -241,6 +255,15 @@ async function boot() {
   await listen<{ id: string }>('note-removed-externally', (event) => onExternalRemoval(event.payload.id));
   // Folders are directories: ones made, renamed or removed in Finder show up here.
   await listen('folders-changed-externally', scheduleListRefresh);
+  // The app menu's File → New Tab / Close Tab (⌘T / ⌘W never reach the page).
+  await listen<string>('menu', (event) => void runMenuCommand(event.payload));
+}
+
+async function runMenuCommand(id: string) {
+  // Not behind an open dialog (the palette, Settings, a confirmation).
+  if (document.querySelector('dialog[open]')) return;
+  if (id === 'new-tab') await newTab();
+  else if (id === 'close-tab') await closeTab(activePane, activePane.active);
 }
 
 /** Run a folder change on disk; tell the user when it can't be done (a name taken, say). */
@@ -257,11 +280,13 @@ async function folderAction(run: () => Promise<unknown>): Promise<boolean> {
 
 /** Open what Settings → General → "On launch" asks for. */
 async function openStartupNote() {
+  workspaceVault = await vaultPath;
   const startup = getPreference('startupOpen');
   if (startup === 'journal') {
     await openJournal(todayKey());
     return;
   }
+  if (startup === 'last' && await restoreWorkspace()) return;
   const lastId = startup === 'last' ? getPreference('lastNoteId') : null;
   const last = lastId ? libraryNotes.find((note) => note.id === lastId) : undefined;
   if (last) await openNote(last);
@@ -283,6 +308,21 @@ function scheduleListRefresh() {
 
 async function onExternalChange(note: Note, diskContent: string) {
   scheduleListRefresh();
+  knownNotes.set(note.id, note);
+  if (linkTitles.has(note.id) && !linkSyncs.has(note.id)) linkTitles.set(note.id, note.title);
+  // Panes in the background never hold unsaved edits: take the disk version.
+  for (const pane of panes) {
+    if (pane === activePane) continue;
+    withPane(pane, () => {
+      if (!selectedNote) return;
+      if (selectedNote.id !== note.id) { void loadBacklinks(selectedNote.id); return; }
+      const propertiesChanged = JSON.stringify(note.properties ?? []) !== JSON.stringify(selectedNote.properties ?? []);
+      selectedNote = note;
+      if (diskContent !== content) showDiskContent(diskContent);
+      else if (propertiesChanged) paintProperties();
+    });
+  }
+  paintAllTabs();
   if (!selectedNote) return;
   if (note.id !== selectedNote.id) {
     // The other note may have gained or lost a link to this one.
@@ -314,7 +354,6 @@ async function onExternalChange(note: Note, diskContent: string) {
     }
   }
   selectedNote = note;
-  linkTitle = note.title;
   showDiskContent(diskContent);
   savedMessage = 'Reloaded from disk';
   renderStatus();
@@ -322,14 +361,14 @@ async function onExternalChange(note: Note, diskContent: string) {
 
 /** Swap in new content for the open note, keeping scroll and caret where they were. */
 function showDiskContent(next: string) {
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   const caret = source && document.activeElement === source ? [source.selectionStart, source.selectionEnd] : null;
   const sourceScroll = source?.scrollTop ?? 0;
   const previewScroll = editorRoot.querySelector('.preview')?.scrollTop ?? 0;
   content = next;
   setDocumentTitle(selectedNote?.title || 'Untitled');
   renderEditor();
-  const nextSource = document.querySelector<HTMLTextAreaElement>('#source');
+  const nextSource = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   if (nextSource) {
     nextSource.scrollTop = sourceScroll;
     if (caret) {
@@ -381,6 +420,14 @@ function bindChrome() {
   window.addEventListener('keydown', async (event) => {
     if (event.metaKey && event.key.toLowerCase() === 'k') { event.preventDefault(); openPalette(); return; }
     if (isPaletteOpen()) return;
+    // Tabs and splits.
+    if (event.metaKey && event.altKey && event.code === 'Backslash') { event.preventDefault(); await splitPane(selectedNote); return; }
+    if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 't') { event.preventDefault(); await newTab(); return; }
+    if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'w') { event.preventDefault(); await closeTab(activePane, activePane.active); return; }
+    if (event.ctrlKey && !event.metaKey && event.key === 'Tab') { event.preventDefault(); await cycleTab(event.shiftKey ? -1 : 1); return; }
+    if (event.metaKey && event.shiftKey && (event.code === 'BracketLeft' || event.code === 'BracketRight')) { event.preventDefault(); await cycleTab(event.code === 'BracketLeft' ? -1 : 1); return; }
+    if (event.metaKey && event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); focusPane(event.key === 'ArrowLeft' ? -1 : 1); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'i') { event.preventDefault(); toggleProperties(); return; }
     if (event.metaKey && event.key === '\\') { event.preventDefault(); toggleFocusMode(); return; }
     if (event.metaKey && event.key === ',') { event.preventDefault(); openSettings(); }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); toggleTheme(); }
@@ -408,6 +455,7 @@ function setViewMode(mode: ViewMode) {
   viewMode = mode;
   setPreference('lastViewMode', mode);
   renderEditor();
+  saveWorkspace();
 }
 
 function toggleFocusMode() {
@@ -415,7 +463,6 @@ function toggleFocusMode() {
   app.classList.toggle('is-focus', focusMode);
   const collapse = document.querySelector<HTMLButtonElement>('#sidebar-collapse');
   collapse?.setAttribute('aria-pressed', String(focusMode));
-  renderEditor();
 }
 
 function toggleTheme() {
@@ -444,6 +491,24 @@ function paletteActions(): PaletteAction[] {
     { id: 'split', label: 'Show source and preview', shortcut: '⌘2', icon: uiIcon('split', 15), run: () => setViewMode('split') },
     { id: 'preview', label: 'Show preview', shortcut: '⌘3', icon: uiIcon('eye', 15), run: () => setViewMode('preview') },
     { id: 'focus', label: focusMode ? 'Exit focus mode' : 'Enter focus mode', hint: 'Hide the sidebar and note list', shortcut: '⌘\\', icon: uiIcon('focus', 15), run: toggleFocusMode },
+    { id: 'new-tab', label: 'New tab', shortcut: '⌘T', icon: uiIcon('plus', 15), run: newTab },
+    { id: 'close-tab', label: 'Close tab', shortcut: '⌘W', icon: uiIcon('close', 15), run: () => closeTab(activePane, activePane.active) },
+    ...(activePane.tabs.length > 1 ? [
+      { id: 'next-tab', label: 'Next tab', shortcut: '⌃⇥', icon: uiIcon('chevronRight', 15), run: () => cycleTab(1) },
+      { id: 'previous-tab', label: 'Previous tab', shortcut: '⌃⇧⇥', icon: uiIcon('chevronLeft', 15), run: () => cycleTab(-1) },
+    ] : []),
+    { id: 'split-right', label: 'Split right', hint: selectedNote ? 'This note again, side by side' : 'An empty pane beside this one', shortcut: '⌥⌘\\', icon: uiIcon('splitRight', 15), run: () => splitPane(selectedNote) },
+    ...(panes.length > 1 ? [
+      { id: 'close-pane', label: 'Close this pane', hint: 'Its tabs close with it', icon: uiIcon('split', 15), run: () => closePane(activePane) },
+      { id: 'focus-pane-next', label: 'Focus the pane to the right', shortcut: '⌃⌘→', icon: uiIcon('chevronRight', 15), run: () => focusPane(1) },
+      { id: 'focus-pane-previous', label: 'Focus the pane to the left', shortcut: '⌃⌘←', icon: uiIcon('chevronLeft', 15), run: () => focusPane(-1) },
+    ] : []),
+    ...(selectedNote?.properties?.length ? [
+      { id: 'fold-properties', label: propertiesAreFolded() ? 'Show properties' : 'Fold properties', hint: 'Fold them to one line, or open them up', shortcut: '⌘⇧I', icon: uiIcon('sliders', 15), run: toggleProperties },
+    ] : []),
+    ...(getPreference('hiddenProperties').length ? [
+      { id: 'unhide-properties', label: 'Show all hidden properties again', hint: getPreference('hiddenProperties').join(', '), icon: uiIcon('eye', 15), run: () => setPreference('hiddenProperties', []) },
+    ] : []),
     { id: 'theme', label: dark ? 'Switch to light theme' : 'Switch to dark theme', shortcut: '⌘⇧D', icon: uiIcon(dark ? 'sun' : 'moon', 15), run: toggleTheme },
     ...(selectedNote ? [
       { id: 'export-html', label: 'Export as HTML…', hint: 'A standalone page that opens anywhere', shortcut: '⌘⇧E', icon: uiIcon('globe', 15), run: exportNoteHtml },
@@ -482,12 +547,12 @@ function openPalette() {
     searchContent: async (query) => (await invoke<Array<{ note: Note; excerpt: string; highlights: Array<[number, number]> }>>('search', { query }))
       .map((r) => ({ id: r.note.id, excerpt: r.excerpt, highlights: r.highlights })),
     actions: paletteActions,
-    openNote: revealNote,
+    openNote: (id, where) => revealNote(id, where),
   });
 }
 
 /** Open a note from anywhere, widening the note list if it isn't in view. */
-async function revealNote(id: string) {
+async function revealNote(id: string, where: OpenTarget = 'here') {
   const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
   const note = all.find((candidate) => candidate.id === id);
   if (!note) return;
@@ -498,7 +563,7 @@ async function revealNote(id: string) {
     renderFilterPills();
     await reloadNotes();
   }
-  await openNote(note);
+  await openNote(note, where);
   document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
@@ -527,6 +592,735 @@ async function createNote() {
 /** Folders the user made, as opposed to All Notes, the Journal and the Archive. */
 function isUserFolder(id: string | null): id is string {
   return !!id && id !== 'archive' && id !== 'journal';
+}
+
+// ---- Panes and tabs ----
+//
+// The editor area holds up to four panes side by side, each with its own tabs.
+// The editor state of the active pane (its note, text, open block, save
+// timer…) lives in the module variables above; every other pane keeps its own
+// in `pane.state` until it becomes active. `withPane` swaps a background pane
+// in for one synchronous moment, so the usual render functions repaint it.
+
+type OpenTarget = 'here' | 'tab' | 'split';
+type Tab = { noteId: string | null; title: string; scroll?: [number, number] };
+type PaneEditor = {
+  note: Note | null;
+  content: string;
+  viewMode: ViewMode;
+  blockEdit: BlockEdit | null;
+  previewBlocks: SourceBlock[];
+  suppressPreviewClick: boolean;
+  backlinks: { id: string; items: Backlink[] } | null;
+  saveTimer: number | undefined;
+  savedMessage: string;
+  caretLine: number | null;
+  notice: { text: string; until: number } | null;
+};
+type Pane = { id: number; el: HTMLElement; root: HTMLDivElement; tabs: Tab[]; active: number; size: number; state: PaneEditor };
+
+const MAX_PANES = 4;
+const MIN_PANE_WIDTH = 300;
+const NOTE_MIME = 'application/x-tagdown-note';
+let panes: Pane[] = [];
+let activePane: Pane;
+let paneIds = 0;
+// While a background pane is swapped in, focus moving into it must not activate it.
+let swapping = 0;
+// The tab being dragged, if a drag started on a tab rather than a note card.
+let draggedTab: { pane: Pane; index: number } | null = null;
+
+const blankTab = (): Tab => ({ noteId: null, title: 'New tab' });
+
+/** ⌘-click opens in a new tab, ⌥⌘-click in a split beside this one. */
+function openTarget(event: MouseEvent | KeyboardEvent): OpenTarget {
+  return event.metaKey ? (event.altKey ? 'split' : 'tab') : 'here';
+}
+
+function createPane(mode: ViewMode = viewMode): Pane {
+  const el = document.createElement('div');
+  el.className = 'pane';
+  const root = document.createElement('div');
+  root.className = 'editor-root';
+  el.append(root);
+  const pane: Pane = {
+    id: ++paneIds, el, root, tabs: [blankTab()], active: 0, size: 1,
+    state: {
+      note: null, content: '', viewMode: mode, blockEdit: null, previewBlocks: [], suppressPreviewClick: false,
+      backlinks: null, saveTimer: undefined, savedMessage: 'Ready', caretLine: null, notice: null,
+    },
+  };
+  // Pressing or focusing anything in a pane makes it the one keys, the palette and the note list act on.
+  el.addEventListener('mousedown', () => activatePane(pane), true);
+  el.addEventListener('focusin', () => activatePane(pane), true);
+  bindPaneDrop(pane);
+  return pane;
+}
+
+function stash(pane: Pane) {
+  pane.state = { note: selectedNote, content, viewMode, blockEdit, previewBlocks, suppressPreviewClick, backlinks, saveTimer, savedMessage, caretLine, notice };
+}
+
+function load(pane: Pane) {
+  ({ note: selectedNote, content, viewMode, blockEdit, previewBlocks, suppressPreviewClick, backlinks, saveTimer, savedMessage, caretLine, notice } = pane.state);
+  editorRoot = pane.root;
+}
+
+/** Run `work` with `pane`'s editor state swapped in. `work` must not await. */
+function withPane<T>(pane: Pane, work: () => T): T {
+  if (pane === activePane) return work();
+  const current = activePane;
+  stash(current);
+  load(pane);
+  activePane = pane;
+  swapping++;
+  try {
+    return work();
+  } finally {
+    swapping--;
+    stash(pane);
+    load(current);
+    activePane = current;
+  }
+}
+
+function forEachPane(work: () => void) {
+  for (const pane of [...panes]) withPane(pane, work);
+}
+
+function activatePane(pane: Pane) {
+  if (pane === activePane || swapping || !panes.includes(pane)) return;
+  // Leave the pane with nothing pending: background panes never hold unsaved edits.
+  if (blockEdit) commitBlockEdit();
+  if (saveTimer !== undefined) void flushSave();
+  stash(activePane);
+  load(pane);
+  activePane = pane;
+  markActivePane();
+  setDocumentTitle(selectedNote ? selectedNote.title || 'Untitled' : 'Tagdown Editor');
+  renderNotes();
+  saveWorkspace();
+}
+
+function markActivePane() {
+  workspaceEl.classList.toggle('has-splits', panes.length > 1);
+  for (const pane of panes) pane.el.classList.toggle('is-active', pane === activePane);
+}
+
+function layoutPanes() {
+  const children: HTMLElement[] = [];
+  panes.forEach((pane, index) => {
+    if (index) children.push(paneDivider(panes[index - 1], pane));
+    pane.el.style.flex = `${pane.size} 1 0`;
+    children.push(pane.el);
+  });
+  // Re-adding a pane that's already in place would reload its embeds; skip those.
+  workspaceEl.querySelectorAll(':scope > .pane-divider').forEach((bar) => bar.remove());
+  for (const child of [...workspaceEl.children]) if (!children.includes(child as HTMLElement)) child.remove();
+  children.forEach((child, index) => {
+    if (workspaceEl.children[index] !== child) workspaceEl.insertBefore(child, workspaceEl.children[index] ?? null);
+  });
+  markActivePane();
+}
+
+/** The bar between two panes: drag to resize, double-click to even them out. */
+function paneDivider(left: Pane, right: Pane): HTMLElement {
+  const bar = document.createElement('div');
+  bar.className = 'pane-divider';
+  bar.setAttribute('role', 'separator');
+  bar.setAttribute('aria-orientation', 'vertical');
+  bar.title = 'Drag to resize · double-click to even out';
+  bar.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    bar.setPointerCapture(event.pointerId);
+    const a = left.el.getBoundingClientRect();
+    const total = a.width + right.el.getBoundingClientRect().width;
+    const sizes = left.size + right.size;
+    bar.classList.add('is-dragging');
+    document.body.classList.add('is-resizing-panes');
+    const move = (e: PointerEvent) => {
+      const width = Math.max(Math.min(e.clientX - a.left, total - MIN_PANE_WIDTH), Math.min(MIN_PANE_WIDTH, total / 2));
+      left.size = (sizes * width) / total;
+      right.size = sizes - left.size;
+      left.el.style.flex = `${left.size} 1 0`;
+      right.el.style.flex = `${right.size} 1 0`;
+    };
+    const up = () => {
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', up);
+      bar.removeEventListener('pointercancel', up);
+      bar.classList.remove('is-dragging');
+      document.body.classList.remove('is-resizing-panes');
+      saveWorkspace();
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+  });
+  bar.addEventListener('dblclick', () => {
+    for (const pane of panes) { pane.size = 1; pane.el.style.flex = '1 1 0'; }
+    saveWorkspace();
+  });
+  return bar;
+}
+
+/** Open a new pane beside `from`, showing `note` (or a new tab). */
+async function splitPane(note: Note | null = null, side: 'left' | 'right' = 'right', from: Pane = activePane) {
+  if (!panes.includes(from)) from = activePane;
+  if (panes.length >= MAX_PANES) {
+    // No room for another: use the pane beside instead.
+    const at = panes.indexOf(from);
+    const step = side === 'right' ? 1 : -1;
+    const neighbour = panes[at + step] ?? panes[at - step];
+    activatePane(neighbour);
+    if (note) await openNote(note, 'tab');
+    showNotice(`${MAX_PANES} panes is the most; opened it in a tab here`);
+    return;
+  }
+  activatePane(from);
+  await settlePendingWork();
+  // Two source-and-preview splits side by side would be four columns; the new one starts as a preview.
+  const pane = createPane(viewMode === 'split' ? 'preview' : viewMode);
+  from.size /= 2;
+  pane.size = from.size;
+  panes.splice(panes.indexOf(from) + (side === 'right' ? 1 : 0), 0, pane);
+  layoutPanes();
+  activatePane(pane);
+  renderEditor();
+  if (note) await openNote(note);
+  else { saveWorkspace(); openPalette(); }
+}
+
+async function closePane(pane: Pane) {
+  if (panes.length < 2 || !panes.includes(pane)) return;
+  if (pane === activePane) await settlePendingWork();
+  const index = panes.indexOf(pane);
+  const neighbour = panes[index - 1] ?? panes[index + 1];
+  activatePane(neighbour);
+  neighbour.size += pane.size;
+  panes.splice(index, 1);
+  layoutPanes();
+  saveWorkspace();
+}
+
+/** ⌃⌘← / ⌃⌘→: move to the pane on that side. */
+function focusPane(step: -1 | 1) {
+  const next = panes[panes.indexOf(activePane) + step];
+  if (!next) return;
+  activatePane(next);
+  (next.root.querySelector<HTMLElement>('#source') ?? next.root.querySelector<HTMLElement>('.tab.is-current'))?.focus({ preventScroll: true });
+}
+
+/** ⌘T: a new tab, with the palette open to pick what goes in it. */
+async function newTab(pane: Pane = activePane) {
+  activatePane(pane);
+  if (pane.tabs[pane.active]?.noteId) {
+    await settlePendingWork();
+    rememberScroll(pane);
+    pane.tabs.splice(++pane.active, 0, blankTab());
+    await displayTab(pane);
+  }
+  openPalette();
+}
+
+async function closeTab(pane: Pane, index: number) {
+  if (!panes.includes(pane) || !pane.tabs[index]) return;
+  activatePane(pane);
+  const shown = index === pane.active;
+  if (shown) {
+    if (blockEdit) commitBlockEdit();
+    await settlePendingWork();
+  }
+  if (pane.tabs.length === 1) {
+    if (panes.length > 1) { await closePane(pane); return; }
+    if (!pane.tabs[0].noteId) return;
+    pane.tabs[0] = blankTab();
+    await displayTab(pane);
+    return;
+  }
+  pane.tabs.splice(index, 1);
+  if (index < pane.active) pane.active--;
+  else if (shown) pane.active = Math.min(index, pane.tabs.length - 1);
+  if (shown) await displayTab(pane);
+  else { paintTabs(pane); saveWorkspace(); }
+}
+
+async function closeOtherTabs(pane: Pane, keep: number) {
+  activatePane(pane);
+  const tab = pane.tabs[keep];
+  if (keep !== pane.active) await switchTab(pane, keep);
+  pane.tabs = [tab];
+  pane.active = 0;
+  paintTabs(pane);
+  saveWorkspace();
+}
+
+async function closeTabsToRight(pane: Pane, index: number) {
+  activatePane(pane);
+  if (pane.active > index) await switchTab(pane, index);
+  pane.tabs.splice(index + 1);
+  paintTabs(pane);
+  saveWorkspace();
+}
+
+async function cycleTab(step: -1 | 1) {
+  const pane = activePane;
+  const count = pane.tabs.length;
+  if (count > 1) await switchTab(pane, (pane.active + step + count) % count);
+}
+
+async function switchTab(pane: Pane, index: number) {
+  activatePane(pane);
+  if (index === pane.active || !pane.tabs[index]) return;
+  if (blockEdit) commitBlockEdit();
+  await settlePendingWork();
+  rememberScroll(pane);
+  pane.active = index;
+  paintTabs(pane);
+  await displayTab(pane);
+}
+
+async function findNote(id: string): Promise<Note | null> {
+  const known = knownNotes.get(id);
+  if (known) return known;
+  const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
+  for (const note of all) knownNotes.set(note.id, note);
+  return knownNotes.get(id) ?? null;
+}
+
+/** Show `pane`'s current tab: fetch its note and draw it. Works on panes in the background too. */
+async function displayTab(pane: Pane, fresh?: Note) {
+  const tab = pane.tabs[pane.active];
+  let note = tab?.noteId ? fresh ?? await findNote(tab.noteId) : null;
+  let text = '';
+  if (note) {
+    try {
+      text = (await invoke<NoteContent>('get_note_content', { id: note.id })).content;
+    } catch {
+      note = null; // gone in the meantime
+    }
+  }
+  if (!panes.includes(pane) || pane.tabs[pane.active] !== tab) return;
+  if (!note) Object.assign(tab, blankTab());
+  withPane(pane, () => {
+    selectedNote = note;
+    content = text;
+    backlinks = null;
+    if (note) {
+      tab.title = tabTitleOf(note);
+      if (!linkSyncs.has(note.id)) linkTitles.set(note.id, note.title);
+    }
+    if (pane === activePane) {
+      setDocumentTitle(note ? note.title || 'Untitled' : 'Tagdown Editor');
+      if (note) setPreference('lastNoteId', note.id);
+    }
+    renderEditor();
+    restoreScroll(pane, tab);
+    if (note) void loadBacklinks(note.id);
+  });
+  if (pane === activePane) renderNotes();
+  saveWorkspace();
+}
+
+function rememberScroll(pane: Pane) {
+  const tab = pane.tabs[pane.active];
+  if (!tab?.noteId) return;
+  tab.scroll = [pane.root.querySelector('#source')?.scrollTop ?? 0, pane.root.querySelector('.preview')?.scrollTop ?? 0];
+}
+
+function restoreScroll(pane: Pane, tab: Tab) {
+  if (!tab.scroll) return;
+  const [source, preview] = tab.scroll;
+  const apply = () => {
+    const sourceEl = pane.root.querySelector('#source');
+    const previewEl = pane.root.querySelector('.preview');
+    if (sourceEl) sourceEl.scrollTop = source;
+    if (previewEl) previewEl.scrollTop = preview;
+  };
+  apply();
+  // Diagrams and images grow the preview after the first paint.
+  requestAnimationFrame(apply);
+}
+
+function tabTitleOf(note: Note) {
+  return note.journal ? formatDay(note.journal, 'short') : note.title || 'Untitled';
+}
+
+function openNoteIds() {
+  return new Set(panes.flatMap((pane) => pane.tabs.flatMap((tab) => (tab.noteId ? [tab.noteId] : []))));
+}
+
+function paintAllTabs() {
+  for (const pane of panes) paintTabs(pane);
+}
+
+function paintTabs(pane: Pane) {
+  const strip = pane.root.querySelector<HTMLElement>('[data-tabs]');
+  if (!strip) return;
+  const lone = pane.tabs.length === 1 && !pane.tabs[0].noteId;
+  strip.innerHTML = pane.tabs.map((tab, index) => {
+    const note = tab.noteId ? knownNotes.get(tab.noteId) : null;
+    const title = note ? tabTitleOf(note) : tab.title;
+    const current = index === pane.active;
+    const folder = note ? folders.find((f) => f.id === note.folderId)?.name : null;
+    const tip = tab.noteId ? `${title}${folder ? ` · ${folder}` : ''}` : 'New tab: find a note with ⌘K';
+    const icon = !tab.noteId ? uiIcon('search', 12) : iconSvg(note?.journal ? 'calendar' : 'notes', 12);
+    return `<div class="tab ${current ? 'is-current' : ''} ${tab.noteId ? '' : 'is-blank'}" role="tab" aria-selected="${current}" tabindex="${current ? 0 : -1}" draggable="${tab.noteId ? 'true' : 'false'}" data-tab="${index}" title="${escapeHtml(tip)}">
+      <span class="tab-icon" aria-hidden="true">${icon}</span><span class="tab-title">${escapeHtml(title)}</span>
+      ${lone ? '' : `<button type="button" class="tab-close" data-close-tab="${index}" tabindex="-1" title="Close tab (⌘W)" aria-label="Close ${escapeHtml(title)}">${uiIcon('close', 10)}</button>`}
+    </div>`;
+  }).join('');
+  strip.querySelectorAll<HTMLElement>('.tab').forEach((el) => {
+    const index = Number(el.dataset.tab);
+    el.addEventListener('click', (event) => {
+      if (!(event.target as Element).closest('.tab-close')) void switchTab(pane, index);
+    });
+    el.addEventListener('auxclick', (event) => {
+      if (event.button === 1) { event.preventDefault(); void closeTab(pane, index); }
+    });
+    el.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        const next = index + (event.key === 'ArrowLeft' ? -1 : 1);
+        if (pane.tabs[next]) void switchTab(pane, next).then(() => pane.root.querySelector<HTMLElement>('.tab.is-current')?.focus());
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        void switchTab(pane, index);
+      }
+    });
+    el.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY, tabMenuItems(pane, index));
+    });
+    el.addEventListener('dragstart', (event) => {
+      const tab = pane.tabs[index];
+      const note = tab?.noteId ? knownNotes.get(tab.noteId) : null;
+      if (!note || !event.dataTransfer) { event.preventDefault(); return; }
+      startNoteDrag(event.dataTransfer, note);
+      draggedTab = { pane, index };
+      el.classList.add('is-dragging');
+    });
+  });
+  strip.querySelectorAll<HTMLButtonElement>('[data-close-tab]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void closeTab(pane, Number(button.dataset.closeTab));
+    });
+  });
+  // Keep the current tab in view when there are more than fit.
+  const current = strip.querySelector<HTMLElement>('.tab.is-current');
+  if (current) {
+    const left = current.offsetLeft;
+    const right = left + current.offsetWidth;
+    if (left < strip.scrollLeft) strip.scrollLeft = left;
+    else if (right > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = right - strip.clientWidth;
+  }
+}
+
+/** Drops on the tab strip: reorder, bring a tab over from another pane, or open a dragged note. */
+function bindTabStrip(pane: Pane) {
+  const strip = pane.root.querySelector<HTMLElement>('[data-tabs]');
+  if (!strip) return;
+  const dropIndex = (x: number) => {
+    const tabs = [...strip.querySelectorAll<HTMLElement>('.tab')];
+    const index = tabs.findIndex((tab) => { const r = tab.getBoundingClientRect(); return x < r.left + r.width / 2; });
+    return index < 0 ? tabs.length : index;
+  };
+  strip.addEventListener('wheel', (event) => {
+    // A mouse wheel scrolls a crowded strip sideways.
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) strip.scrollLeft += event.deltaY;
+  }, { passive: true });
+  strip.addEventListener('dragover', (event) => {
+    if (!isNoteDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    hidePaneDrops();
+    event.dataTransfer!.dropEffect = draggedTab ? 'move' : 'copy';
+    const at = dropIndex(event.clientX);
+    const tabs = strip.querySelectorAll<HTMLElement>('.tab');
+    tabs.forEach((tab, index) => {
+      tab.classList.toggle('drop-before', index === at);
+      tab.classList.toggle('drop-after', at === tabs.length && index === tabs.length - 1);
+    });
+  });
+  strip.addEventListener('dragleave', (event) => {
+    if (!strip.contains(event.relatedTarget as Node)) clearDropMarks();
+  });
+  strip.addEventListener('drop', (event) => {
+    if (!isNoteDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const at = dropIndex(event.clientX);
+    clearDropMarks();
+    void dropNote(event.dataTransfer!, pane, 'center', at);
+  });
+}
+
+function isNoteDrag(event: DragEvent) {
+  return !!event.dataTransfer?.types.includes(NOTE_MIME);
+}
+
+function startNoteDrag(data: DataTransfer, note: Note) {
+  draggedTab = null;
+  data.effectAllowed = 'copyMove';
+  data.setData(NOTE_MIME, note.id);
+  // Dropped into another app (or a text field), it's a link to the note.
+  data.setData('text/plain', `[[${note.title || 'Untitled'}]]`);
+  document.addEventListener('dragend', () => {
+    draggedTab = null;
+    clearDropMarks();
+    document.querySelectorAll('.tab.is-dragging').forEach((el) => el.classList.remove('is-dragging'));
+  }, { once: true });
+}
+
+function hidePaneDrops() {
+  document.querySelectorAll<HTMLElement>('.pane-drop').forEach((overlay) => { overlay.hidden = true; });
+}
+
+function clearDropMarks() {
+  hidePaneDrops();
+  document.querySelectorAll('.tab.drop-before, .tab.drop-after').forEach((tab) => tab.classList.remove('drop-before', 'drop-after'));
+}
+
+/** Dragging a note or tab over a pane: the middle opens it here, the sides split. */
+function bindPaneDrop(pane: Pane) {
+  const overlay = document.createElement('div');
+  overlay.className = 'pane-drop';
+  overlay.hidden = true;
+  overlay.innerHTML = '<div class="pane-drop-zone"><span></span></div>';
+  pane.el.append(overlay);
+  const label = overlay.querySelector('span')!;
+  const zoneAt = (event: DragEvent): 'left' | 'center' | 'right' => {
+    const rect = pane.el.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    return x < 0.3 ? 'left' : x > 0.7 ? 'right' : 'center';
+  };
+  pane.el.addEventListener('dragover', (event) => {
+    if (!isNoteDrag(event)) return;
+    event.preventDefault();
+    const zone = zoneAt(event);
+    const fromHere = draggedTab?.pane === pane;
+    const nothing = fromHere && (zone === 'center' || pane.tabs.length === 1);
+    event.dataTransfer!.dropEffect = nothing ? 'none' : draggedTab ? 'move' : 'copy';
+    overlay.hidden = nothing;
+    overlay.dataset.zone = zone;
+    label.textContent = zone === 'center' ? 'Open in a tab here' : panes.length >= MAX_PANES ? 'Open in the pane beside' : `Split ${zone}`;
+  });
+  pane.el.addEventListener('dragleave', (event) => {
+    if (!pane.el.contains(event.relatedTarget as Node)) overlay.hidden = true;
+  });
+  pane.el.addEventListener('drop', (event) => {
+    if (!isNoteDrag(event)) return;
+    event.preventDefault();
+    clearDropMarks();
+    void dropNote(event.dataTransfer!, pane, zoneAt(event));
+  });
+}
+
+/** A note or tab dropped on `target`: into its tabs (at `at`), or into a new split on one side. */
+async function dropNote(data: DataTransfer, target: Pane, zone: 'left' | 'center' | 'right', at?: number) {
+  const source = draggedTab;
+  draggedTab = null;
+  const id = data.getData(NOTE_MIME);
+  const note = id ? await findNote(id) : null;
+  if (!note) return;
+  if (source && source.pane === target) {
+    if (zone === 'center') {
+      if (at !== undefined) moveTabWithin(target, source.index, at);
+      return;
+    }
+    if (target.tabs.length === 1) return;
+  }
+  // A tab moves; a note card opens a copy.
+  if (source) await closeTab(source.pane, source.index);
+  if (!panes.includes(target)) target = activePane;
+  if (zone !== 'center') { await splitPane(note, zone, target); return; }
+  activatePane(target);
+  await settlePendingWork();
+  rememberScroll(target);
+  const existing = target.tabs.findIndex((tab) => tab.noteId === note.id);
+  if (existing >= 0) target.active = existing;
+  else if (!target.tabs[target.active]?.noteId) target.tabs[target.active] = { noteId: note.id, title: tabTitleOf(note) };
+  else {
+    const index = Math.min(at ?? target.active + 1, target.tabs.length);
+    target.tabs.splice(index, 0, { noteId: note.id, title: tabTitleOf(note) });
+    target.active = index;
+  }
+  await displayTab(target, note);
+}
+
+function moveTabWithin(pane: Pane, from: number, to: number) {
+  const current = pane.tabs[pane.active];
+  const [tab] = pane.tabs.splice(from, 1);
+  pane.tabs.splice(to > from ? to - 1 : to, 0, tab);
+  pane.active = pane.tabs.indexOf(current);
+  paintTabs(pane);
+  saveWorkspace();
+}
+
+function tabMenuItems(pane: Pane, index: number): MenuItem[] {
+  const tab = pane.tabs[index];
+  const note = tab?.noteId ? knownNotes.get(tab.noteId) ?? null : null;
+  const items: MenuItem[] = [
+    { label: 'Close tab', icon: uiIcon('close', 14), shortcut: '⌘W', run: () => closeTab(pane, index) },
+    { label: 'Close other tabs', icon: uiIcon('close', 14), disabled: pane.tabs.length < 2, run: () => closeOtherTabs(pane, index) },
+    { label: 'Close tabs to the right', icon: uiIcon('close', 14), disabled: index >= pane.tabs.length - 1, run: () => closeTabsToRight(pane, index) },
+  ];
+  if (note) {
+    items.push(
+      'separator',
+      { label: 'Open in a pane to the right', icon: uiIcon('splitRight', 14), shortcut: '⌥⌘\\', run: () => splitPane(note, 'right', pane) },
+      {
+        label: 'Move to a new pane', icon: uiIcon('split', 14), disabled: pane.tabs.length < 2,
+        run: async () => { await closeTab(pane, index); await splitPane(note, 'right', pane); },
+      },
+      'separator',
+      ...noteActionItems(note),
+    );
+  }
+  if (panes.length > 1) items.push('separator', { label: 'Close this pane', icon: uiIcon('close', 14), run: () => closePane(pane) });
+  return items;
+}
+
+/** Right-click on a note card: where to open it. */
+function openMenuItems(note: Note): MenuItem[] {
+  return [
+    { label: 'Open', icon: uiIcon('eye', 14), run: () => openNote(note) },
+    { label: 'Open in new tab', icon: uiIcon('plus', 14), shortcut: '⌘-click', run: () => openNote(note, 'tab') },
+    { label: 'Open to the right', icon: uiIcon('splitRight', 14), shortcut: '⌥⌘-click', run: () => openNote(note, 'split') },
+    'separator',
+    ...noteActionItems(note),
+  ];
+}
+
+function noteActionItems(note: Note): MenuItem[] {
+  return [
+    {
+      label: 'Copy link', icon: uiIcon('share', 14),
+      run: async () => {
+        const link = `[[${note.title || 'Untitled'}]]`;
+        await copyText(link);
+        showNotice(`Copied ${link}`);
+      },
+    },
+    { label: 'Show in note list', icon: iconSvg('notes', 14), run: () => revealInList(note.id) },
+  ];
+}
+
+/** Widen the note list to show the note, without opening it. */
+async function revealInList(id: string) {
+  const note = await findNote(id);
+  if (!note) return;
+  if (!notes.some((candidate) => candidate.id === id)) {
+    selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : note.folderId;
+    selectedTag = null;
+    activeFilter = 'all';
+    renderFilterPills();
+    await reloadNotes();
+  }
+  const card = document.querySelector<HTMLElement>(`.note-card[data-note="${CSS.escape(id)}"]`);
+  card?.scrollIntoView({ block: 'nearest' });
+  card?.focus({ preventScroll: true });
+}
+
+/** Close every tab showing `id` (it's being archived or deleted). */
+async function closeNoteEverywhere(id: string) {
+  const back = activePane;
+  for (const pane of [...panes]) {
+    for (let index = pane.tabs.length - 1; index >= 0; index--) {
+      if (pane.tabs[index]?.noteId === id) await closeTab(pane, index);
+    }
+  }
+  if (panes.includes(back)) activatePane(back);
+}
+
+/** After a full reload: drop tabs whose note is gone (deleted outside the app, say). */
+function closeMissingTabs() {
+  let changed = false;
+  for (const pane of panes) {
+    const shown = pane.tabs[pane.active];
+    const kept = pane.tabs.filter((tab) => !tab.noteId || knownNotes.has(tab.noteId));
+    if (kept.length === pane.tabs.length) continue;
+    changed = true;
+    if (!kept.length) kept.push(blankTab());
+    pane.tabs = kept;
+    if (kept.includes(shown)) {
+      pane.active = kept.indexOf(shown);
+      paintTabs(pane);
+      continue;
+    }
+    pane.active = Math.min(pane.active, kept.length - 1);
+    // The note on screen is gone: there's nothing left to save into.
+    withPane(pane, () => { window.clearTimeout(saveTimer); saveTimer = undefined; savedMessage = 'Ready'; });
+    void displayTab(pane);
+  }
+  if (changed) saveWorkspace();
+}
+
+/** The new-tab page: the latest notes that aren't open yet. */
+function recentNotesHtml() {
+  const open = openNoteIds();
+  const recent = libraryNotes.filter((note) => !open.has(note.id)).slice(0, 6);
+  if (!recent.length) return '';
+  return `
+      <div class="empty-recent">
+        <h3>Recent</h3>
+        ${recent.map((note) => `<button type="button" class="empty-recent-row" data-recent="${escapeHtml(note.id)}" title="⌘-click: new tab · ⌥⌘-click: split">${iconSvg(note.journal ? 'calendar' : 'notes', 13)}<span>${escapeHtml(tabTitleOf(note))}</span><time>${formatCardDate(note.updatedAt)}</time></button>`).join('')}
+      </div>`;
+}
+
+// ---- Remembering the open tabs ----
+
+const WORKSPACE_KEY = 'tagdown.workspace';
+type SavedPane = { tabs: string[]; active: number; size: number; mode: ViewMode };
+type SavedWorkspace = { active: number; panes: SavedPane[] };
+// Set once launch has read the saved layout, so nothing overwrites it before then.
+let workspaceVault: string | null = null;
+
+function readWorkspaces(): Record<string, SavedWorkspace> {
+  try { return JSON.parse(localStorage.getItem(WORKSPACE_KEY) || '{}') ?? {}; } catch { return {}; }
+}
+
+function saveWorkspace() {
+  if (workspaceVault === null) return;
+  const saved: SavedWorkspace = {
+    active: panes.indexOf(activePane),
+    panes: panes.map((pane) => {
+      const tabs = pane.tabs.flatMap((tab) => (tab.noteId ? [tab.noteId] : []));
+      return {
+        tabs,
+        active: Math.max(0, tabs.indexOf(pane.tabs[pane.active]?.noteId ?? '')),
+        size: pane.size,
+        mode: pane === activePane ? viewMode : pane.state.viewMode,
+      };
+    }),
+  };
+  const all = readWorkspaces();
+  all[workspaceVault] = saved;
+  try { localStorage.setItem(WORKSPACE_KEY, JSON.stringify(all)); } catch { /* not remembered */ }
+}
+
+/** Reopen the tabs and splits from last time. False when there's nothing to reopen. */
+async function restoreWorkspace(): Promise<boolean> {
+  const saved = workspaceVault === null ? undefined : readWorkspaces()[workspaceVault];
+  const layouts = (saved?.panes ?? [])
+    .map((layout) => ({ ...layout, tabs: (layout.tabs ?? []).filter((id) => knownNotes.has(id)) }))
+    .filter((layout) => layout.tabs.length)
+    .slice(0, MAX_PANES);
+  if (!layouts.length) return false;
+  // The first pane starts in the view Settings asks for; the others keep theirs.
+  layouts.forEach((layout, index) => {
+    const pane = index === 0 ? panes[0] : createPane(layout.mode || viewMode);
+    if (index) panes.push(pane);
+    pane.tabs = layout.tabs.map((id) => ({ noteId: id, title: tabTitleOf(knownNotes.get(id)!) }));
+    pane.active = Math.min(Math.max(0, layout.active || 0), pane.tabs.length - 1);
+    pane.size = layout.size > 0 ? layout.size : 1;
+  });
+  layoutPanes();
+  for (const pane of [...panes]) await displayTab(pane);
+  const active = panes[saved?.active ?? 0];
+  if (active) activatePane(active);
+  return true;
 }
 
 // ---- Journal ----
@@ -613,6 +1407,9 @@ async function reloadFolders() {
   const allNotes = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
   libraryNotes = allNotes.filter((note) => note.folderId !== 'archive');
   allNotesCount = libraryNotes.length;
+  knownNotes.clear();
+  for (const note of allNotes) knownNotes.set(note.id, note);
+  closeMissingTabs();
   renderFolders();
 }
 
@@ -624,12 +1421,6 @@ async function reloadNotes() {
   if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
   // The newest day first.
   if (selectedFolder === 'journal') notes.sort((a, b) => (b.journal ?? '').localeCompare(a.journal ?? ''));
-  if (selectedNote && !notes.some((note) => note.id === selectedNote!.id)) {
-    selectedNote = null;
-    content = '';
-    setDocumentTitle('Tagdown Editor');
-    renderEditor();
-  }
   renderFolders();
   renderNotes();
 }
@@ -938,6 +1729,7 @@ function renderNotes() {
     return;
   }
   let lastGroup = '';
+  const open = openNoteIds();
   noteEl.innerHTML = calendar + visible.map((note) => {
     const day = inJournal ? note.journal ?? null : null;
     const group = day ? monthGroup(day) : dateGroup(note.updatedAt);
@@ -947,7 +1739,7 @@ function renderNotes() {
     const extraTags = note.tags.length > 3 ? `<span class="more">+${note.tags.length - 3}</span>` : '';
     const archived = note.folderId === 'archive';
     return `${heading}
-      <article class="note-card ${selectedNote?.id === note.id ? 'selected' : ''}" data-note="${note.id}" tabindex="0" aria-current="${selectedNote?.id === note.id}">
+      <article class="note-card ${selectedNote?.id === note.id ? 'selected' : open.has(note.id) ? 'is-open' : ''}" data-note="${note.id}" tabindex="0" draggable="true" aria-current="${selectedNote?.id === note.id}" title="${open.has(note.id) && selectedNote?.id !== note.id ? 'Open in a tab. ' : ''}⌘-click: new tab · ⌥⌘-click: split">
         <div class="note-card-head">
           <h3>${escapeHtml(day ? formatDay(day, 'short') : note.title || 'Untitled')}</h3>
           ${day ? `<time datetime="${escapeHtml(day)}">${relativeDay(day) ?? ''}</time>` : `<time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>`}
@@ -959,13 +1751,27 @@ function renderNotes() {
     `;
   }).join('');
   noteEl.querySelectorAll<HTMLElement>('.note-card').forEach((card) => {
-    const choose = async () => {
-      const note = notes.find((candidate) => candidate.id === card.dataset.note);
-      if (note) await openNote(note);
+    const note = () => notes.find((candidate) => candidate.id === card.dataset.note);
+    const choose = async (where: OpenTarget) => {
+      const found = note();
+      if (found) await openNote(found, where);
     };
-    card.addEventListener('click', choose);
+    card.addEventListener('click', (event) => void choose(openTarget(event)));
+    card.addEventListener('auxclick', (event) => {
+      if (event.button === 1) { event.preventDefault(); void choose('tab'); }
+    });
     card.addEventListener('keydown', async (event) => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); await choose(); }
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); await choose(openTarget(event)); }
+    });
+    card.addEventListener('contextmenu', (event) => {
+      const found = note();
+      if (!found) return;
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY, openMenuItems(found));
+    });
+    card.addEventListener('dragstart', (event) => {
+      const found = note();
+      if (found && event.dataTransfer) startNoteDrag(event.dataTransfer, found);
     });
   });
   bindJournalCalendar(noteEl);
@@ -986,6 +1792,7 @@ function renderNotes() {
         danger: archived,
       });
       if (!ok) return;
+      await closeNoteEverywhere(id);
       await invoke(archived ? 'destroy_note' : 'delete_note', { id });
       await reloadFolders();
       await reloadNotes();
@@ -1062,12 +1869,6 @@ async function selectTag(path: string) {
       note.folderId !== 'archive' &&
       note.tags.some((t) => t === path || t.startsWith(`${path}/`)),
   );
-  if (selectedNote && !notes.some((n) => n.id === selectedNote!.id)) {
-    selectedNote = null;
-    content = '';
-    setDocumentTitle('Tagdown Editor');
-    renderEditor();
-  }
   renderFolders();
   renderNotes();
   noteListTitleEl.textContent = `#${path}`;
@@ -1202,60 +2003,59 @@ function renderTags() {
   }
 }
 
-async function openNote(note: Note) {
+/** Open `note` in the open tab, a new tab, or a new split beside the open one. */
+async function openNote(note: Note, where: OpenTarget = 'here') {
+  if (where === 'split') { await splitPane(note); return; }
   await settlePendingWork();
-  selectedNote = note;
-  setPreference('lastNoteId', note.id);
-  linkNoteId = note.id;
-  linkTitle = note.title;
-  const noteContent = await invoke<NoteContent>('get_note_content', { id: note.id });
-  content = noteContent.content;
-  setDocumentTitle(note.title || 'Untitled');
-  renderNotes();
-  renderEditor();
-  void loadBacklinks(note.id);
+  const pane = activePane;
+  rememberScroll(pane);
+  const tab: Tab = { noteId: note.id, title: tabTitleOf(note) };
+  const existing = pane.tabs.findIndex((candidate) => candidate.noteId === note.id);
+  if (existing >= 0) pane.active = existing;
+  else if (where === 'tab' && pane.tabs[pane.active]?.noteId) pane.tabs.splice(++pane.active, 0, tab);
+  else pane.tabs[pane.active] = tab;
+  knownNotes.set(note.id, note);
+  paintTabs(pane);
+  await displayTab(pane, note);
 }
 
 /** Save pending edits and link renames before leaving the open note. */
 async function settlePendingWork() {
-  if (selectedNote && savedMessage === 'Saving…') {
-    window.clearTimeout(saveTimer);
-    await flushSave();
-  }
-  if (linkSyncTimer !== undefined) await syncLinks();
+  if (selectedNote && (saveTimer !== undefined || savedMessage === 'Saving…')) await flushSave();
+  await Promise.all([...linkSyncs.keys()].map(syncLinks));
 }
 
 // ---- Wikilinks ----
 
-function scheduleLinkSync() {
-  window.clearTimeout(linkSyncTimer);
-  linkSyncTimer = window.setTimeout(() => void syncLinks(), 1200);
+function scheduleLinkSync(id: string, title: string) {
+  window.clearTimeout(linkSyncs.get(id)?.timer);
+  linkSyncs.set(id, { title, timer: window.setTimeout(() => void syncLinks(id), 1200) });
 }
 
 /**
- * Point links in other notes at the open note's new title. Runs once the title
+ * Point links in other notes at a note's new title. Runs once the title
  * settles; the backend declines titles that are empty or belong to another
  * note, in which case the old title is kept and a later save retries.
  */
-async function syncLinks() {
-  window.clearTimeout(linkSyncTimer);
-  linkSyncTimer = undefined;
-  const id = linkNoteId;
-  const oldTitle = linkTitle;
-  const newTitle = selectedNote?.id === id ? selectedNote.title : null;
-  if (!id || newTitle === null || newTitle === oldTitle) return;
+async function syncLinks(id: string) {
+  const pending = linkSyncs.get(id);
+  if (!pending) return;
+  window.clearTimeout(pending.timer);
+  linkSyncs.delete(id);
+  const oldTitle = linkTitles.get(id);
+  const newTitle = pending.title;
+  if (oldTitle === undefined || newTitle === oldTitle) return;
   const outcome = await invoke<{ applied: boolean; updated: number }>('rename_links', { id, oldTitle, newTitle });
   if (!outcome.applied) return;
-  if (linkNoteId === id) linkTitle = newTitle;
+  linkTitles.set(id, newTitle);
   if (outcome.updated) {
-    savedMessage = `Updated links in ${outcome.updated} ${outcome.updated === 1 ? 'note' : 'notes'}`;
-    renderStatus();
+    showNotice(`Updated links in ${outcome.updated} ${outcome.updated === 1 ? 'note' : 'notes'}`);
     await reloadNotes();
   }
-  if (selectedNote?.id === id) void loadBacklinks(id);
+  forEachPane(() => { if (selectedNote) void loadBacklinks(selectedNote.id); });
 }
 
-async function followWikilink(target: string) {
+async function followWikilink(target: string, where: OpenTarget = 'here') {
   const { title, anchor } = splitTarget(target);
   if (!title) return;
   let note = resolveTarget(target, libraryNotes);
@@ -1266,7 +2066,7 @@ async function followWikilink(target: string) {
     return;
   }
   if (!note) note = await createNoteTitled(title);
-  if (note.id !== selectedNote?.id) await revealNote(note.id);
+  if (note.id !== selectedNote?.id || where !== 'here') await revealNote(note.id, where);
   if (anchor) scrollToAnchor(anchor);
 }
 
@@ -1316,6 +2116,7 @@ function scrollToBlock(id: string) {
 function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['focus']) {
   const host = editorRoot.querySelector<HTMLElement>('[data-properties]');
   if (!host || !selectedNote) return;
+  const id = selectedNote.id;
   renderPropertiesPanel(host, {
     properties: selectedNote.properties ?? [],
     keySuggestions: () => vaultPropertyKeys(),
@@ -1325,7 +2126,33 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
     decorate: markWikilinks,
     openLink: (target) => void followWikilink(target),
     focus,
+    folded: propertiesAreFolded(),
+    onFold: (folded) => setPropertiesFolded(id, folded),
+    hidden: getPreference('hiddenProperties'),
+    onHide: hideProperty,
   });
+}
+
+function propertiesAreFolded() {
+  if (!selectedNote) return false;
+  const hidden = new Set(getPreference('hiddenProperties').map((key) => key.toLowerCase()));
+  const shown = (selectedNote.properties ?? []).filter((p) => !hidden.has(p.key.toLowerCase())).length;
+  return propertiesFolded(selectedNote.id, shown, getPreference('propertiesFold'));
+}
+
+/** ⌘⇧I: fold the open note's properties to one line, or open them up. */
+function toggleProperties() {
+  if (!selectedNote) return;
+  if (!selectedNote.properties?.length) { paintProperties('new'); return; }
+  setPropertiesFolded(selectedNote.id, !propertiesAreFolded());
+  paintProperties();
+}
+
+/** Keep a property out of sight in every note (or bring it back). */
+function hideProperty(key: string, hide: boolean) {
+  const others = getPreference('hiddenProperties').filter((k) => k.toLowerCase() !== key.toLowerCase());
+  setPreference('hiddenProperties', hide ? [...others, key] : others);
+  showNotice(hide ? `“${key}” hidden in every note` : `“${key}” shown in every note`);
 }
 
 /** Values the vault uses for the property `key`. */
@@ -1429,15 +2256,15 @@ async function saveProperty(key: string, value: PropertyValue | null, renameFrom
   const id = selectedNote.id;
   const isNew = value !== null && !renameFrom && !(selectedNote.properties ?? []).some((p) => p.key === key);
   // Body edits go first, so the two writes don't race.
-  if (savedMessage === 'Saving…') {
-    window.clearTimeout(saveTimer);
-    await flushSave();
-  }
+  if (saveTimer !== undefined || savedMessage === 'Saving…') await flushSave();
   try {
     const note = await invoke<Note>('set_property', { id, key, value, renameFrom: renameFrom ?? null });
+    libraryNotes = libraryNotes.map((n) => (n.id === id ? note : n));
+    knownNotes.set(id, note);
+    // The same note open in another split shows the change too.
+    for (const pane of panes) if (pane !== activePane) withPane(pane, () => { if (selectedNote?.id === id) { selectedNote = note; paintProperties(); } });
     if (selectedNote?.id !== id) return true;
     selectedNote = note;
-    libraryNotes = libraryNotes.map((n) => (n.id === id ? note : n));
     invalidateQueries();
     paintProperties(isNew ? { key, part: 'value' } : undefined);
     const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
@@ -1467,7 +2294,7 @@ function rememberCaret(textarea: HTMLTextAreaElement) {
  */
 async function copyBlockReference(embed = false) {
   if (!selectedNote) return;
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   const editing = blockEdit?.el ?? (source && document.activeElement === source ? source : null);
   let id: string | null = null;
   if (editing) {
@@ -1519,17 +2346,21 @@ async function copyText(text: string) {
 }
 
 async function loadBacklinks(id: string) {
+  const pane = activePane;
   const items = await invoke<Backlink[]>('backlinks', { id }).catch(() => [] as Backlink[]);
-  if (selectedNote?.id !== id) return;
-  backlinks = { id, items };
-  const section = editorRoot.querySelector<HTMLElement>('.preview [data-backlinks]');
-  if (!section) return;
-  const holder = document.createElement('div');
-  holder.innerHTML = backlinksHtml();
-  const fresh = holder.firstElementChild as HTMLElement;
-  section.replaceWith(fresh);
-  resolveLocalImages(fresh);
-  void applyExternals(fresh, getEffectiveTheme());
+  if (!panes.includes(pane)) return;
+  withPane(pane, () => {
+    if (selectedNote?.id !== id) return;
+    backlinks = { id, items };
+    const section = editorRoot.querySelector<HTMLElement>('.preview [data-backlinks]');
+    if (!section) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = backlinksHtml();
+    const fresh = holder.firstElementChild as HTMLElement;
+    section.replaceWith(fresh);
+    resolveLocalImages(fresh);
+    void applyExternals(fresh, getEffectiveTheme());
+  });
 }
 
 function backlinksHtml() {
@@ -1622,7 +2453,7 @@ function scheduleSave() {
 }
 
 function syncSourceTextarea() {
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   if (!source || source.value === content) return;
   const { scrollTop } = source;
   source.value = content;
@@ -1855,37 +2686,48 @@ function renderEditor() {
       <button type="button" class="journal-today-button" data-journal-day="${todayKey()}" title="Today’s journal (⌘⇧J)" ${day === todayKey() ? 'disabled' : ''}>Today</button>
       <button type="button" class="chrome-icon-button" data-journal-day="${shiftDay(day, 1)}" title="Next day (⌥⌘→)" aria-label="Next day">${uiIcon('chevronRight', 14)}</button>
     </div>` : '';
+  // Shown only in the first pane, in focus mode (see layout.css).
+  const exitFocus = `<button class="chrome-icon-button exit-focus" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>`;
+  const tabstrip = `
+      <div class="tabstrip" data-tabs data-tauri-drag-region role="tablist" aria-label="Open notes"></div>
+      <button class="mini-icon-button tab-new" type="button" data-new-tab title="New tab (⌘T)" aria-label="New tab">${uiIcon('plus', 14)}</button>`;
+  const moreMenu = `
+        <div class="export-dropdown">
+          <button id="export-note" class="chrome-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="More" aria-label="More">${uiIcon('more', 15)}</button>
+          <div class="export-menu" role="menu" hidden>
+            ${selectedNote ? `
+            <button type="button" role="menuitem" data-export="html">${uiIcon('globe', 14)}<span>Export as HTML…</span><kbd>⌘⇧E</kbd></button>
+            <button type="button" role="menuitem" data-export="pdf">${uiIcon('printer', 14)}<span>Print or save as PDF…</span><kbd>⌘P</kbd></button>
+            <button type="button" role="menuitem" data-export="site">${uiIcon('globe', 14)}<span>Publish as website…</span></button>
+            <hr>
+            <button type="button" role="menuitem" data-export="present">${uiIcon('play', 14)}<span>Present as slides</span><kbd>⌥⌘P</kbd></button>
+            <button type="button" role="menuitem" data-export="history">${uiIcon('clock', 14)}<span>Version history</span><kbd>⌘⇧H</kbd></button>
+            <hr>` : ''}
+            <button type="button" role="menuitem" data-export="split">${uiIcon('splitRight', 14)}<span>Split right</span><kbd>⌥⌘\\</kbd></button>
+            <button type="button" role="menuitem" data-export="close-pane">${uiIcon('close', 14)}<span>Close this pane</span></button>
+          </div>
+        </div>`;
   const modeButton = (mode: ViewMode, icon: string, label: string, key: string) =>
     `<button data-mode="${mode}" type="button" title="${label} (⌘${key})" aria-label="${label}" class="${viewMode === mode ? 'selected' : ''}" aria-pressed="${viewMode === mode}">${uiIcon(icon, 14)}<span>${label}</span></button>`;
   editorRoot.innerHTML = selectedNote ? `
     <header class="editor-topbar" data-tauri-drag-region>
-      ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
-      <nav class="crumbs" aria-label="Location" data-tauri-drag-region>
-        ${crumbHome}
-        <span class="crumb-sep" aria-hidden="true">/</span>
-        <span class="crumb is-current">${escapeHtml(day ? formatDay(day, 'short') : title)}</span>
-      </nav>
+      ${exitFocus}${tabstrip}
       <div class="topbar-right">
         <span id="saved"></span>
         <div class="mode-switch" role="group" aria-label="View mode">
           ${modeButton('source', 'source', 'Source', '1')}${modeButton('split', 'split', 'Split', '2')}${modeButton('preview', 'eye', 'Preview', '3')}
         </div>
-        <button id="present-note" class="chrome-icon-button" type="button" title="Present as slides (⌥⌘P)" aria-label="Present as slides">${uiIcon('play', 15)}</button>
-        <button id="note-history" class="chrome-icon-button" type="button" title="Version history (⌘⇧H)" aria-label="Version history">${uiIcon('clock', 15)}</button>
-        <div class="export-dropdown">
-          <button id="export-note" class="chrome-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="Export" aria-label="Export">${uiIcon('share', 15)}</button>
-          <div class="export-menu" role="menu" hidden>
-            <button type="button" role="menuitem" data-export="html">${uiIcon('globe', 14)}<span>Export as HTML…</span><kbd>⌘⇧E</kbd></button>
-            <button type="button" role="menuitem" data-export="pdf">${uiIcon('printer', 14)}<span>Print or save as PDF…</span><kbd>⌘P</kbd></button>
-            <button type="button" role="menuitem" data-export="site">${uiIcon('globe', 14)}<span>Publish as website…</span></button>
-          </div>
-        </div>
+        <button id="present-note" class="chrome-icon-button topbar-extra" type="button" title="Present as slides (⌥⌘P)" aria-label="Present as slides">${uiIcon('play', 15)}</button>
+        <button id="note-history" class="chrome-icon-button topbar-extra" type="button" title="Version history (⌘⇧H)" aria-label="Version history">${uiIcon('clock', 15)}</button>
+        <button class="chrome-icon-button topbar-split" type="button" data-split-right title="Split right (⌥⌘\\). Or drag a note or tab to the edge" aria-label="Split right">${uiIcon('splitRight', 15)}</button>
         <button id="pin-note" class="chrome-icon-button pin-button ${selectedNote.starred ? 'active' : ''}" type="button" aria-pressed="${selectedNote.starred}" title="${selectedNote.starred ? 'Unpin note' : 'Pin note'}" aria-label="${selectedNote.starred ? 'Unpin note' : 'Pin note'}">${uiIcon('pin', 15)}</button>
+        ${moreMenu}
       </div>
     </header>
     <div class="doc-header ${day ? 'is-journal' : ''}">
       ${day ? `<div class="journal-day-head"><h1 class="doc-title">${escapeHtml(formatDay(day))}</h1>${dayNav}</div>` : `<h1 class="doc-title">${escapeHtml(title)}</h1>`}
       <div class="doc-meta">
+        <span class="doc-location">${crumbHome}</span>
         ${day ? `<span class="journal-day-key">${relativeDay(day) ? `${relativeDay(day)} · ` : ''}${escapeHtml(title)}</span>` : ''}
         <span>Edited ${formatDate(selectedNote.updatedAt)}</span>
         <span id="counts"></span>
@@ -1897,15 +2739,17 @@ function renderEditor() {
     <div class="format-dock">${renderEditorToolbar()}</div>
   ` : `
     <header class="editor-topbar is-empty" data-tauri-drag-region>
-      ${focusMode ? `<button class="chrome-icon-button" type="button" data-exit-focus title="Exit focus mode (⌘\\)" aria-label="Exit focus mode">${uiIcon('sidebar', 15)}</button>` : ''}
+      ${exitFocus}${tabstrip}
+      <div class="topbar-right">${moreMenu}</div>
     </header>
     <div class="empty-editor">
       <h2>Pick a note, or start a fresh page.</h2>
-      <p>Everything you write is saved as plain text in your vault.</p>
+      <p>Everything you write is saved as plain text in your vault. ⌘-click a note to open it in a new tab, or drag it to the edge to see two side by side.</p>
       <div class="empty-editor-actions">
         <button type="button" class="empty-editor-action is-primary" data-empty-new>${uiIcon('compose', 14)}New note<kbd>⌘N</kbd></button>
         <button type="button" class="empty-editor-action" data-empty-search>${uiIcon('search', 14)}Search<kbd>⌘K</kbd></button>
       </div>
+      ${recentNotesHtml()}
     </div>`;
 
   editorRoot.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
@@ -1918,16 +2762,33 @@ function renderEditor() {
   });
 
   editorRoot.querySelector('[data-empty-new]')?.addEventListener('click', createNote);
+  editorRoot.querySelectorAll<HTMLButtonElement>('[data-recent]').forEach((button) => {
+    button.addEventListener('click', (event) => void revealNote(button.dataset.recent!, openTarget(event)));
+  });
+  editorRoot.querySelector('[data-new-tab]')?.addEventListener('click', () => void newTab());
+  editorRoot.querySelector('[data-split-right]')?.addEventListener('click', () => void splitPane(selectedNote));
+  bindTabStrip(activePane);
+  paintTabs(activePane);
   paintProperties();
   editorRoot.querySelectorAll<HTMLButtonElement>('[data-journal-day]').forEach((button) => {
     button.addEventListener('click', () => void openJournal(button.dataset.journalDay!));
   });
 
-  document.querySelector('#pin-note')?.addEventListener('click', async () => {
+  editorRoot.querySelector('#pin-note')?.addEventListener('click', async () => {
     if (!selectedNote) return;
-    selectedNote = await invoke<Note>('star_note', { id: selectedNote.id, starred: !selectedNote.starred });
+    const updated = await invoke<Note>('star_note', { id: selectedNote.id, starred: !selectedNote.starred });
+    knownNotes.set(updated.id, updated);
+    forEachPane(() => {
+      if (selectedNote?.id !== updated.id) return;
+      selectedNote = updated;
+      const pin = editorRoot.querySelector<HTMLButtonElement>('#pin-note');
+      if (!pin) return;
+      pin.classList.toggle('active', updated.starred);
+      pin.setAttribute('aria-pressed', String(updated.starred));
+      pin.title = updated.starred ? 'Unpin note' : 'Pin note';
+      pin.setAttribute('aria-label', pin.title);
+    });
     await reloadNotes();
-    renderEditor();
   });
 
   bindExportMenu();
@@ -2077,13 +2938,13 @@ function renderEditor() {
     const backlink = target.closest<HTMLElement>('[data-open-note]');
     if (backlink) {
       event.preventDefault();
-      void revealNote(backlink.dataset.openNote!);
+      void revealNote(backlink.dataset.openNote!, openTarget(event));
       return;
     }
     const wikilink = target.closest<HTMLAnchorElement>('.td-wikilink');
     if (wikilink) {
       event.preventDefault();
-      void followWikilink(wikilink.dataset.target || '');
+      void followWikilink(wikilink.dataset.target || '', openTarget(event));
       return;
     }
     // Video embeds / external links open in the system browser via the opener
@@ -2114,26 +2975,48 @@ function renderEditor() {
     if (blockEl) startBlockEdit(blockEl, textAroundPoint(event.clientX, event.clientY));
   });
 
+  // Middle-click opens a link in a new tab; right-click offers where to open it.
+  livePreviewInit?.addEventListener('auxclick', (event) => {
+    if (event.button !== 1) return;
+    const target = event.target as HTMLElement;
+    const link = target.closest<HTMLElement>('.td-wikilink');
+    const backlink = target.closest<HTMLElement>('[data-open-note]');
+    if (!link && !backlink) return;
+    event.preventDefault();
+    if (link) void followWikilink(link.dataset.target || '', 'tab');
+    else void revealNote(backlink!.dataset.openNote!, 'tab');
+  });
+  livePreviewInit?.addEventListener('contextmenu', (event) => {
+    const target = event.target as HTMLElement;
+    const link = target.closest<HTMLElement>('.td-wikilink');
+    const backlink = target.closest<HTMLElement>('[data-open-note]');
+    if (!link && !backlink) return;
+    event.preventDefault();
+    const open = (where: OpenTarget) => link ? followWikilink(link.dataset.target || '', where) : revealNote(backlink!.dataset.openNote!, where);
+    showContextMenu(event.clientX, event.clientY, [
+      { label: 'Open', icon: uiIcon('eye', 14), run: () => open('here') },
+      { label: 'Open in new tab', icon: uiIcon('plus', 14), shortcut: '⌘-click', run: () => open('tab') },
+      { label: 'Open to the right', icon: uiIcon('splitRight', 14), shortcut: '⌥⌘-click', run: () => open('split') },
+    ]);
+  });
+
   editorRoot.querySelector('.preview')?.addEventListener('keydown', (event) => {
     const backlink = (event.target as HTMLElement).closest<HTMLElement>('[data-open-note]');
     if (backlink && ((event as KeyboardEvent).key === 'Enter' || (event as KeyboardEvent).key === ' ')) {
       event.preventDefault();
-      void revealNote(backlink.dataset.openNote!);
+      void revealNote(backlink.dataset.openNote!, openTarget(event as KeyboardEvent));
     }
   });
 
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   if (source) attachEditingAids(source);
   source?.addEventListener('input', () => {
     content = source.value;
-    savedMessage = 'Saving…';
-    window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(flushSave, 500);
     const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
     if (livePreview) {
       paintPreview(livePreview);
     }
-    renderStatus();
+    scheduleSave();
   });
   renderStatus();
 }
@@ -2246,19 +3129,17 @@ function insertText(text: string, atLineStart = false) {
     textarea.dispatchEvent(new Event('input'));
     return;
   }
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   if (!source) return;
   let start = source.selectionStart;
   const end = source.selectionEnd;
   if (atLineStart) while (start > 0 && content[start - 1] !== '\n') start--;
   content = content.slice(0, start) + text + content.slice(end);
-  savedMessage = 'Saving…';
   renderEditor();
-  const next = document.querySelector<HTMLTextAreaElement>('#source');
+  const next = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   next?.focus();
   if (next) next.selectionStart = next.selectionEnd = start + text.length;
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(flushSave, 500);
+  scheduleSave();
 }
 
 function wrapSelection(left: string, right: string) {
@@ -2272,19 +3153,17 @@ function wrapSelection(left: string, right: string) {
     textarea.dispatchEvent(new Event('input'));
     return;
   }
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   if (!source) return;
   const start = source.selectionStart;
   const end = source.selectionEnd;
   const selected = content.slice(start, end);
   content = content.slice(0, start) + left + selected + right + content.slice(end);
-  savedMessage = 'Saving…';
   renderEditor();
-  const next = document.querySelector<HTMLTextAreaElement>('#source');
+  const next = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   next?.focus();
   if (next) { next.selectionStart = start + left.length; next.selectionEnd = start + left.length + selected.length; }
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(flushSave, 500);
+  scheduleSave();
 }
 
 function toggleTaskAt(taskIndex: number) {
@@ -2297,16 +3176,13 @@ function toggleTaskAt(taskIndex: number) {
       const next = m[2] === ' ' ? 'x' : ' ';
       lines[i] = m[1] + next + m[3];
       content = lines.join('\n');
-      const source = document.querySelector<HTMLTextAreaElement>('#source');
+      const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
       if (source) source.value = content;
       const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
       if (livePreview) {
         paintPreview(livePreview);
       }
-      savedMessage = 'Saving…';
-      window.clearTimeout(saveTimer);
-      saveTimer = window.setTimeout(flushSave, 500);
-      renderStatus();
+      scheduleSave();
       return;
     }
     seen++;
@@ -2314,20 +3190,43 @@ function toggleTaskAt(taskIndex: number) {
 }
 
 async function flushSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = undefined;
   if (!selectedNote) return;
-  selectedNote = await invoke<Note>('save_note', { id: selectedNote.id, content });
-  const saved = selectedNote;
-  libraryNotes = libraryNotes.map((note) => (note.id === saved.id ? saved : note));
-  if (saved.id === linkNoteId && saved.title !== linkTitle) scheduleLinkSync();
-  await reloadNotes();
-  savedMessage = 'Saved';
-  setDocumentTitle(selectedNote.title || 'Untitled');
-  // Journal pages are headed by their day, whatever their title says.
-  if (!selectedNote.journal) {
-    const titleText = selectedNote.title || 'Untitled';
-    editorRoot.querySelectorAll('.doc-title, .crumb.is-current').forEach((el) => { el.textContent = titleText; });
+  const pane = activePane;
+  const id = selectedNote.id;
+  const text = content;
+  const saved = await invoke<Note>('save_note', { id, content: text });
+  libraryNotes = libraryNotes.map((note) => (note.id === id ? saved : note));
+  knownNotes.set(id, saved);
+  if (linkTitles.has(id) && saved.title !== (linkSyncs.get(id)?.title ?? linkTitles.get(id))) scheduleLinkSync(id, saved.title);
+  // The same note open in another split shows what was just saved.
+  for (const other of panes) {
+    if (other === pane) continue;
+    withPane(other, () => {
+      if (selectedNote?.id !== id || saveTimer !== undefined) return;
+      selectedNote = saved;
+      if (content !== text) showDiskContent(text);
+    });
   }
-  renderStatus();
+  if (panes.includes(pane)) {
+    withPane(pane, () => {
+      if (selectedNote?.id !== id) return;
+      selectedNote = saved;
+      // More typing since this save started: that save is still to come.
+      if (saveTimer === undefined) savedMessage = 'Saved';
+      if (pane === activePane) setDocumentTitle(saved.title || 'Untitled');
+      // Journal pages are headed by their day, whatever their title says.
+      if (!saved.journal) {
+        const titleText = saved.title || 'Untitled';
+        editorRoot.querySelectorAll('.doc-title').forEach((el) => { el.textContent = titleText; });
+      }
+      renderStatus();
+    });
+  }
+  for (const each of panes) for (const tab of each.tabs) if (tab.noteId === id) tab.title = tabTitleOf(saved);
+  paintAllTabs();
+  await reloadNotes();
 }
 
 function bindExportMenu() {
@@ -2349,6 +3248,7 @@ function bindExportMenu() {
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
     if (!menu.hidden) return close();
+    menu.querySelector<HTMLElement>('[data-export="close-pane"]')!.hidden = panes.length < 2;
     menu.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
     menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
@@ -2366,7 +3266,11 @@ function bindExportMenu() {
     item.addEventListener('click', () => {
       close();
       const kind = item.dataset.export;
-      void (kind === 'pdf' ? exportNotePdf() : kind === 'site' ? showPublish() : exportNoteHtml());
+      const run: Record<string, () => Promise<unknown> | void> = {
+        html: exportNoteHtml, pdf: exportNotePdf, site: showPublish, present: presentNote, history: showVersionHistory,
+        split: () => splitPane(selectedNote), 'close-pane': () => closePane(activePane),
+      };
+      void run[kind ?? 'html']?.();
     });
   });
 }
@@ -2374,7 +3278,7 @@ function bindExportMenu() {
 /** Present the open note as slides, starting from the one the cursor is in. */
 async function presentNote() {
   if (!selectedNote) return;
-  const source = document.querySelector<HTMLTextAreaElement>('#source');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
   const fromLine = blockEdit ? blockEdit.start : source ? content.slice(0, source.selectionStart).split('\n').length - 1 : 0;
   if (blockEdit) commitBlockEdit();
   const noteId = selectedNote.id;
@@ -2427,7 +3331,7 @@ async function showVersionHistory() {
       setDocumentTitle(restored.title || 'Untitled');
       renderEditor();
       await reloadNotes();
-      if (restored.title !== linkTitle) scheduleLinkSync();
+      if (linkTitles.has(note.id) && restored.title !== linkTitles.get(note.id)) scheduleLinkSync(note.id, restored.title);
       void loadBacklinks(note.id);
       savedMessage = `Restored version from ${label}`;
       renderStatus();
@@ -2480,8 +3384,8 @@ function showNotice(text: string) {
 }
 
 function renderStatus() {
-  const countsEl = document.querySelector<HTMLSpanElement>('#counts');
-  const savedEl = document.querySelector<HTMLSpanElement>('#saved');
+  const countsEl = editorRoot.querySelector<HTMLSpanElement>('#counts');
+  const savedEl = editorRoot.querySelector<HTMLSpanElement>('#saved');
   const words = wordCount(content);
   if (countsEl) countsEl.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
   if (!savedEl) return;

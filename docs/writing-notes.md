@@ -6,9 +6,31 @@ The window has three areas:
 
 1. **Sidebar.** The library (All Notes, Archive, and your folders) and the tag tree. Search, the theme switch, and focus mode sit at the top; **New note** and **Settings** at the bottom.
 2. **Note list.** Notes in the current folder or tag, grouped by date (Today, Yesterday, Previous 7 days, and so on). The pills at the top filter it: **All**, **Pinned**, **Untagged**, **Recent**.
-3. **Editor.** The open note, with its breadcrumb, save status, view switcher, and note actions.
+3. **Editor.** The open notes as tabs, with save status, view switcher, and note actions. Rarer actions (export, publish, and in a narrow pane slides and history) sit in the **⋯** menu.
 
 Press **⌘\\** for focus mode, which hides the sidebar and note list so only the note is left.
+
+## Tabs and panes
+
+Clicking a note opens it in the current tab. To keep the note you're on open as well:
+
+| To open a note… | Do this |
+| --- | --- |
+| In a new tab | **⌘-click** it (in the note list, a link, a backlink or the palette with **⌘↩**), middle-click it, or right-click → **Open in new tab** |
+| Beside the current one | **⌥⌘-click** it, right-click → **Open to the right**, or drag it to the left or right edge of the editor |
+| The same note twice | **⌥⌘\\** (Split right) opens the note you're in again beside it, say source on one side and preview on the other |
+
+**⌘T** opens a new tab with the palette ready, so you can type the note's name and press ↩. **⌘W** closes the tab, **⌃⇥** / **⌃⇧⇥** go to the next and previous tab, and **⌃⌘←** / **⌃⌘→** move between panes.
+
+Drag a tab to reorder it, onto another pane's tabs to move it there, or to the edge of a pane to put it in a new pane. Drag a note from the list onto a pane to open it in a tab there. The divider between panes resizes them; double-click it to even them out. You can have up to four panes. A note open in two panes stays in step: what you type in one shows in the other once it's saved.
+
+Notes open in a tab somewhere have a small dot in the note list. Tagdown remembers your tabs and panes per vault and reopens them on launch (**Settings → General → On launch**).
+
+## Properties
+
+A note's properties (its frontmatter fields) sit under the title. When a note has more than three, they fold to one line of chips; click **Properties** (or press **⌘⇧I**) to open or fold them, and each note remembers your choice. Click a chip to jump straight to editing that value. **Settings → Editor → Fold properties** sets when they start folded: always, never, or when there are more than three.
+
+Fields you rarely look at, such as an `id` or a sync timestamp, can be hidden in every note: hover the row and click the eye. **Show hidden** under the list brings them back for a moment; unhide them for good from the row, or in **Settings → Editor → Hidden properties**. Hiding only changes the view; the field stays in the file.
 
 ## Titles
 

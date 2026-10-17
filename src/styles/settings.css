@@ -1139,3 +1139,15 @@
 .vault-item-remove:hover { background: var(--pressed-overlay); color: var(--ink); }
 .vault-list-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .vault-list-foot p { margin: 0; color: var(--ink-3); font-size: 12px; line-height: 1.45; }
+
+/* Hidden properties: a chip per name, × shows it again. */
+.hidden-props { display: flex; flex-wrap: wrap; gap: 6px; }
+.hidden-props-empty { color: var(--ink-3); font-size: 12.5px; }
+.hidden-prop {
+  height: 24px; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; border-radius: 12px; padding: 0 8px 0 10px;
+  background: var(--chip-bg); color: var(--ink-2); font: 12px var(--font-ui);
+  cursor: pointer;
+}
+.hidden-prop span { color: var(--ink-3); font-size: 14px; line-height: 1; }
+.hidden-prop:hover { background: var(--pressed-overlay); color: var(--ink); }

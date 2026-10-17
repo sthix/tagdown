@@ -29,7 +29,8 @@ export type PaletteSource = {
   notes: () => Promise<PaletteNote[]>;
   searchContent: (query: string) => Promise<PaletteHit[]>;
   actions: () => PaletteAction[];
-  openNote: (id: string) => void | Promise<void>;
+  /** `where`: the open tab, a new tab (⌘↵ / ⌘-click) or a split beside it (⌥⌘↵ / ⌥⌘-click). */
+  openNote: (id: string, where: 'here' | 'tab' | 'split') => void | Promise<void>;
   noteIcon: string;
 };
 
@@ -64,6 +65,8 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
       <footer class="palette-foot">
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
         <span><kbd>↵</kbd> open</span>
+        <span><kbd>⌘↵</kbd> new tab</span>
+        <span><kbd>⌥⌘↵</kbd> split</span>
         <span class="palette-foot-syntax"><code>tag:</code><code>title:</code><code>"phrase"</code><code>-word</code></span>
         <span class="palette-foot-brand">Tagdown</span>
       </footer>
@@ -85,10 +88,11 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
     dialog = null;
   };
 
-  const run = async (row: Row | undefined) => {
+  const run = async (row: Row | undefined, event?: { metaKey: boolean; altKey: boolean }) => {
     if (!row) return;
     close();
-    if (row.kind === 'note') await source.openNote(row.note.id);
+    const where = event?.metaKey ? (event.altKey ? 'split' : 'tab') : 'here';
+    if (row.kind === 'note') await source.openNote(row.note.id, where);
     else await row.action.run();
   };
 
@@ -189,7 +193,7 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
   input.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowDown') { event.preventDefault(); active = Math.min(rows.length - 1, active + 1); render(); }
     else if (event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, active - 1); render(); }
-    else if (event.key === 'Enter') { event.preventDefault(); void run(rows[active]); }
+    else if (event.key === 'Enter') { event.preventDefault(); void run(rows[active], event); }
   });
   list.addEventListener('mousemove', (event) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>('.palette-row');
@@ -198,7 +202,7 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
   });
   list.addEventListener('click', (event) => {
     const row = (event.target as HTMLElement).closest<HTMLElement>('.palette-row');
-    if (row) void run(rows[Number(row.dataset.index)]);
+    if (row) void run(rows[Number(row.dataset.index)], event);
   });
   dialog.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
   dialog.addEventListener('mousedown', (event) => { if (event.target === dialog) close(); });

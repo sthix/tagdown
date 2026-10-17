@@ -48,6 +48,10 @@ export type Preferences = {
   accent: Accent;
   /** The faint paper texture on the window background. */
   grain: boolean;
+  /** Whether a note's properties start folded to one line; `auto` folds more than three. */
+  propertiesFold: 'auto' | 'expanded' | 'collapsed';
+  /** Property names kept out of sight in every note, until “Show hidden”. */
+  hiddenProperties: string[];
 };
 
 export const DEFAULTS: Preferences = {
@@ -64,6 +68,8 @@ export const DEFAULTS: Preferences = {
   dragHeadingSections: true,
   accent: 'yellow',
   grain: true,
+  propertiesFold: 'auto',
+  hiddenProperties: [],
 };
 
 const PREVIEW_WIDTHS: Record<Preferences['previewWidth'], string> = { narrow: '640px', medium: '760px', wide: '920px' };

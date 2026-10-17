@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::{Emitter, Manager};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 mod commands;
 
@@ -27,6 +28,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(AppState { vault }))
         .manage(search)
+        .menu(app_menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            // Tabs live in the page; it handles these.
+            id @ ("new-tab" | "close-tab") => { let _ = app.emit("menu", id); }
+            "close-window" => {
+                if let Some(window) = app.get_webview_window("main") { let _ = window.close(); }
+            }
+            _ => {}
+        })
         .setup(move |app| {
             // Images in notes load from the vault through the asset protocol.
             app.asset_protocol_scope().allow_directory(&vault_root, true)?;
@@ -83,6 +93,49 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// The standard macOS menu, except that ⌘W closes a tab (⇧⌘W the window) and ⌘T opens one.
+fn app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let info = app.package_info();
+    let about = AboutMetadata {
+        name: Some(info.name.clone()),
+        version: Some(info.version.to_string()),
+        ..Default::default()
+    };
+    let close_window = MenuItem::with_id(app, "close-window", "Close Window", true, Some("CmdOrCtrl+Shift+W"))?;
+    Menu::with_items(app, &[
+        &Submenu::with_items(app, info.name.clone(), true, &[
+            &PredefinedMenuItem::about(app, None, Some(about))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ])?,
+        &Submenu::with_items(app, "File", true, &[
+            &MenuItem::with_id(app, "new-tab", "New Tab", true, Some("CmdOrCtrl+T"))?,
+            &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &close_window,
+        ])?,
+        &Submenu::with_items(app, "Edit", true, &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ])?,
+        &Submenu::with_items(app, "View", true, &[&PredefinedMenuItem::fullscreen(app, None)?])?,
+        &Submenu::with_items(app, "Window", true, &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+        ])?,
+    ])
 }
 
 /// Open the vault's search index and rebuild it from the notes on a background

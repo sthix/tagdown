@@ -104,6 +104,7 @@ Tagdown sits between Obsidian and Notion: plain Markdown files you own, with ric
 | Wikilinks and backlinks | ✅ | ✅ | ✅ | ⚠️ @-mentions |
 | Nested tags | ✅ | ✅ | ✅ | ⚠️ properties |
 | Daily journal | ✅ | ✅ | ✅ | ⚠️ templates |
+| Tabs and side-by-side notes | ✅ | ✅ | ⚠️ right sidebar only | ⚠️ side peek |
 | Callouts, tabs, grids, cards | ✅ built in | ⚠️ callouts; rest via plugins | ⚠️ admonitions | ✅ blocks |
 | Math and Mermaid diagrams | ✅ | ✅ | ⚠️ Mermaid via plugin | ✅ |
 | Live queries over notes and tasks | ✅ built in | ⚠️ Bases / Dataview | ✅ | ✅ databases |

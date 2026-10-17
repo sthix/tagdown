@@ -49,7 +49,7 @@ const PAGES: Page[] = [
               kind: 'select',
               name: 'startupOpen',
               options: [
-                { value: 'last', label: 'The last note I had open' },
+                { value: 'last', label: 'The tabs and splits I had open' },
                 { value: 'journal', label: 'Today’s journal page' },
                 { value: 'first', label: 'The most recent note' },
               ],
@@ -93,6 +93,30 @@ const PAGES: Page[] = [
         rows: [
           { label: 'Check spelling', control: { kind: 'switch', name: 'spellcheck' } },
           { label: 'Source text size', description: 'The Markdown editor, and blocks you edit in the preview.', control: { kind: 'range', name: 'editorFontSize', min: 11, max: 20, unit: 'px' } },
+        ],
+      },
+      {
+        title: 'Properties',
+        rows: [
+          {
+            label: 'Fold properties',
+            description: 'Folded, they take one line of chips under the title. ⌘⇧I folds or opens them for the note you’re in, and each note remembers.',
+            control: {
+              kind: 'select',
+              name: 'propertiesFold',
+              options: [
+                { value: 'auto', label: 'When a note has more than 3' },
+                { value: 'collapsed', label: 'Always' },
+                { value: 'expanded', label: 'Never' },
+              ],
+            },
+          },
+          {
+            label: 'Hidden properties',
+            description: 'Hidden in every note; the eye on a property’s row hides it. Notes show “Show hidden” to see them anyway.',
+            stacked: true,
+            control: { kind: 'html', render: renderHiddenProperties },
+          },
         ],
       },
       {
@@ -185,6 +209,7 @@ export function initSettings() {
     void invoke('reveal_vault').catch(() => undefined);
   });
   bindVaultList();
+  bindHiddenProperties();
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     tab.addEventListener('click', () => activateTab(tab));
@@ -466,6 +491,27 @@ function renderVaultControl() {
       <button type="button" class="td-button" data-reveal-vault>${uiIcon('folder', 14)}<span>Reveal in Finder</span></button>
     </div>
   `;
+}
+
+function renderHiddenProperties() {
+  return `<div class="hidden-props" data-hidden-props>${hiddenPropertiesHtml()}</div>`;
+}
+
+function hiddenPropertiesHtml() {
+  const keys = getPreference('hiddenProperties');
+  if (!keys.length) return '<span class="hidden-props-empty">None yet.</span>';
+  return keys.map((key) => `<button type="button" class="hidden-prop" data-unhide="${escapeHtml(key)}" title="Show “${escapeHtml(key)}” again">${escapeHtml(key)}<span aria-hidden="true">×</span></button>`).join('');
+}
+
+function bindHiddenProperties() {
+  const holder = dialog?.querySelector<HTMLElement>('[data-hidden-props]');
+  holder?.addEventListener('click', (event) => {
+    const key = (event.target as Element).closest<HTMLElement>('[data-unhide]')?.dataset.unhide;
+    if (key !== undefined) setPreference('hiddenProperties', getPreference('hiddenProperties').filter((k) => k !== key));
+  });
+  onPreferenceChange((name) => {
+    if (name === 'hiddenProperties' && holder) holder.innerHTML = hiddenPropertiesHtml();
+  });
 }
 
 function renderVaultList() {

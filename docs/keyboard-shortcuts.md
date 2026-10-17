@@ -12,6 +12,20 @@
 | ⌘\\ | Focus mode (hide the sidebar and note list) |
 | ⌘⇧D | Switch between light and dark theme |
 
+## Tabs and panes
+
+| Shortcut | Action |
+| --- | --- |
+| ⌘T | New tab (with the palette open to pick a note) |
+| ⌘W | Close the tab; closing a pane's last tab closes the pane |
+| ⇧⌘W | Close the window |
+| ⌃⇥ / ⌃⇧⇥ | Next / previous tab (also ⌘⇧] / ⌘⇧[) |
+| ⌘-click | Open a note, link or backlink in a new tab (⌘↩ in the palette) |
+| ⌥⌘-click | Open it in a pane beside this one (⌥⌘↩ in the palette) |
+| Middle-click | Open in a new tab; on a tab, close it |
+| ⌥⌘\\ | Split right: the open note again, in a new pane |
+| ⌃⌘← / ⌃⌘→ | Move to the pane on the left / right |
+
 ## Views
 
 | Shortcut | Action |
@@ -30,6 +44,7 @@
 | ⌘P | Print or save as PDF |
 | ⌥⌘P | Present as slides |
 | ⌥⌘← / ⌥⌘→ | Previous / next day, on a journal page |
+| ⌘⇧I | Fold or open the note's properties |
 
 ## Editing
 

@@ -152,7 +152,16 @@ impl Server {
                 if types.is_empty() {
                     return Ok("No note types yet. A note's type is its `type:` property; a note titled \"<Type> Template\" defines how new notes of that type start.".into());
                 }
-                Ok(types.iter().map(|t| format!("- {}{} — {} notes{}", t.icon.as_ref().map(|i| format!("{i} ")).unwrap_or_default(), t.name, t.count, if t.template_id.is_some() { format!(", template \"{} Template\"", t.name) } else { String::new() })).collect::<Vec<_>>().join("\n"))
+                Ok(types.iter().map(|t| {
+                    let mut line = format!("- {}{} — {} notes", t.icon.as_ref().map(|i| format!("{i} ")).unwrap_or_default(), t.name, t.count);
+                    if t.template_id.is_some() {
+                        line.push_str(&format!(", template \"{} Template\"", t.name));
+                    }
+                    for link in &t.links {
+                        line.push_str(&format!("; {} links to {} notes{}", link.key, link.target, if link.list { " (a list)" } else { "" }));
+                    }
+                    line
+                }).collect::<Vec<_>>().join("\n"))
             }
             "append_to_note" => {
                 let note = lib.append(&required("note")?, &required("content")?)?;

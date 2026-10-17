@@ -76,6 +76,8 @@ export type TableActions = {
   openLink: (target: string) => void;
   decorate: (el: HTMLElement) => void;
   valueSuggestions: (key: string) => string[];
+  /** What an empty `key` means (“A Person”), if anything. */
+  valueHint?: (key: string) => string | null;
   /** The type the vault mostly gives `key`. */
   knownType: (key: string) => PropertyType | null;
 };
@@ -322,7 +324,7 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
         suggestions: () => actions.valueSuggestions(column),
         listId: `td-qt-values-${r}-${c}`,
         blank: !property,
-        emptyLabel: '',
+        emptyLabel: actions.valueHint?.(column) ?? '',
       }));
     });
     if (actions) tr.insertCell().className = 'td-qt-spacer';

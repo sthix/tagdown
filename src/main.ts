@@ -23,6 +23,7 @@ import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './bloc
 import { propertiesFolded, renderPropertiesPanel, setPropertiesFolded } from './propertiesPanel';
 import { showContextMenu, type MenuItem } from './contextMenu';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
+import { asLinks, linkHint, type LinkField } from './linkFields';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
@@ -77,7 +78,7 @@ type NoteContent = { id: string; content: string };
 type Backlink = { note: Note; mentions: string[] };
 
 /** A note type: the `type:` notes give themselves, and its "<Type> Template" note. */
-type NoteType = { name: string; icon: string | null; templateId: string | null; count: number };
+type NoteType = { name: string; icon: string | null; templateId: string | null; count: number; links: LinkField[] };
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -2306,7 +2307,8 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
   renderPropertiesPanel(host, {
     properties: selectedNote.properties ?? [],
     keySuggestions: () => vaultPropertyKeys(),
-    valueSuggestions: propertyValueSuggestions,
+    valueSuggestions: (key) => propertyValueSuggestions(key, selectedNote),
+    valueHint: (key) => { const field = linkFieldFor(key, selectedNote); return field ? linkHint(field) : null; },
     knownType: propertyKnownType,
     save: saveProperty,
     decorate: markWikilinks,
@@ -2341,19 +2343,57 @@ function hideProperty(key: string, hide: boolean) {
   showNotice(hide ? `“${key}” hidden in every note` : `“${key}” shown in every note`);
 }
 
-/** Values the vault uses for the property `key`. */
-function propertyValueSuggestions(key: string): string[] {
+/**
+ * The link field `key` is in `note`'s type, or (without a note, as in a table)
+ * in any type that has one by that name.
+ */
+function linkFieldFor(key: string, note?: Note | null): LinkField | undefined {
+  const named = (t: NoteType | undefined) => t?.links.find((l) => l.key.toLowerCase() === key.toLowerCase());
+  if (note !== undefined) return named(findType(note ? typeOfNote(note) : null));
+  for (const t of noteTypes) { const field = named(t); if (field) return field; }
+  return undefined;
+}
+
+/** Values the vault uses for the property `key`; for a link field, its type's notes first. */
+function propertyValueSuggestions(key: string, note?: Note | null): string[] {
   const values = new Set<string>();
+  const field = linkFieldFor(key, note);
+  if (field) {
+    libraryNotes.filter((n) => isOfType(n, field.target)).map((n) => n.title).sort((a, b) => a.localeCompare(b))
+      .forEach((title) => values.add(`[[${title}]]`));
+  }
   // Types with a template are offered even before a note uses them.
   if (key.toLowerCase() === 'type') noteTypes.forEach((t) => values.add(t.name));
-  for (const note of libraryNotes) {
+  // A template's values are placeholders (`author: "[[Person]]"`), not suggestions.
+  for (const note of libraryNotes.filter((n) => !templateTypeOf(n.title))) {
     for (const p of note.properties ?? []) {
       if (p.key.toLowerCase() !== key.toLowerCase()) continue;
       if (p.type === 'text' && p.value) values.add(p.value);
       if (p.type === 'list') p.value.forEach((item) => values.add(item));
     }
   }
-  return [...values].slice(0, 50);
+  return [...values].slice(0, field ? 200 : 50);
+}
+
+/**
+ * A link field's value as [[links]], creating notes of its type for names
+ * that don't have one yet (as Capacities does when you pick a new name).
+ */
+async function linkFieldValue(key: string, value: PropertyValue | null, note: Note | null): Promise<PropertyValue | null> {
+  const field = value && linkFieldFor(key, note);
+  if (!field || !value) return value;
+  const { value: linked, titles } = asLinks(value);
+  const created: string[] = [];
+  for (const title of titles) {
+    if (resolveTarget(title, libraryNotes) || created.includes(title)) continue;
+    const made = await invoke<Note>('create_typed_note', { typeName: field.target, title, folderId: null }).catch(() => null);
+    if (made) { created.push(title); libraryNotes = [...libraryNotes, made]; knownNotes.set(made.id, made); }
+  }
+  if (created.length) {
+    showNotice(`Created ${field.target} ${created.map((t) => `“${t}”`).join(', ')}`);
+    scheduleListRefresh();
+  }
+  return linked;
 }
 
 /** The type the vault mostly gives the property `key`. */
@@ -2390,8 +2430,9 @@ function replaceQuery(oldQuery: string, newQuery: string) {
 }
 
 const tableActions: TableActions = {
-  editProperty: async (noteId, key, value) => {
+  editProperty: async (noteId, key, given) => {
     try {
+      const value = await linkFieldValue(key, given, libraryNotes.find((n) => n.id === noteId) ?? null);
       const note = await invoke<Note>('set_property', { id: noteId, key, value, renameFrom: null });
       libraryNotes = libraryNotes.map((n) => (n.id === noteId ? note : n));
       if (selectedNote?.id === noteId) {
@@ -2439,7 +2480,8 @@ const tableActions: TableActions = {
   },
   openLink: (target) => void followWikilink(target),
   decorate: markWikilinks,
-  valueSuggestions: propertyValueSuggestions,
+  valueSuggestions: (key) => propertyValueSuggestions(key),
+  valueHint: (key) => { const field = linkFieldFor(key); return field ? linkHint(field) : null; },
   knownType: propertyKnownType,
 };
 
@@ -2450,9 +2492,10 @@ function vaultPropertyKeys(): string[] {
   return [...counts].sort((a, b) => b[1] - a[1]).map(([key]) => key);
 }
 
-async function saveProperty(key: string, value: PropertyValue | null, renameFrom?: string): Promise<boolean> {
+async function saveProperty(key: string, given: PropertyValue | null, renameFrom?: string): Promise<boolean> {
   if (!selectedNote) return false;
   const id = selectedNote.id;
+  const value = await linkFieldValue(key, given, selectedNote);
   const isNew = value !== null && !renameFrom && !(selectedNote.properties ?? []).some((p) => p.key === key);
   // Body edits go first, so the two writes don't race.
   if (saveTimer !== undefined || savedMessage === 'Saving…') await flushSave();
@@ -2590,11 +2633,28 @@ function backlinksHtml() {
     const only = holder.children.length === 1 && holder.firstElementChild?.tagName === 'P' ? holder.firstElementChild : null;
     return only ? `<div class="backlink-line">${only.innerHTML}</div>` : `<div class="backlink-line has-children">${holder.innerHTML}</div>`;
   };
-  const list = items.map(({ note, mentions }) => `
+  const card = ({ note, mentions }: Backlink) => {
+    const type = findType(typeOfNote(note));
+    return `
     <div class="backlink" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
-      <div class="backlink-title">${iconSvg('notes', 13)}<strong>${escapeHtml(note.title || 'Untitled')}</strong></div>
+      <div class="backlink-title">${type ? typeIconHtml(type, 13) : iconSvg('notes', 13)}<strong>${escapeHtml(note.title || 'Untitled')}</strong></div>
       ${mentions.map(mention).join('')}
-    </div>`).join('');
+    </div>`;
+  };
+  // With notes of several types linking here, each type gets its own group (other notes last).
+  const groups = new Map<string, Backlink[]>();
+  for (const item of items) {
+    const name = findType(typeOfNote(item.note))?.name ?? '';
+    groups.set(name, [...(groups.get(name) ?? []), item]);
+  }
+  const named = [...groups.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  const list = named.length
+    ? [...named, ...(groups.has('') ? [''] : [])].map((name) => {
+      const type = findType(name);
+      const label = type ? `${typeIconHtml(type, 12)}${escapeHtml(type.name)}` : 'Other notes';
+      return `<h3 class="backlinks-group">${label}<span>${groups.get(name)!.length}</span></h3>${groups.get(name)!.map(card).join('')}`;
+    }).join('')
+    : items.map(card).join('');
   return `
     <section class="backlinks" data-backlinks aria-label="Linked mentions">
       <h2>Linked mentions${items.length ? `<span>${items.length}</span>` : ''}</h2>

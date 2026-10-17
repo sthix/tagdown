@@ -86,7 +86,7 @@ To point an assistant at a different vault, add `"--vault", "/path/to/vault"` be
 | `read_note` | A note's full text, with its tags, folder, edit time, and backlinks |
 | `list_notes` | Notes, most recent first, optionally in one folder or under one tag |
 | `create_note` | Create a note with a title, body, optional folder, tags and [type](organizing.md#note-types) |
-| `list_types` | The vault's note types, with how many notes each has |
+| `list_types` | The vault's note types, with how many notes each has and which properties link to other types |
 | `append_to_note` | Add text to the end of a note |
 | `replace_note_content` | Replace a note's whole text (the old text stays in version history) |
 | `list_tasks` | Checklist items across notes, grouped by note |

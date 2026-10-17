@@ -18,6 +18,8 @@ export type PanelOptions = {
   keySuggestions: () => string[];
   /** Values the vault uses for `key`, for suggestions. */
   valueSuggestions: (key: string) => string[];
+  /** What an empty value of `key` should be (“A Person”), if it has a meaning. */
+  valueHint?: (key: string) => string | null;
   /** The type other notes give `key`, so a new property starts as that. */
   knownType: (key: string) => PropertyType | null;
   /** Write a change; `value: null` removes the property. Resolves false when it failed. */
@@ -223,6 +225,7 @@ function row(property: Property, index: number, options: RowOptions, hidden: boo
     openLink: options.openLink,
     suggestions: () => options.valueSuggestions(property.key),
     listId: `${options.listPrefix}-${index}`,
+    emptyLabel: options.valueHint?.(property.key) ?? undefined,
   }));
   wrap.append(cell);
 
@@ -399,6 +402,7 @@ function textField(property: Property & ({ type: 'text' } | { type: 'list' }), f
     input.spellcheck = false;
     input.setAttribute('aria-label', property.key);
     if (property.type === 'list') input.placeholder = 'Comma, separated, items';
+    if (field.emptyLabel) input.placeholder = property.type === 'list' ? `${field.emptyLabel}, comma-separated` : field.emptyLabel;
     const suggestions = field.suggestions();
     if (suggestions.length) {
       const list = el('datalist');

@@ -58,7 +58,7 @@ The sidebar's **Types** section lists every type in the vault with how many note
 
 A note titled after the type plus "Template" (**Book Template**, **Person Template**) says how new notes of that type start:
 
-- its **properties**, with their values, so every Book gets `author`, `rating` and `started`;
+- its **properties**, with their values, so every Book gets `author`, `rating` and `started` (a property can also [link to another type](#links-to-other-types));
 - its **text** below the title;
 - its **`icon:`** property, an emoji, is the type's icon in the sidebar and the note list. It isn't copied into new notes.
 
@@ -67,7 +67,7 @@ In the template, `{{title}}`, `{{date}}`, `{{weekday}}`, `{{yesterday}}` and `{{
 ```tagdown
 ---
 icon: 📚
-author: ""
+author: "[[Person]]"
 rating: 0
 started: "{{date}}"
 ---
@@ -80,6 +80,14 @@ started: "{{date}}"
 ```
 
 Press **+** next to **Types** to start a type: it creates the template note with an empty `icon` for you. Right-click a type to edit its template or make one.
+
+### Links to other types
+
+A template property whose value is a link to a type says that the property holds notes of that type. In the Book Template above, `author: "[[Person]]"` makes `author` a link to a Person, and `readers: ["[[Person]]"]` would hold a list of them:
+
+- new Books start with `author` empty, and the field reads **A Person**;
+- typing in it suggests your Person notes; pick one, or type a new name and press ↩ to create a Person note by that name (from the Person Template);
+- the value is saved as a `[[link]]`, so the author's note lists the book under **Linked mentions**, where mentions are grouped by type.
 
 Giving an existing note a type (by setting its `type` property) adds the template's properties it doesn't have yet. Its text is left alone.
 

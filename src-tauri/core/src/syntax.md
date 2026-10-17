@@ -425,7 +425,7 @@ show:cards lists the matching notes as a grid of cards, each with a cover image 
 
 ### Note types
 
-A note’s type is its type: property (type: Book). A note titled “Book Template” says how new Book notes start: with its properties and their values, and with its text, where {{title}}, {{date}}, {{weekday}}, {{yesterday}} and {{tomorrow}} are filled in. Its icon: property (an emoji) is the type’s icon and isn’t copied. Types are listed in the sidebar; type:Book in a query matches them, and + New note in a table, board or cards for a type starts from its template.
+A note’s type is its type: property (type: Book). A note titled “Book Template” says how new Book notes start: with its properties and their values, and with its text, where {{title}}, {{date}}, {{weekday}}, {{yesterday}} and {{tomorrow}} are filled in. Its icon: property (an emoji) is the type’s icon and isn’t copied. A template value that links to a type, like author: "[[Person]]", makes a link field: new notes start with it empty, it suggests that type’s notes, and a new name creates one. Types are listed in the sidebar; type:Book in a query matches them, and + New note in a table, board or cards for a type starts from its template.
 
 ```tagdown
 ## People to follow up with

@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use tauri::{Emitter, State};
 
-use crate::{commands::search::SearchState, models::{Note, NoteContent, SortOrder}, properties::PropertyValue, AppState};
+use crate::{commands::search::SearchState, models::{Note, NoteContent, SortOrder}, properties::PropertyValue, types::NoteType, AppState};
 
 #[tauri::command]
 pub async fn list_notes(folder_id: Option<String>, sort: SortOrder, state: State<'_, Mutex<AppState>>) -> Result<Vec<Note>, String> {
@@ -97,4 +97,33 @@ pub async fn open_journal(day: String, app: tauri::AppHandle, state: State<'_, M
         let _ = app.emit("note-saved", &note);
     }
     Ok(note)
+}
+
+/// Every note type: the ones with a "<Type> Template" note and the ones notes use.
+#[tauri::command]
+pub async fn list_types(state: State<'_, Mutex<AppState>>) -> Result<Vec<NoteType>, String> {
+    state.lock().map_err(|e| e.to_string())?.vault.note_types()
+}
+
+/// A new note of a type, started from its template.
+#[tauri::command]
+pub async fn create_typed_note(type_name: String, title: String, folder_id: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.create_typed_note(&type_name, &title, folder_id)?;
+    search.index(&note, &state.vault.get_note_content(&note.id)?.content);
+    let _ = app.emit("note-saved", &note);
+    Ok(note)
+}
+
+/// Give a note the properties of its type's template that it lacks; returns
+/// the note and the names of the properties added.
+#[tauri::command]
+pub async fn apply_type(id: String, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<(Note, Vec<String>), String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let (note, added) = state.vault.apply_type(&id)?;
+    if !added.is_empty() {
+        search.index(&note, &state.vault.get_note_content(&id)?.content);
+        let _ = app.emit("note-saved", &note);
+    }
+    Ok((note, added))
 }

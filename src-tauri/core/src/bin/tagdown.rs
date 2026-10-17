@@ -22,7 +22,9 @@ Commands:
   list [--folder NAME] [--tag TAG] [--limit N]
                               Notes, most recently edited first
   show <note>                 Print a note (by title or id)
-  new <title> [text | -]      Create a note; `-` reads the body from stdin
+  new <title> [text | -] [--type TYPE]
+                              Create a note; `-` reads the body from stdin;
+                              a type starts it from that type's template
   append <note> <text | ->    Add text to the end of a note
   journal [day] [text | -]    Print a day's journal page, or add text to it
                               (day: YYYY-MM-DD, today, yesterday, tomorrow)
@@ -132,12 +134,13 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "new" => {
+            let note_type = take_option(&mut args, "--type")?;
             if args.is_empty() {
                 return Err("new needs a title".into());
             }
             let title = args.remove(0);
             let body = if args.is_empty() && !io::stdin().is_terminal() { text_arg(&["-".into()])? } else { text_arg(&args)? };
-            let note = lib.create(&title, &body, None, &[])?;
+            let note = lib.create_typed(&title, &body, None, &[], note_type.as_deref())?;
             println!("Created \"{}\" ({})", note.title, note.id);
             Ok(())
         }

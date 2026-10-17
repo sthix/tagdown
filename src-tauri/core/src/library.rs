@@ -159,9 +159,20 @@ impl Library {
     /// Create a note. `body` is everything after the title heading; when it
     /// already starts with a `# ` heading, that heading is the title.
     pub fn create(&self, title: &str, body: &str, folder: Option<&str>, tags: &[String]) -> Result<Note, String> {
+        self.create_typed(title, body, folder, tags, None)
+    }
+
+    /// `create`, as a note of a type (see `types.rs`): it starts with the
+    /// type's properties, and with its template's body unless `body` is given.
+    pub fn create_typed(&self, title: &str, body: &str, folder: Option<&str>, tags: &[String], note_type: Option<&str>) -> Result<Note, String> {
         let folder_id = folder.map(|name| self.folder_id(name)).transpose()?;
         let body = body.trim();
-        let mut content = if body.starts_with("# ") { body.to_string() } else { format!("# {}\n\n{body}", title.trim()) };
+        let typed = note_type.filter(|t| !t.trim().is_empty()).map(|t| self.vault.create_typed_note(t, title, folder_id.clone())).transpose()?;
+        let mut content = match &typed {
+            Some(note) if body.is_empty() => self.vault.get_note_content(&note.id)?.content,
+            _ if body.starts_with("# ") => body.to_string(),
+            _ => format!("# {}\n\n{body}", title.trim()),
+        };
         let missing: Vec<String> = tags
             .iter()
             .map(|t| t.trim().trim_start_matches('#').to_string())
@@ -171,8 +182,15 @@ impl Library {
         if !missing.is_empty() {
             content = format!("{}\n\n{}", content.trim_end(), missing.join(" "));
         }
-        let note = self.vault.create_note(folder_id)?;
+        let note = match typed {
+            Some(note) => note,
+            None => self.vault.create_note(folder_id)?,
+        };
         self.vault.save_note(&note.id, format!("{}\n", content.trim_end()))
+    }
+
+    pub fn types(&self) -> Result<Vec<crate::types::NoteType>, String> {
+        self.vault.note_types()
     }
 
     pub fn append(&self, reference: &str, text: &str) -> Result<Note, String> {

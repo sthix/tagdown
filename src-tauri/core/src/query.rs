@@ -4,9 +4,15 @@
 // A query is a search (the same syntax as everywhere else: words, "phrases",
 // tag:, title:, -exclusions) plus display options:
 //   show:notes | tasks | table     what to list (notes by default); a table has
-//                                  a column per property, editable in the app
-//   columns:status,due,updated     the table's columns (title always comes first);
+//        | board | cards           a column per property, editable in the app; a
+//                                  board has a lane per value of one property;
+//                                  cards show a cover image and the opening lines
+//   columns:status,due,updated     the table's columns (title always comes first),
+//                                  or the properties cards show;
 //                                  updated, created, folder and tags are the note's own
+//   group:status                   the property a board's lanes are values of (status by default)
+//   lanes:todo,doing,done          a board's lanes in this order, empty ones too
+//   type:Book                      notes of a type, the same as type=Book (see types.rs)
 //   status:open | done | all       which tasks (open by default)
 //   sort:updated | created | title order (most recently edited first by default)
 //   sort:due | sort:-priority      by a property, ascending (or descending with -)
@@ -32,6 +38,7 @@ use crate::{
     properties::{parse_scalar, Property, PropertyValue},
     search_index::SearchIndex,
     tasks::{parse_tasks, Task, TaskFilter},
+    types::TYPE_KEY,
 };
 
 const DEFAULT_LIMIT: usize = 50;
@@ -43,10 +50,24 @@ pub enum Show {
     Notes,
     Tasks,
     Table,
+    Board,
+    Cards,
+}
+
+impl Show {
+    /// Views of notes that can add a note matching the query.
+    fn adds_notes(self) -> bool {
+        matches!(self, Show::Table | Show::Board | Show::Cards)
+    }
 }
 
 /// Columns a table shows when the query doesn't name them, besides the ones it filters or sorts by.
 const TABLE_COLUMNS: usize = 5;
+/// The property a board groups by when the query doesn't say.
+const DEFAULT_GROUP: &str = "status";
+/// The property naming a card's cover image.
+const COVER_KEY: &str = "cover";
+const EXCERPT_CHARS: usize = 180;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sort {
@@ -83,6 +104,10 @@ struct Spec {
     columns: Option<Vec<String>>,
     /// `tag:` searches that aren't excluded, for new notes in a table.
     tags: Vec<String>,
+    /// `group:` as written, if given.
+    group: Option<String>,
+    /// `lanes:` as written.
+    lanes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -95,6 +120,12 @@ pub struct QueryNote {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub properties: Vec<Property>,
+    /// For cards: the opening lines, as plain text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<String>,
+    /// For cards: the `cover:` property, else the note's first image.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover: Option<String>,
 }
 
 /// What a note added from a table starts with, so it matches the query.
@@ -117,8 +148,14 @@ pub struct QueryOutput {
     /// For notes: properties the query filters or sorts by, to show with each
     /// note. For a table: its columns after the title.
     pub columns: Vec<String>,
-    /// For a table: what a note added to it starts with.
+    /// For a table, board or cards: what a note added to it starts with.
     pub new_note: Option<NewNote>,
+    /// For a board: the property its lanes are values of.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// For a board: the lanes the query names, in order (`lanes:`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<String>,
 }
 
 /// Split a query into tokens, keeping "quoted phrases" (and `key:"quoted value"`)
@@ -174,7 +211,7 @@ fn property_filter(token: &str) -> Option<PropertyFilter> {
 }
 
 fn parse(raw: &str) -> Result<Spec, String> {
-    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new() };
+    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new(), group: None, lanes: Vec::new() };
     let mut filter = Vec::new();
     for token in tokens(raw) {
         if let Some(has) = token.strip_prefix("has:").map(|k| (false, k)).or_else(|| token.strip_prefix("-has:").map(|k| (true, k))) {
@@ -201,9 +238,19 @@ fn parse(raw: &str) -> Result<Spec, String> {
                 "notes" => Show::Notes,
                 "tasks" => Show::Tasks,
                 "table" => Show::Table,
-                _ => return Err(format!("show: must be notes, tasks or table, not \"{value}\"")),
+                "board" => Show::Board,
+                "cards" => Show::Cards,
+                _ => return Err(format!("show: must be notes, tasks, table, board or cards, not \"{value}\"")),
             },
-            "columns" => spec.columns = Some(value.split(',').map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect()),
+            "columns" => spec.columns = Some(list_option(value)),
+            "group" => spec.group = Some(value.to_string()).filter(|g| !g.is_empty()),
+            "lanes" => spec.lanes = list_option(value),
+            "type" | "-type" => {
+                if value.is_empty() {
+                    return Err("type: needs a type, like type:Book".into());
+                }
+                spec.properties.push(PropertyFilter { key: TYPE_KEY.into(), negate: key.starts_with('-'), matcher: Match::Equals(value.to_string()) });
+            }
             "status" => spec.status = match value {
                 "open" => TaskFilter::Open,
                 "done" => TaskFilter::Done,
@@ -234,6 +281,11 @@ fn parse(raw: &str) -> Result<Spec, String> {
     Ok(spec)
 }
 
+/// `a,b,c` as a list, blanks left out.
+fn list_option(value: &str) -> Vec<String> {
+    value.split(',').map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect()
+}
+
 /// Run `raw` over `notes`. The note holding the query (`exclude_id`) is left
 /// out, so a dashboard doesn't list itself.
 pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>) -> Result<QueryOutput, String> {
@@ -243,10 +295,13 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
 /// `run`, with `today` for dates like `today+7`.
 pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>, today: NaiveDate) -> Result<QueryOutput, String> {
     let spec = parse(raw)?;
+    let group = (spec.show == Show::Board).then(|| spec.group.clone().unwrap_or_else(|| DEFAULT_GROUP.into()));
     let mut columns: Vec<String> = Vec::new();
     let sort_key = match &spec.sort { Sort::Property { key, .. } => Some(key), _ => None };
     for key in spec.properties.iter().map(|p| &p.key).chain(sort_key) {
-        if !columns.iter().any(|c| c.eq_ignore_ascii_case(key)) {
+        // A board's lanes already say its group; a type filter needn't be repeated on every card.
+        let implied = group.as_ref().is_some_and(|g| g.eq_ignore_ascii_case(key)) || (spec.show != Show::Table && key.eq_ignore_ascii_case(TYPE_KEY));
+        if !implied && !columns.iter().any(|c| c.eq_ignore_ascii_case(key)) {
             columns.push(key.clone());
         }
     }
@@ -318,7 +373,7 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
             }
         }
     }
-    let new_note = (spec.show == Show::Table).then(|| NewNote {
+    let new_note = spec.show.adds_notes().then(|| NewNote {
         folder_id: folder_id.clone(),
         tags: spec.tags.clone(),
         properties: spec.properties.iter().filter(|f| !f.negate).filter_map(|f| match &f.matcher {
@@ -330,17 +385,22 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
         }).collect(),
     });
     Ok(match spec.show {
-        Show::Notes | Show::Table => QueryOutput {
+        Show::Notes | Show::Table | Show::Board | Show::Cards => QueryOutput {
             show: spec.show,
             total: selected.len(),
             notes: selected
                 .into_iter()
                 .take(spec.limit)
-                .map(|(n, _)| QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, created_at: n.created_at, properties: n.properties })
+                .map(|(n, content)| {
+                    let (excerpt, cover) = if spec.show == Show::Cards { (Some(excerpt(&content)), cover(&n, &content)) } else { (None, None) };
+                    QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, created_at: n.created_at, properties: n.properties, excerpt, cover }
+                })
                 .collect(),
             tasks: Vec::new(),
             columns,
             new_note,
+            group,
+            lanes: if spec.show == Show::Board { spec.lanes } else { Vec::new() },
         },
         Show::Tasks => {
             let tasks: Vec<Task> = selected
@@ -348,9 +408,132 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
                 .flat_map(|(n, content)| parse_tasks(n, content))
                 .filter(|t| spec.status.wants(t.done))
                 .collect();
-            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new(), new_note: None }
+            QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new(), new_note: None, group: None, lanes: Vec::new() }
         }
     })
+}
+
+/// A card's cover: the `cover:` property (a path or URL), else the first image in the note.
+fn cover(note: &Note, content: &str) -> Option<String> {
+    if let Some(value) = property(note, COVER_KEY).and_then(|v| v.texts().first().map(|t| t.trim().to_string())).filter(|t| !t.is_empty()) {
+        return Some(value);
+    }
+    first_image(content)
+}
+
+/// The source of the first `![alt](src)`, `<figure src=…>` or `<img src=…>` outside code.
+fn first_image(content: &str) -> Option<String> {
+    let mut fenced = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        let markdown_at = line.find("![");
+        let tag_at = ["<figure", "<img"].iter().filter_map(|tag| line.find(tag)).min();
+        let src = match (markdown_at, tag_at) {
+            (Some(m), t) if t.is_none_or(|t| m < t) => markdown_src(&line[m..]),
+            (_, Some(t)) => tag_src(&line[t..]),
+            _ => None,
+        };
+        if let Some(src) = src.filter(|s| !s.is_empty()) {
+            return Some(src);
+        }
+    }
+    None
+}
+
+/// `src` of `![alt](src "title")`.
+fn markdown_src(text: &str) -> Option<String> {
+    let target = &text[text.find("](")? + 2..];
+    let target = &target[..target.find(')')?];
+    Some(target.split_whitespace().next().unwrap_or_default().trim_matches(['<', '>']).to_string())
+}
+
+/// `src` of `<figure src=a.png …>` or `<img src="a.png">`.
+fn tag_src(text: &str) -> Option<String> {
+    let src = &text[text.find("src=")? + 4..];
+    let value = match src.chars().next()? {
+        q @ ('"' | '\'') => src[1..].split(q).next()?,
+        _ => src.split(|c: char| c.is_whitespace() || c == '>').next()?.trim_end_matches('/'),
+    };
+    Some(value.to_string())
+}
+
+/// A note's opening prose as plain text: no headings, components, code or
+/// tables, links shown as their labels, formatting marks dropped.
+fn excerpt(content: &str) -> String {
+    let mut out = String::new();
+    let mut fenced = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with("```") || t.starts_with("~~~") || t.starts_with("$$") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced || t.is_empty() || t.starts_with(['#', '<', '|', '!']) || t.starts_with(":::") || t.starts_with("---") || t.starts_with("^") {
+            continue;
+        }
+        let t = t.trim_start_matches(['>', ' ']);
+        let t = t.strip_prefix("- [ ] ").or_else(|| t.strip_prefix("- [x] ")).or_else(|| t.strip_prefix("- ")).or_else(|| t.strip_prefix("* ")).unwrap_or(t);
+        let text = plain_inline(t);
+        if text.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&text);
+        if out.chars().count() >= EXCERPT_CHARS {
+            break;
+        }
+    }
+    if out.chars().count() > EXCERPT_CHARS {
+        let cut: String = out.chars().take(EXCERPT_CHARS).collect();
+        out = format!("{}…", cut.trim_end_matches(|c: char| !c.is_whitespace()).trim_end());
+    }
+    out
+}
+
+/// One line of Markdown as plain text.
+fn plain_inline(line: &str) -> String {
+    let mut out = String::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        if let Some(inner) = rest.strip_prefix("[[") {
+            if let Some(end) = inner.find("]]") {
+                let target = &inner[..end];
+                let label = target.split_once('|').map_or_else(|| target.split('#').next().unwrap_or(target), |(_, l)| l);
+                out.push_str(label);
+                rest = &inner[end + 2..];
+                continue;
+            }
+        }
+        if let Some(inner) = rest.strip_prefix('[') {
+            if let Some((label, after)) = inner.split_once("](") {
+                if let Some(end) = after.find(')') {
+                    out.push_str(label);
+                    rest = &after[end + 1..];
+                    continue;
+                }
+            }
+        }
+        let c = rest.chars().next().unwrap();
+        if !matches!(c, '*' | '`' | '~' | '=') {
+            out.push(c);
+        }
+        rest = &rest[c.len_utf8()..];
+    }
+    // A trailing ^block-id is a marker, not text.
+    let out = out.trim();
+    match out.rsplit_once(" ^") {
+        Some((before, id)) if !id.is_empty() && id.chars().all(|c| c.is_alphanumeric() || c == '-') => before.trim().to_string(),
+        _ => out.to_string(),
+    }
 }
 
 /// The note's property `key`, compared case-insensitively.
@@ -559,10 +742,40 @@ mod tests {
     }
 
     #[test]
+    fn boards_group_by_a_property_and_cards_show_covers() {
+        use PropertyValue::*;
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let notes = vec![
+            (with(note("a", "Atlas", &[], None, 2), &[("type", Text("Project".into())), ("status", Text("doing".into())), ("owner", Text("Sam".into()))]), "# Atlas\n\n::: tip Goal\nShip.\n:::\n\nThe **launch** plan for [[Beacon|the beacon]]. ^intro\n\n![Map](attachments/map.png \"Map\")".to_string()),
+            (with(note("b", "Beacon", &[], None, 1), &[("type", Text("project".into())), ("cover", Text("https://example.com/b.jpg".into()))]), "# Beacon\n\n<figure src=\"x.png\" />".to_string()),
+            (with(note("c", "Comet", &[], None, 0), &[("type", Text("Book".into()))]), "# Comet\n\n```\n![no](code.png)\n```\n- [ ] Read it".to_string()),
+        ];
+        let q = |raw: &str| run_at(raw, notes.clone(), None, &[], None, today).unwrap();
+
+        let board = q("show:board type:project lanes:todo,doing");
+        assert_eq!((board.show, board.group.as_deref(), board.lanes.clone()), (Show::Board, Some("status"), vec!["todo".to_string(), "doing".into()]));
+        assert_eq!(titles(&board), vec!["Beacon", "Atlas"], "type: matches without case");
+        assert!(board.columns.is_empty(), "neither the group nor the type repeats on cards");
+        assert_eq!(board.new_note.unwrap().properties, vec![Property { key: "type".into(), value: Text("project".into()) }]);
+        assert_eq!(q("show:board group:owner sort:owner").group.as_deref(), Some("owner"));
+        assert_eq!(titles(&q("-type:project")), vec!["Comet"]);
+
+        let cards = q("show:cards sort:title");
+        let shown: Vec<(&str, Option<&str>, Option<&str>)> = cards.notes.iter().map(|n| (n.title.as_str(), n.cover.as_deref(), n.excerpt.as_deref())).collect();
+        assert_eq!(shown, vec![
+            ("Atlas", Some("attachments/map.png"), Some("Ship. The launch plan for the beacon.")),
+            ("Beacon", Some("https://example.com/b.jpg"), Some("")),
+            ("Comet", None, Some("Read it")),
+        ], "the cover property first, then the first image outside code");
+        assert!(q("show:table").notes[0].excerpt.is_none(), "only cards carry excerpts");
+    }
+
+    #[test]
     fn explains_bad_options() {
         let (notes, index, folders) = vault();
-        assert_eq!(run("show:grid", notes.clone(), Some(&index), &folders, None).unwrap_err(), "show: must be notes, tasks or table, not \"grid\"");
+        assert_eq!(run("show:grid", notes.clone(), Some(&index), &folders, None).unwrap_err(), "show: must be notes, tasks, table, board or cards, not \"grid\"");
         assert!(run("has:", notes.clone(), Some(&index), &folders, None).unwrap_err().contains("property name"));
-        assert!(run("folder:Nope", notes, Some(&index), &folders, None).unwrap_err().contains("no folder named"));
+        assert!(run("folder:Nope", notes.clone(), Some(&index), &folders, None).unwrap_err().contains("no folder named"));
+        assert!(run("type:", notes, Some(&index), &folders, None).unwrap_err().contains("needs a type"));
     }
 }

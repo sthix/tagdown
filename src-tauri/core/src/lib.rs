@@ -10,6 +10,7 @@ pub mod properties;
 pub mod search_index;
 pub mod site;
 pub mod tasks;
+pub mod types;
 pub mod vault;
 pub mod vaults;
 pub mod watcher;

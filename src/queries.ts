@@ -10,11 +10,23 @@ import { renderPreview } from './tagdown/renderer';
 import { defaultValue, valueText, type Property, type PropertyType, type PropertyValue } from './propertyValues';
 import { propertyField } from './propertiesPanel';
 import { getOption, nextSort, setOption, withColumns } from './queryText';
+import { boardLanes, laneKey, movedValue, propertyOf, type Lane } from './boardLanes';
+import { resolveLocalImages } from './localImages';
 
-type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[] };
+type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string };
 export type NewNote = { folderId: string | null; tags: string[]; properties: Property[] };
 type QueryTask = { noteId: string; noteTitle: string; text: string; done: boolean; line: number };
-type QueryOutput = { show: 'notes' | 'tasks' | 'table'; notes: QueryNote[]; tasks: QueryTask[]; total: number; columns?: string[]; newNote?: NewNote | null };
+type QueryOutput = {
+  show: 'notes' | 'tasks' | 'table' | 'board' | 'cards';
+  notes: QueryNote[];
+  tasks: QueryTask[];
+  total: number;
+  columns?: string[];
+  newNote?: NewNote | null;
+  /** A board's group property, and the lanes its query names. */
+  group?: string;
+  lanes?: string[];
+};
 type Result = { ok: true; output: QueryOutput } | { ok: false; error: string };
 
 const results = new Map<string, Result>();
@@ -55,8 +67,8 @@ type FillOptions = {
 };
 
 export type TableActions = {
-  /** Set a property of a listed note; resolves false when that failed. */
-  editProperty: (noteId: string, key: string, value: PropertyValue) => Promise<boolean>;
+  /** Set (or with null, remove) a property of a listed note; resolves false when that failed. */
+  editProperty: (noteId: string, key: string, value: PropertyValue | null) => Promise<boolean>;
   /** Replace the query's text in the note (sorting, columns). */
   editQuery: (oldQuery: string, newQuery: string) => void;
   /** Add a note titled `title` that starts as `newNote` says. */
@@ -105,8 +117,11 @@ function paint(body: HTMLElement, result: Result, options: FillOptions, query: s
   const more = output.total > listed
     ? `<p class="td-query-more">Showing ${listed} of ${output.total}. Add <code>limit:${output.total}</code> to see all.</p>`
     : '';
-  if (output.show === 'table') {
-    paintTable(body, output, options.interactive === false ? undefined : options.table, query);
+  const actions = options.interactive === false ? undefined : options.table;
+  if (output.show === 'table' || output.show === 'board' || output.show === 'cards') {
+    if (output.show === 'table') paintTable(body, output, actions, query);
+    else if (output.show === 'board') paintBoard(body, output, actions, query);
+    else paintCards(body, output, actions);
     body.insertAdjacentHTML('beforeend', more);
     return;
   }
@@ -224,11 +239,6 @@ function propertyChips(note: QueryNote, columns: string[]): string {
   return chips.length ? ` <span class="td-query-props">${chips.join('')}</span>` : '';
 }
 
-/** The property `column` of a note, compared without case. */
-function propertyOf(note: QueryNote, column: string): Property | undefined {
-  return note.properties?.find((p) => p.key.toLowerCase() === column.toLowerCase());
-}
-
 /** A value as plain text, links as their labels. */
 function plainText(property: Property): string {
   if (property.type === 'checkbox') return property.value ? '✓' : '';
@@ -246,16 +256,7 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
   const table = document.createElement('table');
   table.className = `td-query-table${actions ? ' is-editable' : ''}`;
 
-  // The type a column's empty cells take: what its filled cells use, else what the vault uses.
-  const typeOf = (column: string): Exclude<PropertyType, 'raw'> => {
-    const counts = new Map<PropertyType, number>();
-    for (const note of output.notes) {
-      const p = propertyOf(note, column);
-      if (p && p.type !== 'raw') counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
-    }
-    const found = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? actions?.knownType(column) ?? 'text';
-    return found === 'raw' ? 'text' : found;
-  };
+  const typeOf = (column: string) => columnType(output, column, actions);
 
   const head = table.createTHead().insertRow();
   const header = (label: string, column: string) => {
@@ -336,6 +337,171 @@ function paintTable(body: HTMLElement, output: QueryOutput, actions: TableAction
   if (actions && output.newNote) body.append(newRowButton(output.newNote, actions));
 }
 
+/** The type a column's empty cells take: what its filled cells use, else what the vault uses. */
+function columnType(output: QueryOutput, column: string, actions: TableActions | undefined): Exclude<PropertyType, 'raw'> {
+  const counts = new Map<PropertyType, number>();
+  for (const note of output.notes) {
+    const p = propertyOf(note, column);
+    if (p && p.type !== 'raw') counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
+  }
+  const found = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? actions?.knownType(column) ?? 'text';
+  return found === 'raw' ? 'text' : found;
+}
+
+const CARD_MIME = 'application/x-tagdown-board-card';
+
+/**
+ * A board: a lane per value of the group property, with the notes as cards.
+ * With `actions`, cards move between lanes by dragging (which sets the
+ * property), each lane adds a note with its value, and "+ Lane" adds a lane
+ * (by writing `lanes:` into the query).
+ */
+function paintBoard(body: HTMLElement, output: QueryOutput, actions: TableActions | undefined, query: string) {
+  const group = output.group ?? 'status';
+  const type = columnType(output, group, actions);
+  const { lanes, none } = boardLanes(output.notes, group, output.lanes ?? [], type);
+  const byId = new Map(output.notes.map((note) => [note.id, note]));
+  const columns = output.columns ?? [];
+
+  const board = document.createElement('div');
+  board.className = `td-qb${actions ? ' is-editable' : ''}`;
+  const laneEl = (lane: Lane | null) => {
+    const ids = lane ? lane.ids : none;
+    const section = document.createElement('section');
+    section.className = `td-qb-lane${lane ? '' : ' is-none'}`;
+    section.dataset.lane = lane?.key ?? '';
+    section.innerHTML = `<header class="td-qb-head"><span class="td-qb-name">${escapeHtml(lane ? lane.label : `No ${group}`)}</span><span class="td-qb-count">${ids.length}</span></header>`;
+    const cards = document.createElement('div');
+    cards.className = 'td-qb-cards';
+    for (const id of ids) {
+      const note = byId.get(id);
+      if (!note) continue;
+      const card = document.createElement('div');
+      card.className = 'td-qb-card';
+      card.innerHTML = `<a class="td-query-note" href="#" data-open-note="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</a>${propertyChips(note, columns)}`;
+      if (actions) {
+        card.dataset.openNote = note.id;
+        card.draggable = true;
+        card.addEventListener('dragstart', (event) => {
+          event.dataTransfer?.setData(CARD_MIME, JSON.stringify({ id: note.id, from: lane?.value ?? null }));
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+          card.classList.add('is-dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('is-dragging'));
+      }
+      cards.append(card);
+    }
+    section.append(cards);
+    if (actions) {
+      section.addEventListener('dragover', (event) => {
+        if (!event.dataTransfer?.types.includes(CARD_MIME)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        section.classList.add('is-over');
+      });
+      section.addEventListener('dragleave', (event) => {
+        if (!section.contains(event.relatedTarget as Node | null)) section.classList.remove('is-over');
+      });
+      section.addEventListener('drop', (event) => {
+        section.classList.remove('is-over');
+        const raw = event.dataTransfer?.getData(CARD_MIME);
+        if (!raw) return;
+        event.preventDefault();
+        const { id, from } = JSON.parse(raw) as { id: string; from: string | null };
+        const to = lane?.value ?? null;
+        const note = byId.get(id);
+        if (!note || (from === null ? to === null : to !== null && laneKey(from) === laneKey(to))) return;
+        const property = propertyOf(note, group);
+        const value = movedValue(property, from, to, property && property.type !== 'raw' ? property.type : type);
+        // Show the move now; the refresh after saving redraws the board.
+        const dragged = board.querySelector<HTMLElement>(`.td-qb-card.is-dragging`);
+        if (dragged) cards.append(dragged);
+        void actions.editProperty(id, property?.key ?? group, value);
+      });
+      if (output.newNote) {
+        const newNote = output.newNote;
+        const others = newNote.properties.filter((p) => p.key.toLowerCase() !== group.toLowerCase());
+        const value = lane ? movedValue(undefined, null, lane.value, type) : null;
+        section.append(newRowButton({ ...newNote, properties: value ? [...others, { key: group, ...value }] : others }, actions, 'New'));
+      }
+    }
+    return section;
+  };
+  lanes.forEach((lane) => board.append(laneEl(lane)));
+  if (none.length || !lanes.length) board.append(laneEl(null));
+  if (actions) board.append(addLaneButton((name) => {
+    const named = [...lanes.map((l) => l.value), name];
+    actions.editQuery(query, setOption(query, 'lanes', named.join(',')));
+  }));
+
+  const scroller = document.createElement('div');
+  scroller.className = 'td-qb-scroll';
+  scroller.append(board);
+  body.replaceChildren(scroller);
+}
+
+/** "+ Lane", which asks for a value and adds a lane for it. */
+function addLaneButton(add: (name: string) => void): HTMLElement {
+  const holder = document.createElement('div');
+  holder.className = 'td-qb-addlane';
+  const start = () => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.innerHTML = '<span aria-hidden="true">+</span> Lane';
+    button.title = 'Add a lane';
+    button.addEventListener('click', ask);
+    holder.replaceChildren(button);
+  };
+  const ask = () => {
+    const input = document.createElement('input');
+    input.className = 'prop-input';
+    input.placeholder = 'Lane name';
+    input.setAttribute('aria-label', 'Lane name');
+    let done = false;
+    const finish = (keep: boolean) => {
+      if (done) return;
+      done = true;
+      const name = input.value.trim().replaceAll(',', ' ');
+      if (keep && name) add(name);
+      else start();
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+      if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    holder.replaceChildren(input);
+    input.focus();
+  };
+  start();
+  return holder;
+}
+
+/** Cards: a grid of the notes, each with its cover image, opening lines and chosen properties. */
+function paintCards(body: HTMLElement, output: QueryOutput, actions: TableActions | undefined) {
+  const columns = output.columns ?? [];
+  const grid = document.createElement('div');
+  grid.className = 'td-qc';
+  grid.innerHTML = output.notes.map((note) => `
+    <a class="td-qc-card${note.cover ? ' has-cover' : ''}" href="#" data-open-note="${escapeHtml(note.id)}">
+      ${note.cover ? `<span class="td-qc-cover"><img src="${escapeHtml(note.cover)}" alt="" loading="lazy"></span>` : ''}
+      <span class="td-qc-body">
+        <strong class="td-qc-title">${escapeHtml(note.title || 'Untitled')}</strong>
+        ${note.excerpt ? `<span class="td-qc-excerpt">${escapeHtml(note.excerpt)}</span>` : ''}
+        ${propertyChips(note, columns)}
+      </span>
+    </a>`).join('');
+  // A cover that can't load leaves the card without one.
+  grid.querySelectorAll<HTMLImageElement>('.td-qc-cover img').forEach((img) => img.addEventListener('error', () => {
+    img.closest('.td-qc-card')?.classList.remove('has-cover');
+    img.parentElement?.remove();
+  }, { once: true }));
+  resolveLocalImages(grid);
+  body.replaceChildren(grid);
+  if (!output.notes.length) body.insertAdjacentHTML('beforeend', '<p class="td-query-empty">No notes match.</p>');
+  if (actions && output.newNote) body.append(newRowButton(output.newNote, actions));
+}
+
 /** The last header: a menu adding one of the listed notes' other properties, or a built-in column. */
 function addColumnHeader(output: QueryOutput, columns: string[], apply: (columns: string[]) => void): HTMLElement {
   const th = document.createElement('th');
@@ -383,13 +549,13 @@ function addColumnHeader(output: QueryOutput, columns: string[], apply: (columns
 }
 
 /** “+ New note”, which asks for a title and adds a note that matches the query. */
-function newRowButton(newNote: NewNote, actions: TableActions): HTMLElement {
+function newRowButton(newNote: NewNote, actions: TableActions, label = 'New note'): HTMLElement {
   const holder = document.createElement('div');
   holder.className = 'td-qt-new';
   const start = () => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.innerHTML = '<span aria-hidden="true">+</span> New note';
+    button.innerHTML = `<span aria-hidden="true">+</span> ${label}`;
     const starts = [
       ...newNote.properties.map((p) => `${p.key}: ${plainText(p)}`),
       ...newNote.tags.map((t) => `#${t}`),

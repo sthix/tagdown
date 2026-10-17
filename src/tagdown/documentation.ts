@@ -225,7 +225,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Live queries',
-        description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.',
+        description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes, tasks, table, board or cards, status:open/done/all, sort:updated/created/title, folder:Name, type:Name, limit:N. Ticking a listed task updates the note it lives in.',
         syntax: '## Open project tasks\n\n<query tag:project show:tasks />\n\n## Recently edited\n\n<query folder:Work sort:updated limit:5 />'
       },
       {
@@ -237,6 +237,21 @@ export const tagdownDocumentation: DocumentationSection[] = [
         title: 'Table views',
         description: 'show:table lists the matching notes as a table with a column per property. Edit a cell to change that note’s property, click a header to sort, × hides a column and + adds one (the query’s sort: and columns: change with it), and + New note adds a note that already matches the filters. columns:status,due,updated picks the columns; updated, created, folder and tags are the note’s own.',
         syntax: '<query tag:project show:table columns:status,owner,due sort:due />'
+      },
+      {
+        title: 'Board views',
+        description: 'show:board puts the matching notes in a lane per value of one property: group:status by default, or group:owner and so on. lanes:todo,doing,done fixes the lanes’ order and shows empty ones; notes without a value go in a last lane. Drag a card to another lane to change that note’s property, + New adds a note with the lane’s value, and + Lane adds a lane (it writes lanes: into the query). columns:due,owner picks what the cards show.',
+        syntax: '<query type:Project show:board lanes:planned,active,done />'
+      },
+      {
+        title: 'Card views',
+        description: 'show:cards lists the matching notes as a grid of cards, each with a cover image (the note’s cover: property, a path or URL, else its first image), its opening lines and the properties columns: names.',
+        syntax: '<query type:Book show:cards columns:author,rating sort:-rating />'
+      },
+      {
+        title: 'Note types',
+        description: 'A note’s type is its type: property (type: Book). A note titled “Book Template” says how new Book notes start: with its properties and their values, and with its text, where {{title}}, {{date}}, {{weekday}}, {{yesterday}} and {{tomorrow}} are filled in. Its icon: property (an emoji) is the type’s icon and isn’t copied. Types are listed in the sidebar; type:Book in a query matches them, and + New note in a table, board or cards for a type starts from its template.',
+        syntax: '## People to follow up with\n\n<query type:Person follow-up=true show:table columns:team,email />'
       },
       {
         title: 'Math (KaTeX)',

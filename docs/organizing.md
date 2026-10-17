@@ -44,6 +44,53 @@ Write `#tag` anywhere in a note, or `#parent/child` for a nested tag. Tags writt
 
 The sidebar shows tags as a tree. Click a tag to list its notes; a parent tag includes the notes of its children. You can also create a tag from the sidebar and pick one of seven colours for it. Tags without a chosen colour get one automatically.
 
+## Note types
+
+A note can say what kind of thing it is: a book, a person, a project, a meeting. Its type is a `type:` [property](queries-and-tasks.md#properties), so it stays plain YAML in the file:
+
+```yaml
+type: Book
+```
+
+The sidebar's **Types** section lists every type in the vault with how many notes have it. Click one to list its notes; **New note** (⌘N) there creates a note of that type. The command palette has a **New Book** action for each type, too.
+
+### Templates
+
+A note titled after the type plus "Template" (**Book Template**, **Person Template**) says how new notes of that type start:
+
+- its **properties**, with their values, so every Book gets `author`, `rating` and `started`;
+- its **text** below the title;
+- its **`icon:`** property, an emoji, is the type's icon in the sidebar and the note list. It isn't copied into new notes.
+
+In the template, `{{title}}`, `{{date}}`, `{{weekday}}`, `{{yesterday}}` and `{{tomorrow}}` are filled in for each new note, in the text and in property values (`started: "{{date}}"` becomes that day's date).
+
+```tagdown
+---
+icon: 📚
+author: ""
+rating: 0
+started: "{{date}}"
+---
+
+# Book Template
+
+## Why I picked up {{title}}
+
+## Notes
+```
+
+Press **+** next to **Types** to start a type: it creates the template note with an empty `icon` for you. Right-click a type to edit its template or make one.
+
+Giving an existing note a type (by setting its `type` property) adds the template's properties it doesn't have yet. Its text is left alone.
+
+### Types in queries
+
+`type:Book` in a [query](queries-and-tasks.md) lists notes of that type, the same as `type=Book`. A [table, board or cards](queries-and-tasks.md#tables-boards-and-cards) for a type adds new notes from its template:
+
+```tagdown
+<query type:Book show:cards columns:author,rating sort:-rating />
+```
+
 ## Pinning and filters
 
 Pin a note with the pin button in the editor's top-right corner. The pills above the note list filter the current view:

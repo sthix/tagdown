@@ -1029,6 +1029,68 @@
 .preview .td-query-task input { flex-shrink: 0; margin: 0; accent-color: var(--marker-strong); cursor: pointer; }
 .preview .td-query-task input:disabled { cursor: default; }
 .preview .td-query-task.is-done span { color: var(--ink-3); text-decoration: line-through; }
+/* Board views: a lane per value of one property. */
+.preview .td-qb-scroll { overflow-x: auto; margin: 2px -4px 0; padding: 0 4px 4px; }
+.preview .td-qb { display: flex; align-items: flex-start; gap: 8px; min-width: min-content; }
+.preview .td-qb-lane {
+  flex: 1 0 150px; max-width: 280px;
+  display: flex; flex-direction: column; gap: 6px;
+  min-height: 56px; padding: 7px 7px 8px;
+  border-radius: 9px;
+  background: var(--chip-bg);
+  transition: box-shadow .12s ease, background-color .12s ease;
+}
+.preview .td-qb-lane.is-over { background: var(--marker-soft); box-shadow: inset 0 0 0 1px var(--marker-strong); }
+.preview .td-qb-head { display: flex; align-items: baseline; gap: 6px; padding: 0 3px; color: var(--ink-2); font-size: 11.5px; font-weight: 600; }
+.preview .td-qb-lane.is-none .td-qb-head { color: var(--ink-3); font-weight: 500; }
+.preview .td-qb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview .td-qb-count { color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+.preview .td-qb-cards { display: flex; flex-direction: column; gap: 6px; }
+.preview .td-qb-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 7px 9px 8px;
+  border: .5px solid var(--pv-rule-soft);
+  border-radius: 7px;
+  background: var(--bg-dialog);
+  box-shadow: 0 1px 1.5px rgba(48,40,16,.06);
+}
+.preview .td-qb.is-editable .td-qb-card { cursor: grab; }
+.preview .td-qb-card.is-dragging { opacity: .45; }
+.preview .td-qb-card .td-query-note { font-size: 13px; line-height: 1.35; }
+.preview .td-qb-card .td-query-props { gap: 3px; }
+.preview .td-qb-lane .td-qt-new { margin-top: 0; }
+.preview .td-qb-lane .td-qt-new .prop-input { width: 100%; }
+.preview .td-qb-addlane { flex: 0 0 auto; padding-top: 3px; }
+.preview .td-qb-addlane button {
+  height: 26px; border: 0; border-radius: 6px; padding: 0 9px 0 7px;
+  background: none; color: var(--ink-3); font: 12px var(--font-ui); white-space: nowrap; cursor: pointer;
+}
+.preview .td-qb-addlane button:hover { background: var(--chip-bg); color: var(--ink); }
+.preview .td-qb-addlane .prop-input { width: 150px; }
+
+/* Card views: a grid of notes with their cover images. */
+.preview .td-qc { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px; margin-top: 2px; }
+.preview .td-qc-card {
+  display: flex; flex-direction: column; overflow: hidden;
+  border: .5px solid var(--pv-rule-soft);
+  border-radius: 9px;
+  background: var(--bg-dialog);
+  box-shadow: 0 1px 1.5px rgba(48,40,16,.06);
+  color: inherit; text-decoration: none;
+  transition: box-shadow .14s ease, transform .14s ease;
+}
+.preview .td-qc-card:hover { box-shadow: 0 3px 10px rgba(48,40,16,.1); transform: translateY(-1px); }
+.preview .td-qc-cover { display: block; aspect-ratio: 16 / 9; overflow: hidden; background: var(--chip-bg); }
+.preview .td-qc-cover img { display: block; width: 100%; height: 100%; margin: 0; object-fit: cover; border-radius: 0; }
+.preview .td-qc-body { display: flex; flex-direction: column; gap: 5px; padding: 9px 11px 11px; }
+.preview .td-qc-title { color: var(--ink); font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.preview .td-qc-card:hover .td-qc-title { color: var(--pv-accent); }
+.preview .td-qc-excerpt {
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  color: var(--ink-2); font-size: 12.5px; line-height: 1.45;
+}
+.preview .td-qc-card.has-cover .td-qc-excerpt { -webkit-line-clamp: 2; }
+.preview .td-qc + .td-qt-new { margin-top: 8px; }
 .preview .td-query-empty, .preview .td-query-more { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
 .preview .td-query-error { margin: 2px 0 0; color: var(--danger); font-size: 12.5px; }
 

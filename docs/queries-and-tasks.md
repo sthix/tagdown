@@ -18,13 +18,52 @@ The query uses the [search syntax](organizing.md#search) (words, `"phrases"`, `t
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `show:` | `notes`, `tasks` | `notes` |
+| `show:` | `notes`, `tasks`, `table`, `board`, `cards` | `notes` |
 | `status:` | `open`, `done`, `all` (for tasks) | `open` |
-| `sort:` | `updated`, `created`, `title` | `updated` |
+| `sort:` | `updated`, `created`, `title`, or a property (`sort:due`, `sort:-priority` for descending) | `updated` |
 | `folder:` | A folder name; quote names with spaces | All folders |
+| `type:` | A [note type](organizing.md#note-types), like `type:Book` | All types |
+| `columns:` | Properties to show in a table, on board cards or on cards | The ones the query uses |
+| `group:` | The property a board's lanes are values of | `status` |
+| `lanes:` | A board's lanes, in order, like `lanes:todo,doing,done` | The values notes use |
 | `limit:` | A number up to 500 | 50 |
 
 A note never lists itself. When a query shows tasks, ticking one in the list ticks it in the note it lives in.
+
+## Properties
+
+Properties are typed fields under a note's title: text, numbers, true/false, dates (`2026-11-14`), lists, and `[[links]]`, which count as backlinks. Add one with **Add property** in the command palette (⌘K). They live in the note's frontmatter as plain YAML.
+
+Queries filter on them:
+
+| Filter | Matches |
+| --- | --- |
+| `status=active` | The value, without case; a list holding it; a link by its title |
+| `status!=done` | Notes whose value isn't that, including notes without it |
+| `priority=2..`, `due=..today+7` | Ranges of numbers or dates, either end open; `today`, `today+N`, `today-N` |
+| `has:owner`, `-has:owner` | Notes with (or without) a value |
+
+## Tables, boards and cards
+
+Three views show the matching notes with their properties, and each can add a note that already matches the query: in its folder, with its tags and the values its `key=value` filters ask for. For a `type:`, the new note starts from the type's [template](organizing.md#templates).
+
+**`show:table`** lists the notes with a column per property. Edit a cell to change that note's property, click a header to sort, × hides a column and + adds one. These rewrite the query in the note, so the view stays plain text.
+
+```tagdown
+<query tag:project show:table columns:status,owner,due sort:due />
+```
+
+**`show:board`** puts the notes in a lane per value of one property, `status` unless `group:` names another. Drag a card to another lane to change that note's property; for a list property, the card swaps the one item. Notes without a value go in a last lane, and dragging a card there clears the property. `lanes:` fixes the lanes' order and shows lanes no note uses yet; **+ Lane** adds one by writing `lanes:` into the query. **+ New** in a lane adds a note with that lane's value.
+
+```tagdown
+<query type:Project show:board lanes:planned,active,done columns:owner,due />
+```
+
+**`show:cards`** shows a grid of cards with each note's cover image, opening lines, and the properties `columns:` names. The cover is the note's `cover:` property (a path in the vault or a URL), or else the first image in the note.
+
+```tagdown
+<query type:Book show:cards columns:author,rating sort:-rating />
+```
 
 Queries are also evaluated when you [export, publish, or present](sharing.md) a note, so the output contains the list as it was at that moment.
 

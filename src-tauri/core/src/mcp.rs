@@ -144,8 +144,15 @@ impl Server {
             }
             "create_note" => {
                 let tags: Vec<String> = args.get("tags").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default();
-                let note = lib.create(&required("title")?, &str_arg("content").unwrap_or_default(), str_arg("folder").as_deref(), &tags)?;
+                let note = lib.create_typed(&required("title")?, &str_arg("content").unwrap_or_default(), str_arg("folder").as_deref(), &tags, str_arg("type").as_deref())?;
                 Ok(format!("Created \"{}\" (id: {}).", note.title, note.id))
+            }
+            "list_types" => {
+                let types = lib.types()?;
+                if types.is_empty() {
+                    return Ok("No note types yet. A note's type is its `type:` property; a note titled \"<Type> Template\" defines how new notes of that type start.".into());
+                }
+                Ok(types.iter().map(|t| format!("- {}{} — {} notes{}", t.icon.as_ref().map(|i| format!("{i} ")).unwrap_or_default(), t.name, t.count, if t.template_id.is_some() { format!(", template \"{} Template\"", t.name) } else { String::new() })).collect::<Vec<_>>().join("\n"))
             }
             "append_to_note" => {
                 let note = lib.append(&required("note")?, &required("content")?)?;
@@ -285,8 +292,16 @@ fn tools() -> Value {
                 "content": content,
                 "folder": { "type": "string", "description": "Folder name; omitted for the top level." },
                 "tags": { "type": "array", "items": { "type": "string" }, "description": "Tags to add, e.g. [\"project/atlas\"]." },
+                "type": { "type": "string", "description": "A note type from list_types, e.g. Book. The note starts with the type's properties, and with its template's text when content is empty." },
             }, "required": ["title"] },
             "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+        },
+        {
+            "name": "list_types",
+            "title": "List note types",
+            "description": "Note types in the vault (like Book, Person, Project), with how many notes have each. A note's type is its `type:` property; a note titled \"<Type> Template\" holds the properties and text new notes of that type start with.",
+            "inputSchema": { "type": "object", "properties": {} },
+            "annotations": read_only,
         },
         {
             "name": "append_to_note",
@@ -322,7 +337,7 @@ fn tools() -> Value {
         {
             "name": "run_query",
             "title": "Run query",
-            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks|table, status:open|done|all, sort:updated|created|title|<property>|-<property>, folder:Name, limit:N, columns:a,b, and property filters key=value, key!=value, key=lo..hi (numbers or dates; today+N), has:key. Empty lists recent notes.",
+            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks|table|board|cards, group:<property> and lanes:a,b (board), type:Name, status:open|done|all, sort:updated|created|title|<property>|-<property>, folder:Name, limit:N, columns:a,b, and property filters key=value, key!=value, key=lo..hi (numbers or dates; today+N), has:key. Empty lists recent notes.",
             "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "e.g. tag:project show:tasks" } } },
             "annotations": read_only,
         },
@@ -375,7 +390,7 @@ mod tests {
         assert_eq!(init["result"]["serverInfo"]["name"], "tagdown");
         assert!(s.handle(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
         let tools = s.handle(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 12);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 13);
         let syntax = s.handle(json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": { "uri": SYNTAX_URI } })).unwrap();
         assert!(syntax["result"]["contents"][0]["text"].as_str().unwrap().starts_with("# Tagdown syntax"));
         let unknown = s.handle(json!({ "jsonrpc": "2.0", "id": 4, "method": "nope" })).unwrap();

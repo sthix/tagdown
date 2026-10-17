@@ -76,6 +76,9 @@ type NoteContent = { id: string; content: string };
 
 type Backlink = { note: Note; mentions: string[] };
 
+/** A note type: the `type:` notes give themselves, and its "<Type> Template" note. */
+type NoteType = { name: string; icon: string | null; templateId: string | null; count: number };
+
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
 const FOLDER_ICONS: FolderIcon[] = [
@@ -111,6 +114,9 @@ let tags: Tag[] = [];
 let selectedNote: Note | null = null;
 let selectedFolder: string | null = null;
 let selectedTag: string | null = null;
+let selectedType: string | null = null;
+let noteTypes: NoteType[] = [];
+let creatingType = false;
 let activeFilter: QuickFilter = 'all';
 let expandedTags: Record<string, boolean> = {};
 let content = '';
@@ -199,6 +205,10 @@ app.innerHTML = `
         <div id="folders"></div>
       </section>
       <section>
+        <h2 class="section-header"><span>Types</span><button id="new-type" class="section-add" type="button" title="New note type" aria-label="New note type">${uiIcon('plus', 13)}</button></h2>
+        <div id="types"></div>
+      </section>
+      <section>
         <h2 class="section-header"><span>Tags</span><span class="section-count" id="tag-count" hidden>0</span><button id="new-tag" class="section-add" type="button" title="New tag" aria-label="New tag">${uiIcon('plus', 13)}</button></h2>
         <div id="tags"></div>
       </section>
@@ -230,6 +240,7 @@ app.innerHTML = `
 const folderEl = document.querySelector<HTMLDivElement>('#folders')!;
 const noteEl = document.querySelector<HTMLDivElement>('#notes')!;
 const tagEl = document.querySelector<HTMLDivElement>('#tags')!;
+const typeEl = document.querySelector<HTMLDivElement>('#types')!;
 const workspaceEl = document.querySelector<HTMLDivElement>('#workspace')!;
 // The open pane's editor; see "Panes and tabs".
 let editorRoot: HTMLDivElement;
@@ -403,6 +414,10 @@ function bindChrome() {
     const parent = isUserFolder(selectedFolder) ? selectedFolder : null;
     startFolderCreate(parent);
   });
+  document.querySelector('#new-type')?.addEventListener('click', () => {
+    creatingType = true;
+    renderTypes();
+  });
   document.querySelector('#new-tag')?.addEventListener('click', () => {
     creatingTag = true;
     tagDraftColor = 'blue';
@@ -480,7 +495,11 @@ function renderThemeToggle() {
 function paletteActions(): PaletteAction[] {
   const dark = getEffectiveTheme() === 'dark';
   return [
-    { id: 'new', label: 'New note', hint: isUserFolder(selectedFolder) ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
+    { id: 'new', label: selectedType ? `New ${selectedType}` : 'New note', hint: isUserFolder(selectedFolder) ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
+    ...noteTypes.filter((t) => t.name !== selectedType).map((t) => (
+      { id: `new-type-${t.name}`, label: `New ${t.name}`, hint: t.templateId ? `From “${t.name} Template”` : 'A note of this type', icon: typeIconHtml(t, 15), run: () => createTypedNote(t.name) }
+    )),
+    { id: 'new-note-type', label: 'New note type…', hint: 'Like Book or Person, with a template', icon: uiIcon('type', 15), run: () => { creatingType = true; renderTypes(); } },
     { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
@@ -559,6 +578,7 @@ async function revealNote(id: string, where: OpenTarget = 'here') {
   if (!notes.some((candidate) => candidate.id === id)) {
     selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : null;
     selectedTag = null;
+    selectedType = null;
     activeFilter = 'all';
     renderFilterPills();
     await reloadNotes();
@@ -577,6 +597,7 @@ function noteMarkerChange() {
 }
 
 async function createNote() {
+  if (selectedType) { await createTypedNote(selectedType); return; }
   const folderId = selectedFolder === 'journal' ? null : selectedFolder;
   const note = await invoke<Note>('create_note', { folderId });
   if (selectedFolder === 'journal') {
@@ -1216,6 +1237,7 @@ async function revealInList(id: string) {
   if (!notes.some((candidate) => candidate.id === id)) {
     selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : note.folderId;
     selectedTag = null;
+    selectedType = null;
     activeFilter = 'all';
     renderFilterPills();
     await reloadNotes();
@@ -1332,10 +1354,11 @@ async function openJournal(day: string) {
   await settlePendingWork();
   const note = await invoke<Note>('open_journal', { day });
   journalMonth = monthOf(day);
-  if (selectedFolder !== 'journal' || selectedTag) {
+  if (selectedFolder !== 'journal' || selectedTag || selectedType) {
     noteMarkerChange();
     selectedFolder = 'journal';
     selectedTag = null;
+    selectedType = null;
     activeFilter = 'all';
     renderFilterPills();
   }
@@ -1413,6 +1436,7 @@ async function reloadFolders() {
   for (const note of allNotes) knownNotes.set(note.id, note);
   closeMissingTabs();
   renderFolders();
+  await reloadTypes();
 }
 
 async function reloadNotes() {
@@ -1421,6 +1445,9 @@ async function reloadNotes() {
   notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
   // Archived notes only show up in the Archive itself, not in All.
   if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
+  // A tag or a type narrows All Notes.
+  if (selectedTag) notes = notes.filter((note) => hasTag(note, selectedTag!));
+  if (selectedType) notes = notes.filter((note) => isOfType(note, selectedType!));
   // The newest day first.
   if (selectedFolder === 'journal') notes.sort((a, b) => (b.journal ?? '').localeCompare(a.journal ?? ''));
   renderFolders();
@@ -1468,10 +1495,10 @@ function renderFolders() {
   };
 
   folderEl.innerHTML = `
-    <button class="folder system-folder ${selectedFolder === null && !selectedTag ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
+    <button class="folder system-folder ${selectedFolder === null && !selectedTag && !selectedType ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
       <span class="folder-disclosure is-empty" aria-hidden="true"></span>
       <span class="folder-icon" aria-hidden="true">${iconSvg('notes', 13)}</span>
-      <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag)}">All Notes</span></span>
+      <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag && !selectedType)}">All Notes</span></span>
       <span class="folder-count">${allNotesCount}</span>
     </button>
     <button class="folder system-folder ${selectedFolder === 'journal' ? 'selected' : ''}" data-folder="journal" style="padding-left: ${rowInset(0)}px" type="button" title="Journal (⌘⇧J for today)">
@@ -1497,6 +1524,7 @@ function renderFolders() {
       noteMarkerChange();
       selectedFolder = button.dataset.folder || null;
       selectedTag = null;
+      selectedType = null;
       activeFilter = 'all';
       renderFilterPills();
       await reloadNotes();
@@ -1567,8 +1595,17 @@ function renderFolders() {
     });
   }
   const currentFolder = selectedFolder ? folders.find((folder) => folder.id === selectedFolder) : null;
-  noteListTitleEl.textContent = currentFolder?.name ?? (selectedFolder === 'journal' ? 'Journal' : 'All Notes');
-  scopeIconEl.innerHTML = currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : selectedFolder === 'journal' ? 'calendar' : 'notes');
+  const currentType = selectedType ? noteTypes.find((t) => normalizeTitle(t.name) === normalizeTitle(selectedType!)) : null;
+  noteListTitleEl.textContent = selectedTag ? `#${selectedTag}` : selectedType ? (currentType?.name ?? selectedType) : currentFolder?.name ?? (selectedFolder === 'journal' ? 'Journal' : 'All Notes');
+  scopeIconEl.innerHTML = selectedTag ? uiIcon('hash', 16)
+    : selectedType ? typeIconHtml(currentType ?? { name: selectedType, icon: null }, 16)
+    : currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : selectedFolder === 'journal' ? 'calendar' : 'notes');
+  const newButton = document.querySelector<HTMLButtonElement>('#note-list-new');
+  if (newButton) {
+    const label = selectedType ? `New ${currentType?.name ?? selectedType}` : 'New note';
+    newButton.title = `${label} (⌘N)`;
+    newButton.setAttribute('aria-label', label);
+  }
 }
 
 function iconSvg(key: string | null | undefined, size = 16) {
@@ -1728,6 +1765,7 @@ function renderNotes() {
     noteEl.querySelector('[data-empty-list-new]')?.addEventListener('click', createNote);
     bindJournalCalendar(noteEl);
     renderTags();
+    renderTypes();
     return;
   }
   let lastGroup = '';
@@ -1743,7 +1781,7 @@ function renderNotes() {
     return `${heading}
       <article class="note-card ${selectedNote?.id === note.id ? 'selected' : open.has(note.id) ? 'is-open' : ''}" data-note="${note.id}" tabindex="0" draggable="true" aria-current="${selectedNote?.id === note.id}" title="${open.has(note.id) && selectedNote?.id !== note.id ? 'Open in a tab. ' : ''}⌘-click: new tab · ⌥⌘-click: split">
         <div class="note-card-head">
-          <h3>${escapeHtml(day ? formatDay(day, 'short') : note.title || 'Untitled')}</h3>
+          <h3>${typeIcon(note)}${escapeHtml(day ? formatDay(day, 'short') : note.title || 'Untitled')}</h3>
           ${day ? `<time datetime="${escapeHtml(day)}">${relativeDay(day) ?? ''}</time>` : `<time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>`}
         </div>
         <p>${escapeHtml(note.preview || (day ? 'Nothing written yet' : 'Empty note'))}</p>
@@ -1802,6 +1840,13 @@ function renderNotes() {
     });
   });
   renderTags();
+  renderTypes();
+}
+
+/** The emoji of a note's type, before its title in the list. */
+function typeIcon(note: Note) {
+  const icon = findType(typeOfNote(note))?.icon;
+  return icon && !templateTypeOf(note.title) ? `<span class="note-type-icon" aria-hidden="true">${escapeHtml(icon)}</span>` : '';
 }
 
 type TagNode = { path: string; name: string; children: TagNode[]; hasRecord: boolean };
@@ -1862,19 +1907,16 @@ function colorForTag(path: string) {
 async function selectTag(path: string) {
   noteMarkerChange();
   selectedTag = path;
+  selectedType = null;
   selectedFolder = null;
   activeFilter = 'all';
   renderFilterPills();
-  const all = await invoke<Note[]>('list_notes', { folderId: null, sort: 'updatedDesc' satisfies SortOrder });
-  notes = all.filter(
-    (note) =>
-      note.folderId !== 'archive' &&
-      note.tags.some((t) => t === path || t.startsWith(`${path}/`)),
-  );
-  renderFolders();
-  renderNotes();
-  noteListTitleEl.textContent = `#${path}`;
-  scopeIconEl.innerHTML = uiIcon('hash', 16);
+  await reloadNotes();
+  renderTypes();
+}
+
+function hasTag(note: Note, path: string) {
+  return note.tags.some((t) => t === path || t.startsWith(`${path}/`));
 }
 
 function renderTags() {
@@ -2003,6 +2045,148 @@ function renderTags() {
       await commitTagCreate(input.value, tagDraftColor);
     });
   }
+}
+
+// ---- Note types ----
+//
+// A note's type is its `type:` property; a note titled "<Type> Template" holds
+// what new notes of that type start with (see types.rs). The sidebar lists the
+// types; choosing one lists its notes, and new notes there are of that type.
+
+const TEMPLATE_SUFFIX = ' template';
+
+/** The type a note says it is: its `type:` text, a [[link]] by its title. */
+function typeOfNote(note: Note): string | null {
+  const property = note.properties?.find((p) => p.key.toLowerCase() === 'type');
+  if (property?.type !== 'text') return null;
+  const text = property.value.trim();
+  const link = text.match(/^\[\[([^\]|#]+)(?:[^\]]*)\]\]$/);
+  return (link ? link[1] : text).trim() || null;
+}
+
+/** The type a template note defines ("Book Template" → "Book"); the Journal Template defines none. */
+function templateTypeOf(title: string): string | null {
+  const t = title.trim();
+  if (normalizeTitle(t) === 'journal template' || !t.toLowerCase().endsWith(TEMPLATE_SUFFIX)) return null;
+  return t.slice(0, -TEMPLATE_SUFFIX.length).trim() || null;
+}
+
+function isOfType(note: Note, name: string) {
+  const type = typeOfNote(note);
+  return !!type && normalizeTitle(type) === normalizeTitle(name) && !templateTypeOf(note.title);
+}
+
+function findType(name: string | null): NoteType | undefined {
+  return name ? noteTypes.find((t) => normalizeTitle(t.name) === normalizeTitle(name)) : undefined;
+}
+
+/** A type's icon: its emoji, else a generic shape. */
+function typeIconHtml(type: { name: string; icon: string | null }, size = 13) {
+  if (type.icon) return `<span class="type-emoji" style="font-size:${Math.round(size * 0.9)}px" aria-hidden="true">${escapeHtml(type.icon)}</span>`;
+  return `<svg class="folder-svg" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2.3" /><rect x="9.2" y="2.7" width="4.6" height="4.6" rx="1" /><path d="M5 9.3l2.6 4.4H2.4L5 9.3z" /><path d="M11.5 9.4l2.2 2.2-2.2 2.2-2.2-2.2z" /></svg>`;
+}
+
+async function reloadTypes() {
+  noteTypes = await invoke<NoteType[]>('list_types').catch(() => [] as NoteType[]);
+  renderTypes();
+}
+
+function renderTypes() {
+  const rows = noteTypes.map((t) => {
+    const selected = !!selectedType && normalizeTitle(t.name) === normalizeTitle(selectedType);
+    return `
+      <button class="folder type-row ${selected ? 'selected' : ''}" data-type-name="${escapeHtml(t.name)}" style="padding-left: 12px" type="button" title="${escapeHtml(t.templateId ? `${t.name} notes start from “${t.name} Template”` : `Notes with type: ${t.name}`)}">
+        <span class="folder-disclosure is-empty" aria-hidden="true"></span>
+        <span class="folder-icon" aria-hidden="true">${typeIconHtml(t)}</span>
+        <span class="folder-name"><span class="${markerClass(selected)}">${escapeHtml(t.name)}</span></span>
+        <span class="folder-count">${t.count}</span>
+      </button>`;
+  }).join('');
+  const create = creatingType ? `
+    <div class="folder-create-row" style="padding-left: 31px">
+      <span class="folder-icon" aria-hidden="true">${typeIconHtml({ name: '', icon: null })}</span>
+      <input id="type-create-input" placeholder="Type name, like Book" autocomplete="off" spellcheck="false" aria-label="Type name" />
+    </div>` : '';
+  const empty = !creatingType && !noteTypes.length
+    ? '<div class="tag-empty">Give a note a <kbd>type</kbd> property, or press <kbd>+</kbd>.</div>'
+    : '';
+  typeEl.innerHTML = rows + create + empty;
+  typeEl.querySelectorAll<HTMLButtonElement>('[data-type-name]').forEach((row) => {
+    row.addEventListener('click', () => void selectType(row.dataset.typeName!));
+    row.addEventListener('contextmenu', (event) => {
+      const type = findType(row.dataset.typeName!);
+      if (!type) return;
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY, [
+        { label: `New ${type.name}`, icon: uiIcon('compose', 14), run: () => createTypedNote(type.name) },
+        type.templateId
+          ? { label: 'Edit template', icon: uiIcon('source', 14), run: () => revealNote(type.templateId!) }
+          : { label: 'Make a template', icon: uiIcon('plus', 14), run: () => createTypeTemplate(type.name) },
+      ]);
+    });
+  });
+  const input = typeEl.querySelector<HTMLInputElement>('#type-create-input');
+  if (!input) return;
+  requestAnimationFrame(() => input.focus());
+  let committed = false;
+  const commit = async (keep: boolean) => {
+    if (committed) return;
+    committed = true;
+    creatingType = false;
+    const name = input.value.trim();
+    if (keep && name) await createTypeTemplate(name);
+    else renderTypes();
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void commit(true); }
+    else if (event.key === 'Escape') { event.preventDefault(); void commit(false); }
+  });
+  input.addEventListener('blur', () => void commit(true));
+}
+
+/** List the notes of a type. */
+async function selectType(name: string) {
+  noteMarkerChange();
+  selectedType = findType(name)?.name ?? name;
+  selectedTag = null;
+  selectedFolder = null;
+  activeFilter = 'all';
+  renderFilterPills();
+  await reloadNotes();
+}
+
+/** A new note of the type `name`, from its template, in the folder being viewed. */
+async function createTypedNote(name: string) {
+  await settlePendingWork();
+  const folderId = isUserFolder(selectedFolder) ? selectedFolder : null;
+  const note = await invoke<Note>('create_typed_note', { typeName: name, title: 'Untitled', folderId });
+  if (selectedFolder === 'journal' || selectedFolder === 'archive') selectedFolder = null;
+  await reloadFolders();
+  await reloadNotes();
+  await openNote(note);
+  // Ready to type the title over "Untitled".
+  if (viewMode !== 'preview') {
+    const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
+    if (source) { source.focus(); source.setSelectionRange(2, 2 + 'Untitled'.length); }
+  }
+}
+
+/** Start a type: its "<Name> Template" note, with an icon property to fill in. */
+async function createTypeTemplate(name: string) {
+  await settlePendingWork();
+  const existing = findType(name);
+  if (existing?.templateId) { await revealNote(existing.templateId); return; }
+  const typeName = existing?.name ?? name;
+  const created = await invoke<Note>('create_note', { folderId: null });
+  await invoke<Note>('save_note', { id: created.id, content: `# ${typeName} Template\n\n` });
+  const note = await invoke<Note>('set_property', { id: created.id, key: 'icon', value: { type: 'text', value: '' }, renameFrom: null });
+  selectedType = typeName;
+  selectedTag = null;
+  selectedFolder = null;
+  await reloadFolders();
+  await reloadNotes();
+  await openNote(note);
+  showNotice(`New ${typeName} notes start with this template’s properties and text`);
 }
 
 /** Open `note` in the open tab, a new tab, or a new split beside the open one. */
@@ -2160,6 +2344,8 @@ function hideProperty(key: string, hide: boolean) {
 /** Values the vault uses for the property `key`. */
 function propertyValueSuggestions(key: string): string[] {
   const values = new Set<string>();
+  // Types with a template are offered even before a note uses them.
+  if (key.toLowerCase() === 'type') noteTypes.forEach((t) => values.add(t.name));
   for (const note of libraryNotes) {
     for (const p of note.properties ?? []) {
       if (p.key.toLowerCase() !== key.toLowerCase()) continue;
@@ -2225,10 +2411,21 @@ const tableActions: TableActions = {
     try {
       await settlePendingWork();
       const folderId = newNote.folderId ?? (isUserFolder(selectedNote?.folderId ?? null) ? selectedNote!.folderId : null);
-      const created = await invoke<Note>('create_note', { folderId });
       const tags = newNote.tags.length ? `${newNote.tags.map((tag) => `#${tag}`).join(' ')}\n` : '';
-      await invoke<Note>('save_note', { id: created.id, content: `# ${title}\n\n${tags}` });
-      for (const { key, ...value } of newNote.properties) {
+      // A query for a type adds a note of that type, from its template.
+      const type = newNote.properties.find((p) => p.key.toLowerCase() === 'type' && p.type === 'text');
+      let created: Note;
+      if (type?.type === 'text' && type.value.trim()) {
+        created = await invoke<Note>('create_typed_note', { typeName: type.value, title, folderId });
+        if (tags) {
+          const { content: body } = await invoke<NoteContent>('get_note_content', { id: created.id });
+          await invoke<Note>('save_note', { id: created.id, content: `${body.trimEnd()}\n\n${tags}` });
+        }
+      } else {
+        created = await invoke<Note>('create_note', { folderId });
+        await invoke<Note>('save_note', { id: created.id, content: `# ${title}\n\n${tags}` });
+      }
+      for (const { key, ...value } of newNote.properties.filter((p) => p !== type)) {
         await invoke<Note>('set_property', { id: created.id, key, value, renameFrom: null });
       }
       await reloadFolders();
@@ -2268,6 +2465,7 @@ async function saveProperty(key: string, value: PropertyValue | null, renameFrom
     if (selectedNote?.id !== id) return true;
     selectedNote = note;
     invalidateQueries();
+    if (key.toLowerCase() === 'type' && value?.type === 'text' && value.value.trim()) await applyType(id);
     paintProperties(isNew ? { key, part: 'value' } : undefined);
     const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
     if (preview) void fillQueries(preview, { excludeId: id, table: tableActions });
@@ -2277,6 +2475,16 @@ async function saveProperty(key: string, value: PropertyValue | null, renameFrom
     await message(String(error), { title: 'Could not change the property', kind: 'warning' });
     return false;
   }
+}
+
+/** After a note's type is set, give it the type's properties it lacks. */
+async function applyType(id: string) {
+  const [note, added] = await invoke<[Note, string[]]>('apply_type', { id }).catch(() => [null, []] as [null, string[]]);
+  if (!note || !added.length) return;
+  libraryNotes = libraryNotes.map((n) => (n.id === id ? note : n));
+  knownNotes.set(id, note);
+  if (selectedNote?.id === id) selectedNote = note;
+  showNotice(`Added ${added.join(', ')} from the ${typeOfNote(note) ?? ''} template`);
 }
 
 // ---- Block references ----
@@ -2910,7 +3118,7 @@ function renderEditor() {
     // the pressed element was re-rendered away.
     suppressPreviewClick = false;
     // Ticking a task in a query block leaves an open block alone.
-    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note], .td-query-table, .td-qt-new')) return;
+    if (!blockEdit || target.closest('.td-block-editor, input[data-task-note], .td-query-table, .td-qt-new, .td-qb, .td-qc')) return;
     event.preventDefault();
     suppressPreviewClick = true;
     const hint = textAroundPoint(event.clientX, event.clientY);
@@ -3024,7 +3232,7 @@ function renderEditor() {
 }
 
 function isInteractive(target: HTMLElement) {
-  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-new');
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-new, .td-qb, .td-qc');
 }
 
 const wikilinkOptions = {

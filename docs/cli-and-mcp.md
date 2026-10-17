@@ -32,7 +32,7 @@ Notes are addressed by title (case-insensitive), by their file in the vault as a
 | `tagdown search <query>` | Full-text search (`tag:name`, `title:word`, `"phrase"`, `-word`) |
 | `tagdown list [--folder NAME] [--tag TAG] [--limit N]` | Notes, most recently edited first |
 | `tagdown show <note>` | Print a note |
-| `tagdown new <title> [text \| -]` | Create a note; `-` reads the body from stdin |
+| `tagdown new <title> [text \| -] [--type TYPE]` | Create a note; `-` reads the body from stdin. With `--type Book`, it's a [Book note](organizing.md#note-types) that starts from the Book Template |
 | `tagdown append <note> <text \| ->` | Add text to the end of a note |
 | `tagdown journal [day] [text \| -]` | Print a day's [journal](journal.md) page, or add text to it; `day` is `YYYY-MM-DD`, `today` (the default), `yesterday` or `tomorrow` |
 | `tagdown tasks [--done \| --all] [--tag TAG]` | Checklist items across notes (open ones by default) |
@@ -46,6 +46,7 @@ Examples:
 ```sh
 tagdown search "tag:project budget"
 tagdown new "Meeting notes" "Agenda for [[Project Atlas]]"
+tagdown new "Dune" --type Book
 tagdown append "Meeting notes" "- [ ] Send recap"
 git log --oneline -5 | tagdown append "Release log" -
 tagdown journal "- Shipped the beta 🎉"
@@ -84,7 +85,8 @@ To point an assistant at a different vault, add `"--vault", "/path/to/vault"` be
 | `search_notes` | Full-text search with the usual query syntax; returns titles, ids, and excerpts |
 | `read_note` | A note's full text, with its tags, folder, edit time, and backlinks |
 | `list_notes` | Notes, most recent first, optionally in one folder or under one tag |
-| `create_note` | Create a note with a title, body, optional folder and tags |
+| `create_note` | Create a note with a title, body, optional folder, tags and [type](organizing.md#note-types) |
+| `list_types` | The vault's note types, with how many notes each has |
 | `append_to_note` | Add text to the end of a note |
 | `replace_note_content` | Replace a note's whole text (the old text stays in version history) |
 | `list_tasks` | Checklist items across notes, grouped by note |

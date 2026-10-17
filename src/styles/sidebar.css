@@ -291,6 +291,9 @@
 }
 .folder-create-row input::placeholder { color: var(--ink-3); }
 
+#types { padding-bottom: 4px; }
+.type-emoji { display: block; width: 16px; line-height: 16px; text-align: center; }
+
 #tags { display: block; padding-bottom: 8px; }
 .tag-tree-item { display: block; }
 .tag-dot {

@@ -49,7 +49,7 @@ impl Vault {
         }
         let body = self.journal_template()?.map(|t| fill_template(&t, day)).unwrap_or_default();
         let content = format!("# {}\n\n{}", journal_title(day), body.trim());
-        let note = self.create_note_with(None, &format!("{}\n", content.trim_end()), Some(day))?;
+        let note = self.create_note_with(None, &format!("{}\n", content.trim_end()), Some(day), &[])?;
         Ok((note, true))
     }
 
@@ -65,7 +65,7 @@ impl Vault {
 }
 
 /// Everything after a note's `# ` title line.
-fn strip_title(content: &str) -> String {
+pub(crate) fn strip_title(content: &str) -> String {
     let title = derive_title(content);
     let mut lines = content.lines();
     let mut rest = Vec::new();

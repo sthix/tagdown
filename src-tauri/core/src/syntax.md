@@ -373,7 +373,7 @@ Where we are
 
 ### Live queries
 
-A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes or show:tasks, status:open/done/all, sort:updated/created/title, folder:Name, limit:N. Ticking a listed task updates the note it lives in.
+A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes, tasks, table, board or cards, status:open/done/all, sort:updated/created/title, folder:Name, type:Name, limit:N. Ticking a listed task updates the note it lives in.
 
 ```tagdown
 ## Open project tasks
@@ -405,6 +405,32 @@ show:table lists the matching notes as a table with a column per property. Edit 
 
 ```tagdown
 <query tag:project show:table columns:status,owner,due sort:due />
+```
+
+### Board views
+
+show:board puts the matching notes in a lane per value of one property: group:status by default, or group:owner and so on. lanes:todo,doing,done fixes the lanes’ order and shows empty ones; notes without a value go in a last lane. Drag a card to another lane to change that note’s property, + New adds a note with the lane’s value, and + Lane adds a lane (it writes lanes: into the query). columns:due,owner picks what the cards show.
+
+```tagdown
+<query type:Project show:board lanes:planned,active,done />
+```
+
+### Card views
+
+show:cards lists the matching notes as a grid of cards, each with a cover image (the note’s cover: property, a path or URL, else its first image), its opening lines and the properties columns: names.
+
+```tagdown
+<query type:Book show:cards columns:author,rating sort:-rating />
+```
+
+### Note types
+
+A note’s type is its type: property (type: Book). A note titled “Book Template” says how new Book notes start: with its properties and their values, and with its text, where {{title}}, {{date}}, {{weekday}}, {{yesterday}} and {{tomorrow}} are filled in. Its icon: property (an emoji) is the type’s icon and isn’t copied. Types are listed in the sidebar; type:Book in a query matches them, and + New note in a table, board or cards for a type starts from its template.
+
+```tagdown
+## People to follow up with
+
+<query type:Person follow-up=true show:table columns:team,email />
 ```
 
 ### Math (KaTeX)

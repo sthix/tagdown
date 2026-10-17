@@ -107,12 +107,17 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
       } else {
         // Query results from notes that aren't published are left out entirely:
         // their titles and tasks are not for this site.
-        (el.closest('.td-query-group, .td-query-notes > li') ?? el).remove();
+        (el.closest('.td-query-group, .td-query-notes > li, .td-query-table tbody tr, .td-qb-card') ?? el).remove();
       }
     });
     root.querySelectorAll('.td-query-more').forEach((el) => el.remove()); // its counts include unpublished notes
+    // A board's lane counts include them too.
+    root.querySelectorAll<HTMLElement>('.td-qb-lane').forEach((lane) => {
+      const count = lane.querySelector('.td-qb-count');
+      if (count) count.textContent = String(lane.querySelectorAll('.td-qb-card').length);
+    });
     root.querySelectorAll('.td-query-body').forEach((body) => {
-      if (!body.querySelector('.td-query-group, li, .td-query-error')) body.innerHTML = '<p class="td-query-empty">Nothing published matches.</p>';
+      if (!body.querySelector('.td-query-group, li, .td-query-error, .td-qb-card, .td-qc-card, tbody tr')) body.innerHTML = '<p class="td-query-empty">Nothing published matches.</p>';
     });
     // A static page can't tick anything.
     root.querySelectorAll('input[type="checkbox"]').forEach((box) => box.setAttribute('disabled', ''));

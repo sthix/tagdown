@@ -112,6 +112,7 @@
   align-items: baseline;
   gap: 10px;
 }
+.note-type-icon { margin-right: 5px; font-size: 12.5px; font-weight: 400; }
 .note-card h3 {
   flex: 1;
   min-width: 0;

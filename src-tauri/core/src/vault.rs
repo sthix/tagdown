@@ -8,7 +8,7 @@ use crate::{
     history::History,
     frontmatter::{derive_preview, derive_tags, derive_title, split_any, word_count, write_frontmatter},
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
-    properties::{parse_properties, set_property, PropertyValue},
+    properties::{parse_properties, set_property, write_entry, Property, PropertyValue},
     watcher::FileTracker,
 };
 
@@ -140,11 +140,12 @@ impl Vault {
     }
 
     pub fn create_note(&self, folder_id: Option<String>) -> Result<Note, String> {
-        self.create_note_with(folder_id, "# Untitled\n", None)
+        self.create_note_with(folder_id, "# Untitled\n", None, &[])
     }
 
-    /// Create a note with `content` as its body, optionally as the journal page for a day.
-    pub(crate) fn create_note_with(&self, folder_id: Option<String>, content: &str, journal: Option<NaiveDate>) -> Result<Note, String> {
+    /// Create a note with `content` as its body, optionally as the journal page
+    /// for a day, starting with `properties` in its frontmatter.
+    pub(crate) fn create_note_with(&self, folder_id: Option<String>, content: &str, journal: Option<NaiveDate>, properties: &[Property]) -> Result<Note, String> {
         let now = Utc::now();
         let meta = NoteFrontmatter {
             id: Uuid::new_v4().to_string(),
@@ -155,7 +156,7 @@ impl Vault {
             created: now,
             updated: now,
             journal,
-            extra: Vec::new(),
+            extra: properties.iter().map(|p| write_entry(&p.key, &p.value)).collect(),
         };
         let path = self.folder_dir(meta.folder_id.as_deref())?.join(format!("note-{}.{NOTE_EXT}", meta.id));
         self.write_note(&path, &write_frontmatter(&meta, content))?;
@@ -225,6 +226,28 @@ impl Vault {
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(self.note_at(&path, meta, &content))
+    }
+
+    /// Add `properties` the note doesn't have yet (by name, ignoring case), in
+    /// one write. Says which were added; with none, the file is left alone.
+    pub fn add_properties(&self, id: &str, properties: &[Property]) -> Result<(Note, Vec<String>), String> {
+        let path = self.note_path(id)?;
+        let (mut meta, content) = self.read_note(&path)?;
+        let mut taken: Vec<String> = parse_properties(&meta.extra).into_iter().map(|p| p.key.to_lowercase()).collect();
+        let mut added = Vec::new();
+        for p in properties {
+            if taken.contains(&p.key.to_lowercase()) {
+                continue;
+            }
+            set_property(&mut meta.extra, &p.key, Some(&p.value), None)?;
+            taken.push(p.key.to_lowercase());
+            added.push(p.key.clone());
+        }
+        if !added.is_empty() {
+            meta.updated = Utc::now();
+            self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        }
+        Ok((self.note_at(&path, meta, &content), added))
     }
 
     /// Point links to `old_title` in a note's properties at `new_title`,

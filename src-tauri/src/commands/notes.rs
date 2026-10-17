@@ -118,6 +118,35 @@ pub async fn append_to_journal(day: String, text: String, state: State<'_, Mutex
     Ok(Appended { note, content })
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedLink {
+    note: Note,
+    /// The link was saved before; `note` is that note.
+    existed: bool,
+    /// Why the page couldn't be read, when the note has only its address.
+    fetch_error: Option<String>,
+}
+
+/// Save a web page as a note of type Link, or find the one saved before.
+#[tauri::command]
+pub async fn save_web_link(url: String, folder_id: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<SavedLink, String> {
+    let url = crate::weblink::web_url(&url).ok_or("Only http:// and https:// links can be saved.")?.to_string();
+    if let Some(note) = state.lock().map_err(|e| e.to_string())?.vault.find_web_link(&url)? {
+        return Ok(SavedLink { note, existed: true, fetch_error: None });
+    }
+    // Fetching can take seconds: off the async runtime, without holding the vault.
+    let fetch_url = url.clone();
+    let page = tauri::async_runtime::spawn_blocking(move || crate::weblink::fetch_page(&fetch_url).map(|html| crate::weblink::page_info(&html)))
+        .await
+        .map_err(|e| e.to_string())?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.create_web_link(&url, page.as_ref().ok(), folder_id)?;
+    search.index(&note, &state.vault.get_note_content(&note.id)?.content);
+    let _ = app.emit("note-saved", &note);
+    Ok(SavedLink { note, existed: false, fetch_error: page.err() })
+}
+
 /// The notes and open tasks of `day` (YYYY-MM-DD), shown under its journal page `id`.
 #[tauri::command]
 pub async fn journal_day(day: String, id: String, state: State<'_, Mutex<AppState>>) -> Result<crate::journal::DaySummary, String> {

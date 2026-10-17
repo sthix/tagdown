@@ -82,6 +82,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J, or `tagdown today "…"`) adds a line to today's page from anywhere.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Note types** like Book, Person or Project: a `type:` property, a sidebar section, and a template note that new notes of the type start from.
+- **Saved web links**: paste a link on an empty line (or use *Save web link…*) to keep the page as a Link note with its title, description and opening text.
 - **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables, kanban **boards** (drag a card to change its status) or **cards** with cover images. Tick tasks right in the list; ⌘⇧T shows every open task.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
 

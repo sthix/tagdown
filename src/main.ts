@@ -31,6 +31,7 @@ import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVa
 import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import { openQuickCapture } from './quickCapture';
 import { openLocalGraph } from './localGraph';
+import { offerLinkNote, onEmptyLine, openSaveLinkDialog, webUrl } from './webLinks';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -513,6 +514,7 @@ function paletteActions(): PaletteAction[] {
     { id: 'new-note-type', label: 'New note type…', hint: 'Like Book or Person, with a template', icon: uiIcon('type', 15), run: () => { creatingType = true; renderTypes(); } },
     { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
     ...(selectedNote ? [{ id: 'graph', label: 'Show graph', hint: 'This note’s links, both ways', shortcut: '⌘⇧G', icon: uiIcon('graph', 15), run: showGraph }] : []),
+    { id: 'save-link', label: 'Save web link…', hint: 'A Link note with the page’s title and text', icon: uiIcon('globe', 15), run: () => openSaveLinkDialog({ save: (url) => saveWebLink(url) }) },
     { id: 'quick-capture', label: 'Quick capture', hint: 'Add a line to today’s journal', shortcut: '⌥⌘J', icon: uiIcon('compose', 15), run: quickCapture },
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
@@ -1361,6 +1363,41 @@ async function restoreWorkspace(): Promise<boolean> {
 }
 
 // ---- Journal ----
+
+/**
+ * Save a web page as a Link note. From a paste (`pasted`, the editor it went
+ * into), the pasted link becomes a link to the note; otherwise the note opens.
+ */
+async function saveWebLink(url: string, pasted?: HTMLTextAreaElement) {
+  const folderId = isUserFolder(selectedFolder) ? selectedFolder : null;
+  const saved = await invoke<{ note: Note; existed: boolean; fetchError: string | null }>('save_web_link', { url, folderId });
+  await Promise.all([reloadNotes(), reloadTypes()]);
+  invalidateQueries();
+  const title = saved.note.title || 'Untitled';
+  if (pasted) replacePastedLink(pasted, url, `[[${title}]]`);
+  else await revealNote(saved.note.id);
+  showNotice(saved.existed ? `Saved before as “${title}”` : saved.fetchError ? `Saved the link only; the page couldn’t be read (${saved.fetchError})` : `Saved “${title}”`);
+}
+
+/** Put `text` where `url` was pasted on its own line, if it's still there. */
+function replacePastedLink(textarea: HTMLTextAreaElement, url: string, text: string) {
+  const find = (value: string) => {
+    for (let at = value.indexOf(url); at >= 0; at = value.indexOf(url, at + 1)) {
+      if (onEmptyLine(value, at, at + url.length)) return at;
+    }
+    return -1;
+  };
+  if (textarea.isConnected) {
+    const at = find(textarea.value);
+    if (at >= 0) applyEdit(textarea, { from: at, to: at + url.length, text, selStart: at + text.length, selEnd: at + text.length });
+    return;
+  }
+  // The block editor it went into has closed: change the note's text instead.
+  const at = find(content);
+  if (at < 0) return;
+  showDiskContent(content.slice(0, at) + text + content.slice(at + url.length));
+  scheduleSave();
+}
 
 /** The open note with the notes it links to and the notes linking to it. */
 async function showGraph() {
@@ -3390,6 +3427,12 @@ function attachEditingAids(textarea: HTMLTextAreaElement) {
   attachSlashCommands(textarea);
   attachListEditing(textarea);
   attachImageInput(textarea);
+  textarea.addEventListener('paste', (event) => {
+    const url = webUrl(event.clipboardData?.getData('text/plain') ?? '');
+    if (url && onEmptyLine(textarea.value, textarea.selectionStart, textarea.selectionEnd)) {
+      offerLinkNote(url, () => saveWebLink(url, textarea).catch(async (error) => { await message(String(error), { title: 'Could not save the link', kind: 'warning' }); }));
+    }
+  });
   for (const type of ['keyup', 'mouseup', 'input', 'focus']) textarea.addEventListener(type, () => rememberCaret(textarea));
   textarea.addEventListener('tagdown:pick', (event) => {
     const pick = (event as CustomEvent<string>).detail;

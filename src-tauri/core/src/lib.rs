@@ -14,6 +14,7 @@ pub mod types;
 pub mod vault;
 pub mod vaults;
 pub mod watcher;
+pub mod weblink;
 pub mod library;
 pub mod mcp;
 pub mod query;

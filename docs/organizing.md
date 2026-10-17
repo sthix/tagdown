@@ -99,6 +99,16 @@ Giving an existing note a type (by setting its `type` property) adds the templat
 <query type:Book show:cards columns:author,rating sort:-rating />
 ```
 
+### Saved web links
+
+To keep a page from the web, paste its link on an empty line and click **Save as Link note** in the bar that appears, or choose **Save web link…** in the command palette.
+
+Tagdown fetches the page once and makes a note of type **Link**: titled with the page's title, with a `url:` property (and `site:` when the page names its site), the page's description as a quote, and the article's opening paragraphs. A pasted link becomes a link to the new note. Saving a link you saved before opens the note you already have.
+
+A **Link Template** note works like any other type's template: its properties and body are added to each new Link note, say `read: false` and a "## Why I saved it" heading. When the page can't be read (you're offline, or it isn't a web page), the note gets the address only.
+
+The page is fetched with your Mac's own `curl`, over http or https only. Nothing else leaves your Mac.
+
 ## Pinning and filters
 
 Pin a note with the pin button in the editor's top-right corner. The pills above the note list filter the current view:

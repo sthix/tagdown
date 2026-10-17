@@ -161,12 +161,12 @@ impl Vault {
         Ok(list_types(&notes))
     }
 
-    fn type_names(&self) -> Result<Vec<String>, String> {
+    pub(crate) fn type_names(&self) -> Result<Vec<String>, String> {
         Ok(self.note_types()?.into_iter().map(|t| t.name).collect())
     }
 
     /// The template note for the type `name`, with its body.
-    fn type_template(&self, name: &str) -> Result<Option<(Note, String)>, String> {
+    pub(crate) fn type_template(&self, name: &str) -> Result<Option<(Note, String)>, String> {
         let wanted = normalize_title(name);
         Ok(self.notes_with_content()?.into_iter().find(|(n, _)| {
             n.folder_id.as_deref() != Some(ARCHIVE) && template_type(&n.title).is_some_and(|t| normalize_title(&t) == wanted)

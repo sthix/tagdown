@@ -329,7 +329,7 @@ fn tools() -> Value {
         {
             "name": "list_tasks",
             "title": "List tasks",
-            "description": "Checklist items (- [ ] / - [x]) across notes, grouped by note.",
+            "description": "Checklist items (- [ ] / - [x]) across notes, grouped by note. A task's day is its first [[YYYY-MM-DD]] link, !high/!medium/!low its priority, and every:day|weekday|week|month|year makes it repeat. For tasks by day, use run_query with show:tasks date:today sort:date.",
             "inputSchema": { "type": "object", "properties": {
                 "status": { "type": "string", "enum": ["open", "done", "all"], "default": "open" },
                 "tag": { "type": "string", "description": "Only notes with this tag." },
@@ -346,7 +346,7 @@ fn tools() -> Value {
         {
             "name": "run_query",
             "title": "Run query",
-            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks|table|board|cards, group:<property> and lanes:a,b (board), type:Name, status:open|done|all, sort:updated|created|title|<property>|-<property>, folder:Name, limit:N, columns:a,b, and property filters key=value, key!=value, key=lo..hi (numbers or dates; today+N), has:key. Empty lists recent notes.",
+            "description": "List notes or tasks like a <query /> block does: a search (words, tag:, title:, \"phrases\", -word) plus show:notes|tasks|table|board|cards, group:<property> and lanes:a,b (board), type:Name, status:open|done|all, date:today|overdue|upcoming|week|none|any|YYYY-MM-DD and priority:high|medium|low (tasks), sort:updated|created|title|date|priority|<property>|-<property>, folder:Name, limit:N, columns:a,b, and property filters key=value, key!=value, key=lo..hi (numbers or dates; today+N), has:key. Empty lists recent notes.",
             "inputSchema": { "type": "object", "properties": { "query": { "type": "string", "description": "e.g. tag:project show:tasks" } } },
             "annotations": read_only,
         },

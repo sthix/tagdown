@@ -1099,6 +1099,29 @@
 }
 .preview .td-qc-card.has-cover .td-qc-excerpt { -webkit-line-clamp: 2; }
 .preview .td-qc + .td-qt-new { margin-top: 8px; }
+/* Task days, priorities and repeats: in notes and in task lists. */
+:is(.preview, .tagdown-reference-preview) .td-task-date {
+  padding: 0 5px; border-radius: 5px; border-bottom: 0;
+  background: var(--chip-bg); color: var(--ink-2);
+  font-family: var(--font-ui); font-size: .82em; white-space: nowrap; text-decoration: none;
+}
+:is(.preview, .tagdown-reference-preview) .td-task-date::before,
+:is(.preview, .tagdown-reference-preview) .td-task-date::after { content: none; }
+:is(.preview, .tagdown-reference-preview) :is(.td-task-date, .td-task-when).is-today { background: var(--marker-soft); color: var(--ink); }
+:is(.preview, .tagdown-reference-preview) :is(.td-task-date, .td-task-when).is-overdue { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+:is(.preview, .tagdown-reference-preview) :is(.td-task-flag, .td-task-repeat, .td-task-when) {
+  display: inline-block; padding: 0 6px; border-radius: 5px;
+  background: var(--chip-bg); color: var(--ink-3);
+  font: 500 .74em/1.6 var(--font-ui); letter-spacing: .02em; white-space: nowrap; vertical-align: .08em;
+}
+:is(.preview, .tagdown-reference-preview) .td-task-when { color: var(--ink-2); }
+:is(.preview, .tagdown-reference-preview) .td-task-flag { text-transform: capitalize; }
+:is(.preview, .tagdown-reference-preview) .td-task-flag.is-high { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+:is(.preview, .tagdown-reference-preview) .td-task-flag.is-medium { background: var(--marker-soft); color: var(--ink-2); }
+.preview .td-query-day { margin: 0 0 2px; color: var(--ink-2); font: 600 12px var(--font-ui); letter-spacing: 0; border: 0; padding: 0; }
+.preview .td-query-group.is-overdue .td-query-day { color: var(--danger); }
+.preview .td-query-task-note { margin-left: 4px; color: var(--ink-3); font: 12px var(--font-ui); text-decoration: none; white-space: nowrap; }
+.preview .td-query-task-note:hover { color: var(--pv-accent); text-decoration: underline; }
 .preview .td-query-empty, .preview .td-query-more { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
 .preview .td-query-error { margin: 2px 0 0; color: var(--danger); font-size: 12.5px; }
 
@@ -1129,6 +1152,15 @@
 .task-list-head code { font-size: 11px; }
 .task-list-dialog .task-list-body { flex: 1; height: auto; padding: 4px 18px 24px; background: transparent; }
 .task-list-dialog .td-query { margin: 8px 0 0; padding: 0; border: 0; background: transparent; }
+.task-list-views { display: flex; gap: 2px; padding: 8px 18px 0; border-bottom: .5px solid var(--line); }
+.task-list-views button {
+  margin-bottom: -.5px; padding: 6px 10px 8px;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  color: var(--ink-3); font: 500 12.5px var(--font-ui); cursor: pointer;
+}
+.task-list-views button:hover { color: var(--ink); }
+.task-list-views button[aria-selected="true"] { border-bottom-color: var(--marker-strong); color: var(--ink); font-weight: 600; }
+.task-list-hint { margin: 12px 0 0; color: var(--ink-3); font: 12px var(--font-ui); }
 
 /* ---- Reordering blocks by drag ---- */
 .block-drag-handle {

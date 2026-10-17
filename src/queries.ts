@@ -15,7 +15,11 @@ import { resolveLocalImages } from './localImages';
 
 type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string };
 export type NewNote = { folderId: string | null; tags: string[]; properties: Property[] };
-type QueryTask = { noteId: string; noteTitle: string; text: string; done: boolean; line: number };
+type QueryTask = {
+  noteId: string; noteTitle: string; text: string; done: boolean; line: number;
+  /** Its day (YYYY-MM-DD), priority (1 high to 3 low) and repeat, and its text without those words. */
+  date?: string | null; priority?: number | null; repeat?: string | null; label?: string;
+};
 type QueryOutput = {
   show: 'notes' | 'tasks' | 'table' | 'board' | 'cards';
   notes: QueryNote[];
@@ -139,23 +143,78 @@ function paint(body: HTMLElement, result: Result, options: FillOptions, query: s
     body.innerHTML = '<p class="td-query-empty">No matching tasks.</p>';
     return;
   }
+  // Sorted by day, tasks are grouped by day and say which note they're in; otherwise by note.
+  const byDay = getOption(query, 'sort')?.toLowerCase() === 'date';
   const groups: Array<{ id: string; title: string; tasks: QueryTask[] }> = [];
   for (const task of output.tasks) {
+    const id = byDay ? dayGroup(task) : task.noteId;
     const last = groups[groups.length - 1];
-    if (last?.id === task.noteId) last.tasks.push(task);
-    else groups.push({ id: task.noteId, title: task.noteTitle, tasks: [task] });
+    if (last?.id === id) last.tasks.push(task);
+    else groups.push({ id, title: byDay ? dayGroupTitle(id) : task.noteTitle, tasks: [task] });
   }
-  body.innerHTML = groups.map((group) => `
-    <div class="td-query-group">
-      <a class="td-query-note" href="#" data-open-note="${escapeHtml(group.id)}">${escapeHtml(group.title || 'Untitled')}</a>
-      <ul class="td-query-tasks">${group.tasks.map((task) => `
-        <li class="td-query-task${task.done ? ' is-done' : ''}">
+  const item = (task: QueryTask) => `
+        <li class="td-query-task${task.done ? ' is-done' : ''}${task.priority ? ` is-${PRIORITIES[task.priority]}` : ''}">
           <input type="checkbox"${task.done ? ' checked' : ''}${options.interactive === false ? ' disabled' : ''}
                  data-task-note="${escapeHtml(task.noteId)}" data-task-line="${task.line}" data-task-text="${escapeHtml(task.text)}"
                  aria-label="${task.done ? 'Mark not done' : 'Mark done'}: ${escapeHtml(task.text)}">
-          <span>${inline(task.text)}</span>
-        </li>`).join('')}</ul>
+          <span>${inline(taskText(task))}${taskChips(task, !byDay)}${byDay ? ` <a class="td-query-task-note" href="#" data-open-note="${escapeHtml(task.noteId)}">${escapeHtml(task.noteTitle || 'Untitled')}</a>` : ''}</span>
+        </li>`;
+  body.innerHTML = groups.map((group) => `
+    <div class="td-query-group${byDay ? ` is-day${group.id === 'overdue' ? ' is-overdue' : ''}` : ''}">
+      ${byDay ? `<h4 class="td-query-day">${escapeHtml(group.title)}</h4>` : `<a class="td-query-note" href="#" data-open-note="${escapeHtml(group.id)}">${escapeHtml(group.title || 'Untitled')}</a>`}
+      <ul class="td-query-tasks">${group.tasks.map(item).join('')}</ul>
     </div>`).join('') + more;
+}
+
+const PRIORITIES: Record<number, string> = { 1: 'high', 2: 'medium', 3: 'low' };
+const DATE_LINK = /\s*\[\[\d{4}-\d{2}-\d{2}(?:\|[^\]]*)?\]\]/;
+
+function localDay(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function shiftedToday(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return localDay(date);
+}
+
+/** A day in words: Today, Tomorrow, Yesterday, or "Tue, Oct 20". */
+function dayName(day: string) {
+  if (day === shiftedToday(0)) return 'Today';
+  if (day === shiftedToday(1)) return 'Tomorrow';
+  if (day === shiftedToday(-1)) return 'Yesterday';
+  const date = new Date(`${day}T12:00:00`);
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: day.slice(0, 4) === shiftedToday(0).slice(0, 4) ? undefined : 'numeric' });
+}
+
+/** The day group an open task sorted by day goes in: overdue ones together. */
+function dayGroup(task: QueryTask) {
+  if (!task.date) return 'none';
+  return !task.done && task.date < shiftedToday(0) ? 'overdue' : task.date;
+}
+
+function dayGroupTitle(group: string) {
+  return group === 'overdue' ? 'Overdue' : group === 'none' ? 'No date' : dayName(group);
+}
+
+/** A task's text to show: without its priority and repeat words, and without its day, which shows as a chip. */
+function taskText(task: QueryTask) {
+  const label = task.label ?? task.text;
+  return task.date ? label.replace(DATE_LINK, '').trim() || label : label;
+}
+
+/** A listed task's day, priority and repeat. The day is left out where the group already says it. */
+function taskChips(task: QueryTask, withDay: boolean) {
+  let out = '';
+  if (task.date && (withDay || dayGroup(task) === 'overdue')) {
+    const today = shiftedToday(0);
+    const when = task.done ? '' : task.date < today ? ' is-overdue' : task.date === today ? ' is-today' : '';
+    out += ` <span class="td-task-when${when}" title="${task.date}">${escapeHtml(dayName(task.date))}</span>`;
+  }
+  if (task.priority) out += ` <span class="td-task-flag is-${PRIORITIES[task.priority]}">${PRIORITIES[task.priority]}</span>`;
+  if (task.repeat) out += ` <span class="td-task-repeat" title="Repeats every ${task.repeat}">↻ ${task.repeat === 'weekday' ? 'weekdays' : task.repeat === 'day' ? 'daily' : `${task.repeat}ly`}</span>`;
+  return out;
 }
 
 /** Tick or untick a task shown in a query block; it lives in another note. */
@@ -190,7 +249,16 @@ type TaskListOptions = {
   afterToggle: () => void | Promise<void>;
 };
 
-/** A dialog listing every open task in the vault, grouped by note. */
+// The open-tasks dialog's views; the last one chosen is kept while the app runs.
+const TASK_VIEWS = [
+  { label: 'Today', query: 'show:tasks date:today sort:date limit:500', hint: 'Due today, and overdue ones first.' },
+  { label: 'Upcoming', query: 'show:tasks date:upcoming sort:date limit:500', hint: 'Tasks with a day after today.' },
+  { label: 'Inbox', query: 'show:tasks date:none sort:priority limit:500', hint: 'Tasks without a day yet.' },
+  { label: 'All', query: 'show:tasks limit:500', hint: 'Every open task, by note.' },
+];
+let taskView = 0;
+
+/** A dialog listing the vault's open tasks: today's, upcoming, undated, or all. */
 export function openTaskList(options: TaskListOptions) {
   document.querySelector('.task-list-dialog')?.remove();
   const dialog = document.createElement('dialog');
@@ -199,15 +267,29 @@ export function openTaskList(options: TaskListOptions) {
   dialog.innerHTML = `
     <div class="task-list-shell">
       <header class="task-list-head">
-        <div><h2>Open tasks</h2><span>Across all notes. Put <code>&lt;query show:tasks /&gt;</code> in a note to keep a list like this there.</span></div>
+        <div><h2>Open tasks</h2><span>Across all notes. Give a task a day with a date link like <code>[[${shiftedToday(1)}]]</code>; a query such as <code>&lt;query show:tasks date:today /&gt;</code> keeps a list like this in a note.</span></div>
         <button type="button" class="history-close" aria-label="Close" data-close>×</button>
       </header>
-      <div class="preview task-list-body"><div class="td-query" data-query="show:tasks limit:500"><div class="td-query-body"></div></div></div>
+      <div class="task-list-views" role="tablist" aria-label="Which tasks">${TASK_VIEWS.map((view, i) => `<button type="button" role="tab" data-view="${i}" aria-selected="${i === taskView}">${view.label}</button>`).join('')}</div>
+      <div class="preview task-list-body"></div>
     </div>`;
   document.body.append(dialog);
   const body = dialog.querySelector<HTMLElement>('.task-list-body')!;
   const close = () => { if (dialog.open) dialog.close(); dialog.remove(); };
+  const show = () => {
+    const view = TASK_VIEWS[taskView];
+    body.innerHTML = `<p class="task-list-hint">${view.hint}</p><div class="td-query" data-query="${escapeHtml(view.query)}"><div class="td-query-body"></div></div>`;
+    dialog.querySelectorAll<HTMLElement>('[data-view]').forEach((tab) => tab.setAttribute('aria-selected', String(Number(tab.dataset.view) === taskView)));
+  };
   const refresh = () => { invalidateQueries(); return fillQueries(body, { excludeId: null }); };
+  dialog.querySelector('.task-list-views')!.addEventListener('click', (event) => {
+    const tab = (event.target as HTMLElement).closest<HTMLElement>('[data-view]');
+    if (!tab) return;
+    taskView = Number(tab.dataset.view);
+    show();
+    void refresh();
+  });
+  show();
   dialog.querySelector('[data-close]')!.addEventListener('click', close);
   dialog.addEventListener('mousedown', (event) => { if (event.target === dialog) close(); });
   dialog.addEventListener('close', () => dialog.remove());

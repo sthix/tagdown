@@ -92,6 +92,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: '- [x] Done item\n- [ ] Pending item\n- Regular bullet'
       },
       {
+        title: 'Task days, priorities and repeats',
+        description: 'A task’s first date link is its day, shown as Today, Tomorrow or a date, and marked when overdue. !high, !medium or !low sets its priority. every:day, weekday, week, month or year makes it repeat: ticking it adds the next one, its day moved on, above it.',
+        syntax: '- [ ] Send the invite list [[2026-10-20]] !high\n- [ ] Water the plants [[2026-10-18]] every:week\n- [ ] Read the CRDT paper !low'
+      },
+      {
         title: 'Nested lists',
         description: 'Indent an item under the one above it to make it a child; in the editor, Tab and Shift+Tab nest and un-nest. Bullets, numbers and tasks mix at any depth, and an indented line without a marker continues the item above.',
         syntax: '- Project\n  - Research\n    - [x] Read the docs\n    - [ ] Try it out\n  - Write-up\n    continues on a second line\n- Next project'
@@ -225,7 +230,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Live queries',
-        description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes, tasks, table, board or cards, status:open/done/all, sort:updated/created/title, folder:Name, type:Name, limit:N. Ticking a listed task updates the note it lives in.',
+        description: 'A <query /> lists the notes or tasks across the vault that match a search (words, "phrases", tag:, title:, -word). Options: show:notes, tasks, table, board or cards, status:open/done/all, sort:updated/created/title, folder:Name, type:Name, limit:N; for tasks, date:today/overdue/upcoming/week/none, priority:high/medium/low and sort:date. Ticking a listed task updates the note it lives in.',
         syntax: '## Open project tasks\n\n<query tag:project show:tasks />\n\n## Recently edited\n\n<query folder:Work sort:updated limit:5 />'
       },
       {

@@ -20,12 +20,14 @@ The query uses the [search syntax](organizing.md#search) (words, `"phrases"`, `t
 | --- | --- | --- |
 | `show:` | `notes`, `tasks`, `table`, `board`, `cards` | `notes` |
 | `status:` | `open`, `done`, `all` (for tasks) | `open` |
-| `sort:` | `updated`, `created`, `title`, or a property (`sort:due`, `sort:-priority` for descending) | `updated` |
+| `sort:` | `updated`, `created`, `title`, or a property (`sort:due`, `sort:-priority` for descending); for tasks, `date` or `priority` | `updated` |
 | `folder:` | A folder name; quote names with spaces | All folders |
 | `type:` | A [note type](organizing.md#note-types), like `type:Book` | All types |
 | `columns:` | Properties to show in a table, on board cards or on cards | The ones the query uses |
 | `group:` | The property a board's lanes are values of | `status` |
 | `lanes:` | A board's lanes, in order, like `lanes:todo,doing,done` | The values notes use |
+| `date:` | For tasks: `today` (and overdue), `overdue`, `upcoming`, `week`, `none`, `any`, or a day like `2026-10-20` or `today+1` | Any |
+| `priority:` | For tasks: `high`, `medium`, `low` | Any |
 | `limit:` | A number up to 500 | 50 |
 
 A note never lists itself. When a query shows tasks, ticking one in the list ticks it in the note it lives in.
@@ -82,8 +84,45 @@ A task is any list item written as `- [ ]` (open) or `- [x]` (done):
 
 Click a checkbox in the preview to tick it; the source is updated for you.
 
+### Days, priorities and repeats
+
+A task can carry a few words that Tagdown reads, all plain text:
+
+```tagdown
+- [ ] Send the beta invite list [[2026-10-20]] !high
+- [ ] Water the plants [[2026-10-18]] every:week
+- [ ] Read the CRDT paper !low
+```
+
+- **Its day** is the first date link in it. The date link also puts the task on that day's [journal page](journal.md) under *Linked mentions*. The preview shows it as *Today*, *Tomorrow* or *Tue, Oct 20*, highlighted when it's today or overdue. Type `/date` to insert today's date and change it.
+- **Its priority** is `!high`, `!medium` or `!low`, shown as a flag.
+- **`every:day`**, `every:weekday`, `every:week`, `every:month` or `every:year` makes it **repeat**. Ticking it adds the next one above it, with its day moved on (a task without a day repeats from today). The ticked one stays as a record.
+
+Queries list tasks by day with `date:` and `sort:date`:
+
+```tagdown
+## Today
+
+<query show:tasks date:today sort:date />
+
+## This week, most important first
+
+<query show:tasks date:week sort:priority />
+```
+
+Sorted by `date`, the list is grouped by day (overdue tasks together at the top) and each task names its note.
+
 ## The open-tasks view
 
-Press **⌘⇧T** (or choose **Show open tasks** in the command palette) to see every unticked task in the vault, grouped by note. Tick tasks off right there, or click a note to open it.
+Press **⌘⇧T** (or choose **Show open tasks** in the command palette) to see the vault's unticked tasks:
+
+| View | Shows |
+| --- | --- |
+| Today | Tasks due today, with overdue ones first |
+| Upcoming | Tasks with a later day, grouped by day |
+| Inbox | Tasks without a day, most important first |
+| All | Every open task, grouped by note |
+
+Tick tasks off right there, or click a note to open it. The view you chose last is kept while the app runs.
 
 From the command line, `tagdown tasks` prints the same list; see [Command line and AI assistants](cli-and-mcp.md).

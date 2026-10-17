@@ -107,10 +107,12 @@ export async function buildSite(siteTitle: string, notes: SiteNote[], progress: 
       } else {
         // Query results from notes that aren't published are left out entirely:
         // their titles and tasks are not for this site.
-        (el.closest('.td-query-group, .td-query-notes > li, .td-query-table tbody tr, .td-qb-card') ?? el).remove();
+        (el.closest('.td-query-task, .td-query-group, .td-query-notes > li, .td-query-table tbody tr, .td-qb-card') ?? el).remove();
       }
     });
     root.querySelectorAll('.td-query-more').forEach((el) => el.remove()); // its counts include unpublished notes
+    // A day of tasks whose every task was left out goes too.
+    root.querySelectorAll('.td-query-group').forEach((group) => { if (!group.querySelector('li')) group.remove(); });
     // A board's lane counts include them too.
     root.querySelectorAll<HTMLElement>('.td-qb-lane').forEach((lane) => {
       const count = lane.querySelector('.td-qb-count');

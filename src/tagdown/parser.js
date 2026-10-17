@@ -741,6 +741,61 @@ function renderList(lines) {
   return renderListItems(root.children);
 }
 
+/* Task words (see tasks.rs): `!high`, `!medium` or `!low` is the task's
+   priority and `every:week` (day, weekday, week, month, year) says it repeats.
+   They show as chips after the text. The first [[YYYY-MM-DD]] link is its day,
+   marked when that day is today or past. */
+const TASK_PRIORITY = /^!(high|medium|low)$/i;
+const TASK_REPEAT = /^every:(day|weekday|week|month|year)$/i;
+
+function taskWords(text) {
+  let priority = null;
+  let repeat = null;
+  const kept = text.split(/(\s+)/).filter((word) => {
+    const p = word.match(TASK_PRIORITY);
+    if (p) { priority = priority || p[1].toLowerCase(); return false; }
+    const r = word.match(TASK_REPEAT);
+    if (r) { repeat = repeat || r[1].toLowerCase(); return false; }
+    return true;
+  });
+  return { text: kept.join('').replace(/\s{2,}/g, ' ').trim(), priority, repeat };
+}
+
+function taskChips({ priority, repeat }) {
+  let out = '';
+  if (priority) out += ` <span class="td-task-flag is-${priority}" title="${priority[0].toUpperCase()}${priority.slice(1)} priority">${priority}</span>`;
+  if (repeat) out += ` <span class="td-task-repeat" title="Repeats every ${repeat}">↻ ${repeat === 'weekday' ? 'weekdays' : repeat === 'day' ? 'daily' : `${repeat}ly`}</span>`;
+  return out;
+}
+
+function localToday() {
+  return localDay(new Date());
+}
+
+/** A day as a task shows it: Today, Tomorrow, Yesterday, or "Tue, Oct 20". */
+function taskDay(day) {
+  const today = localToday();
+  const shift = (n) => { const d = new Date(`${today}T12:00:00`); d.setDate(d.getDate() + n); return localDay(d); };
+  if (day === today) return 'Today';
+  if (day === shift(1)) return 'Tomorrow';
+  if (day === shift(-1)) return 'Yesterday';
+  const date = new Date(`${day}T12:00:00`);
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: day.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' });
+}
+
+function localDay(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** The task's first day link, marked as its date (overdue or today while open) and named in words. */
+function markTaskDate(html, done) {
+  return html.replace(/<a class="td-wikilink"( href="[^"]*" data-target="(\d{4}-\d{2}-\d{2})")>([^<]*)<\/a>/, (_, rest, day, label) => {
+    const today = localToday();
+    const when = done ? '' : day < today ? ' is-overdue' : day === today ? ' is-today' : '';
+    return `<a class="td-wikilink td-task-date${when}"${rest} title="${day}">${label === day ? taskDay(day) : label}</a>`;
+  });
+}
+
 function renderListItems(items) {
   let out = '';
   for (let i = 0; i < items.length;) {
@@ -750,7 +805,8 @@ function renderListItems(items) {
     const lis = group.map(item => {
       const nested = item.children.length ? renderListItems(item.children) : '';
       if (item.task !== null) {
-        return `<li class="td-task"><input type="checkbox"${item.task ? ' checked' : ''}><span>${inline(item.text)}</span>${nested}</li>`;
+        const meta = taskWords(item.text);
+        return `<li class="td-task${meta.priority ? ` is-${meta.priority}` : ''}"><input type="checkbox"${item.task ? ' checked' : ''}><span>${markTaskDate(inline(meta.text), item.task)}${taskChips(meta)}</span>${nested}</li>`;
       }
       return `<li>${inline(item.text)}${nested}</li>`;
     }).join('');

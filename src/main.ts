@@ -24,6 +24,7 @@ import { propertiesFolded, renderPropertiesPanel, setPropertiesFolded } from './
 import { showContextMenu, type MenuItem } from './contextMenu';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { asLinks, linkHint, type LinkField } from './linkFields';
+import { nextTaskLine } from './taskRepeat';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
@@ -3445,6 +3446,9 @@ function toggleTaskAt(taskIndex: number) {
     if (seen === taskIndex) {
       const next = m[2] === ' ' ? 'x' : ' ';
       lines[i] = m[1] + next + m[3];
+      // A repeating task comes back: its next one goes above it.
+      const again = next === 'x' ? nextTaskLine(lines[i], todayKey()) : null;
+      if (again) lines.splice(i, 0, again);
       content = lines.join('\n');
       const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
       if (source) source.value = content;

@@ -13,6 +13,11 @@
 //   group:status                   the property a board's lanes are values of (status by default)
 //   lanes:todo,doing,done          a board's lanes in this order, empty ones too
 //   type:Book                      notes of a type, the same as type=Book (see types.rs)
+//   date:today | overdue | upcoming tasks by their day (see tasks.rs): today and
+//        | week | none | any          earlier, before today, after today, within
+//        | 2026-10-20 | today+1      a week (and earlier), without one, with one, or that day
+//   priority:high | medium | low    tasks with that priority
+//   sort:date | sort:priority      tasks in order of their day (undated last) or priority
 //   status:open | done | all       which tasks (open by default)
 //   sort:updated | created | title order (most recently edited first by default)
 //   sort:due | sort:-priority      by a property, ascending (or descending with -)
@@ -91,6 +96,43 @@ struct PropertyFilter {
     matcher: Match,
 }
 
+/// Which tasks `date:` keeps.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DateFilter {
+    Upto(NaiveDate),
+    Before(NaiveDate),
+    After(NaiveDate),
+    On(NaiveDate),
+    Undated,
+    Dated,
+}
+
+impl DateFilter {
+    fn parse(value: &str, today: NaiveDate) -> Result<Self, String> {
+        Ok(match value.to_lowercase().as_str() {
+            "today" => DateFilter::Upto(today),
+            "overdue" => DateFilter::Before(today),
+            "upcoming" => DateFilter::After(today),
+            "week" => DateFilter::Upto(today + TimeDelta::days(7)),
+            "none" => DateFilter::Undated,
+            "any" => DateFilter::Dated,
+            other => DateFilter::On(date_value(other, today).ok_or_else(|| format!("date: must be today, overdue, upcoming, week, none, any or a day, not \"{value}\""))?),
+        })
+    }
+
+    fn wants(self, date: Option<NaiveDate>) -> bool {
+        match (self, date) {
+            (DateFilter::Undated, d) => d.is_none(),
+            (_, None) => false,
+            (DateFilter::Dated, Some(_)) => true,
+            (DateFilter::Upto(day), Some(d)) => d <= day,
+            (DateFilter::Before(day), Some(d)) => d < day,
+            (DateFilter::After(day), Some(d)) => d > day,
+            (DateFilter::On(day), Some(d)) => d == day,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Spec {
     filter: String,
@@ -108,6 +150,10 @@ struct Spec {
     group: Option<String>,
     /// `lanes:` as written.
     lanes: Vec<String>,
+    /// `date:` for tasks, as written.
+    task_date: Option<String>,
+    /// `priority:` for tasks: 1 high, 2 medium, 3 low.
+    task_priority: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -211,7 +257,7 @@ fn property_filter(token: &str) -> Option<PropertyFilter> {
 }
 
 fn parse(raw: &str) -> Result<Spec, String> {
-    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new(), group: None, lanes: Vec::new() };
+    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new(), group: None, lanes: Vec::new(), task_date: None, task_priority: None };
     let mut filter = Vec::new();
     for token in tokens(raw) {
         if let Some(has) = token.strip_prefix("has:").map(|k| (false, k)).or_else(|| token.strip_prefix("-has:").map(|k| (true, k))) {
@@ -245,6 +291,13 @@ fn parse(raw: &str) -> Result<Spec, String> {
             "columns" => spec.columns = Some(list_option(value)),
             "group" => spec.group = Some(value.to_string()).filter(|g| !g.is_empty()),
             "lanes" => spec.lanes = list_option(value),
+            "date" => spec.task_date = Some(value.to_string()),
+            "priority" => spec.task_priority = Some(match value.to_lowercase().as_str() {
+                "high" => 1,
+                "medium" => 2,
+                "low" => 3,
+                _ => return Err(format!("priority: must be high, medium or low, not \"{value}\"")),
+            }),
             "type" | "-type" => {
                 if value.is_empty() {
                     return Err("type: needs a type, like type:Book".into());
@@ -295,6 +348,7 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
 /// `run`, with `today` for dates like `today+7`.
 pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>, today: NaiveDate) -> Result<QueryOutput, String> {
     let spec = parse(raw)?;
+    let task_date = spec.task_date.as_deref().map(|d| DateFilter::parse(d, today)).transpose()?;
     let group = (spec.show == Show::Board).then(|| spec.group.clone().unwrap_or_else(|| DEFAULT_GROUP.into()));
     let mut columns: Vec<String> = Vec::new();
     let sort_key = match &spec.sort { Sort::Property { key, .. } => Some(key), _ => None };
@@ -403,11 +457,31 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
             lanes: if spec.show == Show::Board { spec.lanes } else { Vec::new() },
         },
         Show::Tasks => {
-            let tasks: Vec<Task> = selected
+            let mut tasks: Vec<Task> = selected
                 .iter()
                 .flat_map(|(n, content)| parse_tasks(n, content))
                 .filter(|t| spec.status.wants(t.done))
+                .filter(|t| task_date.is_none_or(|f| f.wants(t.date)))
+                .filter(|t| spec.task_priority.is_none_or(|p| t.priority == Some(p)))
                 .collect();
+            // Ordered by day or priority, the other breaking ties; tasks without either go last.
+            let last = |v: Option<u8>| v.unwrap_or(u8::MAX);
+            match &spec.sort {
+                Sort::Property { key, desc } if key.eq_ignore_ascii_case("date") => tasks.sort_by(|a, b| {
+                    let by_day = match (a.date, b.date) {
+                        (Some(x), Some(y)) => if *desc { y.cmp(&x) } else { x.cmp(&y) },
+                        (Some(_), None) => Ordering::Less,
+                        (None, Some(_)) => Ordering::Greater,
+                        (None, None) => Ordering::Equal,
+                    };
+                    by_day.then(last(a.priority).cmp(&last(b.priority)))
+                }),
+                Sort::Property { key, desc } if key.eq_ignore_ascii_case("priority") => tasks.sort_by(|a, b| {
+                    let by_priority = if *desc { last(b.priority).cmp(&last(a.priority)) } else { last(a.priority).cmp(&last(b.priority)) };
+                    by_priority.then(a.date.map_or(NaiveDate::MAX, |d| d).cmp(&b.date.map_or(NaiveDate::MAX, |d| d)))
+                }),
+                _ => {}
+            }
             QueryOutput { show: Show::Tasks, total: tasks.len(), tasks: tasks.into_iter().take(spec.limit).collect(), notes: Vec::new(), columns: Vec::new(), new_note: None, group: None, lanes: Vec::new() }
         }
     })
@@ -768,6 +842,25 @@ mod tests {
             ("Comet", None, Some("Read it")),
         ], "the cover property first, then the first image outside code");
         assert!(q("show:table").notes[0].excerpt.is_none(), "only cards carry excerpts");
+    }
+
+    #[test]
+    fn filters_and_orders_tasks_by_day_and_priority() {
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let notes = vec![
+            (note("a", "Atlas", &[], None, 1), "# Atlas\n\n- [ ] Late [[2026-10-14]]\n- [ ] Now !low [[2026-10-15]]\n- [ ] Urgent now [[2026-10-15]] !high\n- [ ] Someday\n- [ ] Next week [[2026-10-22]] !medium\n- [ ] Far [[2026-12-01]]".to_string()),
+        ];
+        let t = |raw: &str| run_at(raw, notes.clone(), None, &[], None, today).unwrap().tasks.iter().map(|t| t.label.clone()).collect::<Vec<_>>();
+        assert_eq!(t("show:tasks date:today sort:date"), vec!["Late [[2026-10-14]]", "Urgent now [[2026-10-15]]", "Now [[2026-10-15]]"], "overdue first; then by priority");
+        assert_eq!(t("show:tasks date:overdue"), vec!["Late [[2026-10-14]]"]);
+        assert_eq!(t("show:tasks date:upcoming sort:date"), vec!["Next week [[2026-10-22]]", "Far [[2026-12-01]]"]);
+        assert_eq!(t("show:tasks date:week"), vec!["Late [[2026-10-14]]", "Now [[2026-10-15]]", "Urgent now [[2026-10-15]]", "Next week [[2026-10-22]]"]);
+        assert_eq!(t("show:tasks date:none"), vec!["Someday"]);
+        assert_eq!(t("show:tasks date:today+7"), vec!["Next week [[2026-10-22]]"]);
+        assert_eq!(t("show:tasks priority:high"), vec!["Urgent now [[2026-10-15]]"]);
+        assert_eq!(t("show:tasks sort:priority")[..3], ["Urgent now [[2026-10-15]]", "Next week [[2026-10-22]]", "Now [[2026-10-15]]"]);
+        assert!(run_at("show:tasks date:soon", notes.clone(), None, &[], None, today).unwrap_err().contains("date: must be"));
+        assert!(run_at("show:tasks priority:urgent", notes, None, &[], None, today).unwrap_err().contains("priority: must be"));
     }
 
     #[test]

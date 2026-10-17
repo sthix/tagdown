@@ -118,7 +118,9 @@ Math is rendered with KaTeX and diagrams with Mermaid.
 ## Media
 
 ```tagdown
-<figure src=diagram.png caption="System diagram" />
+<figure src=diagram.png caption="System diagram" size=medium />
+
+![The team at the offsite|320](attachments/offsite.jpg)
 
 <quote "Grace Hopper">
 The most dangerous phrase is: we have always done it this way.
@@ -126,6 +128,10 @@ The most dangerous phrase is: we have always done it this way.
 
 <embed url=https://youtu.be/dQw4w9WgXcQ />
 ```
+
+A figure's `size=` is `small`, `medium`, `large` or `full`: a third, half, three quarters or all of the text width. `width=` takes pixels (`width=320`) or a percentage (`width=60%`) instead. In the preview, point at a figure for a bar that sets its size and adds or edits its caption; clicking a caption edits it too. Images you paste or drop into a note arrive as figures.
+
+A plain Markdown image `![alt](path)` sits inline with the text. A number after `|` sets its width in pixels, the way Obsidian writes it.
 
 YouTube and Vimeo embeds show a thumbnail that opens the video in your browser.
 

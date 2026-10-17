@@ -203,8 +203,13 @@ export const tagdownDocumentation: DocumentationSection[] = [
     examples: [
       {
         title: 'Figure',
-        description: 'Use src/caption attributes or positional shorthand.',
-        syntax: '<figure src=diagram.png caption="System diagram" />'
+        description: 'An image with a caption. size= is small, medium, large or full (a third, half, three quarters or all of the text width); width= takes pixels or a percentage. In the preview, point at a figure to set both.',
+        syntax: '<figure src=diagram.png caption="System diagram" size=medium />'
+      },
+      {
+        title: 'Image',
+        description: 'A plain Markdown image, inline with the text. A number after | sets the width in pixels, as Obsidian writes it.',
+        syntax: '![The team at the offsite|320](attachments/offsite.jpg)'
       },
       {
         title: 'Quote',

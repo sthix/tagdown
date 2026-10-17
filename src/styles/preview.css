@@ -601,6 +601,38 @@
 /* ---- Figures ---- */
 .preview figure.td-figure { margin: 18px auto; text-align: center; }
 .preview .td-figure img { max-width: 100%; border-radius: 6px; display: inline-block; }
+.preview img.td-image { max-width: 100%; border-radius: 6px; vertical-align: middle; }
+/* Sizes against the text column; a figure with no size keeps the image's own. */
+:is(.preview, .tagdown-reference-preview) .td-figure.is-small img { width: 33%; }
+:is(.preview, .tagdown-reference-preview) .td-figure.is-medium img { width: 50%; }
+:is(.preview, .tagdown-reference-preview) .td-figure.is-large img { width: 75%; }
+:is(.preview, .tagdown-reference-preview) .td-figure.is-full img { width: 100%; }
+/* The size and caption bar, over the top of a figure while pointing at it. */
+.preview .td-figure { position: relative; }
+.preview .td-figure-tools {
+  position: absolute; top: 8px; left: 50%; z-index: 2;
+  display: flex; gap: 2px; padding: 3px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--bg-glass); backdrop-filter: blur(8px); box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  font-family: var(--font-ui); font-style: normal;
+  opacity: 0; transform: translateX(-50%); transition: opacity .12s ease; pointer-events: none;
+}
+.preview .td-figure:hover .td-figure-tools, .preview .td-figure-tools:focus-within { opacity: 1; pointer-events: auto; }
+.preview .td-figure-tools button {
+  min-width: 26px; height: 24px; padding: 0 7px;
+  border: 0; border-radius: 5px; background: none;
+  color: var(--ink-2); font: 500 12px var(--font-ui); cursor: pointer;
+}
+.preview .td-figure-tools button:hover { background: var(--hover-overlay); color: var(--ink); }
+.preview .td-figure-tools button[aria-pressed="true"] { background: var(--chip-bg); color: var(--ink); }
+.preview .td-figure-tools [data-figure-caption] { margin-left: 4px; border-left: 1px solid var(--rule); border-radius: 0 5px 5px 0; }
+.preview .td-figure figcaption { cursor: text; }
+.preview .td-figure-caption-input {
+  display: block; width: min(420px, 100%); margin: 6px auto 0; padding: 4px 8px;
+  border: 1px solid var(--rule-strong); border-radius: 6px; background: var(--bg-field);
+  color: var(--ink); font: italic 13px var(--font-serif); text-align: center;
+}
+.preview .td-figure-caption-input:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 .preview .td-figure figcaption {
   font-family: var(--font-serif);
   font-style: italic;

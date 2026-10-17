@@ -220,6 +220,7 @@ function slugify(text) {
 /* ---------- 1. Tokenizer ---------- */
 
 const VOID_TAGS = new Set(['hr', 'br', 'figure', 'embed']);
+const FIGURE_SIZES = new Set(['small', 'medium', 'large', 'full']);
 
 function tokenize(input) {
   const tokens = [];
@@ -421,6 +422,18 @@ function inline(text) {
     `<sup class="td-fn-ref" id="td-fnref-${id}"><a href="#td-fn-${id}">${id}</a></sup>`
   );
 
+  const images = [];
+  // 5a. Images ![alt](src "optional title"). `![alt|300](src)` gives the
+  //     width in pixels, as Obsidian writes it.
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;(.*?)&quot;)?\)/g, (_, alt, src, title) => {
+    const sized = alt.match(/^(.*?)\|(\d+)$/);
+    const width = sized ? ` width="${sized[2]}"` : '';
+    const tAttr = title ? ` title="${title}"` : '';
+    // Held aside like code, so `*` or `_` in a file name stays as written.
+    images.push(`<img class="td-image" src="${src}" alt="${sized ? sized[1] : alt}"${width}${tAttr}>`);
+    return ` IMG${images.length - 1} `;
+  });
+
   // 5. Links [text](url "optional title")
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]+)")?\)/g, (_, t, u, title) => {
     const tAttr = title ? ` title="${esc(title)}"` : '';
@@ -463,6 +476,7 @@ function inline(text) {
 
   // 16. Restore code spans
   s = s.replace(/ CODE(\d+) /g, (_, n) => `<code>${codeSpans[+n]}</code>`);
+  s = s.replace(/ IMG(\d+) /g, (_, n) => images[+n]);
 
   return s;
 }
@@ -940,13 +954,17 @@ const HANDLERS = {
 
   figure: (n, a) => {
     // <figure img.png "Caption text" /> or <figure src=img.png caption="..." />
-    const src = a.src || shorthand(a, 'src', ['alt','width','height','caption']);
+    // size=small|medium|large|full sets the width against the text column;
+    // width=320 (pixels) or width=60% sets it exactly.
+    const src = a.src || shorthand(a, 'src', ['alt','width','height','caption','size']);
     const alt = a.alt || '';
-    const w = a.width ? ` width="${esc(a.width)}"` : '';
+    const width = String(a.width || '').trim();
+    const w = /^\d+(\.\d+)?%$/.test(width) ? ` style="width: ${esc(width)}"` : width ? ` width="${esc(width)}"` : '';
+    const size = FIGURE_SIZES.has(String(a.size).toLowerCase()) ? ` is-${String(a.size).toLowerCase()}` : '';
     const cap = a.caption || (a._pos && a._pos[0]) || getRawText(n).trim();
     const img = src ? `<img src="${esc(src)}" alt="${esc(alt)}"${w}>` : '';
     const caption = cap ? `<figcaption>${inline(cap)}</figcaption>` : '';
-    return `<figure class="td-figure">${img}${caption}</figure>`;
+    return `<figure class="td-figure${size}">${img}${caption}</figure>`;
   },
 
   quote: (n, a) => {

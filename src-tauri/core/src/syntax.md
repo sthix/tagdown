@@ -330,10 +330,18 @@ Figures, quotes, and embeds cover common prose-document needs without heavy rich
 
 ### Figure
 
-Use src/caption attributes or positional shorthand.
+An image with a caption. size= is small, medium, large or full (a third, half, three quarters or all of the text width); width= takes pixels or a percentage. In the preview, point at a figure to set both.
 
 ```tagdown
-<figure src=diagram.png caption="System diagram" />
+<figure src=diagram.png caption="System diagram" size=medium />
+```
+
+### Image
+
+A plain Markdown image, inline with the text. A number after | sets the width in pixels, as Obsidian writes it.
+
+```tagdown
+![The team at the offsite|320](attachments/offsite.jpg)
 ```
 
 ### Quote

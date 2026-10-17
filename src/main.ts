@@ -32,6 +32,7 @@ import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, r
 import { openQuickCapture } from './quickCapture';
 import { openLocalGraph } from './localGraph';
 import { offerLinkNote, onEmptyLine, openSaveLinkDialog, webUrl } from './webLinks';
+import { decorateFigures, setFigure } from './figures';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -2810,6 +2811,28 @@ function markWikilinks(el: HTMLElement) {
   });
 }
 
+/** The source of preview block `index`. */
+function blockSource(index: number): string | null {
+  const block = previewBlocks[index];
+  return block ? content.split('\n').slice(block.start, block.end).join('\n') : null;
+}
+
+/** Set the caption or size of a figure from its bar in the preview. */
+function editFigure(index: number, figure: number, key: 'caption' | 'size', value: string) {
+  const block = previewBlocks[index];
+  const source = blockSource(index);
+  const next = source === null ? null : setFigure(source, figure, key, value);
+  if (!block || next === null) return;
+  const lines = content.split('\n');
+  lines.splice(block.start, block.end - block.start, ...next.split('\n'));
+  content = lines.join('\n');
+  const textarea = editorRoot.querySelector<HTMLTextAreaElement>('#source');
+  if (textarea) textarea.value = content;
+  const preview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (preview) paintPreview(preview);
+  scheduleSave();
+}
+
 function paintPreview(el: HTMLElement) {
   const { html, blocks } = renderEditablePreview(content);
   previewBlocks = blocks;
@@ -2820,6 +2843,7 @@ function paintPreview(el: HTMLElement) {
     : '';
   el.innerHTML = html + append + daySummaryHtml() + backlinksHtml();
   resolveLocalImages(el);
+  decorateFigures(el, { sourceOf: blockSource, edit: editFigure });
   markDocTitle(el);
   markWikilinks(el);
   void fillQueries(el, { excludeId: selectedNote?.id ?? null, table: tableActions });
@@ -3419,7 +3443,7 @@ function renderEditor() {
 }
 
 function isInteractive(target: HTMLElement) {
-  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .backlinks, .td-query-table, .td-qt-bulk, .td-qt-new, .td-qb, .td-qc');
+  return !!target.closest('a, button, input, select, textarea, summary, label, iframe, video, audio, [data-embed-url], .td-tag, .td-figure-tools, .td-figure figcaption, .backlinks, .td-query-table, .td-qt-bulk, .td-qt-new, .td-qb, .td-qc');
 }
 
 const wikilinkOptions = {

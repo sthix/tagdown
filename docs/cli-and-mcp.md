@@ -33,7 +33,7 @@ Notes are addressed by title (case-insensitive), by their file in the vault as a
 | `tagdown list [--folder NAME] [--tag TAG] [--limit N]` | Notes, most recently edited first |
 | `tagdown show <note>` | Print a note |
 | `tagdown new <title> [text \| -] [--type TYPE]` | Create a note; `-` reads the body from stdin. With `--type Book`, it's a [Book note](organizing.md#note-types) that starts from the Book Template |
-| `tagdown append <note> <text \| ->` | Add text to the end of a note |
+| `tagdown append <note> <text \| ->` | Add text to the end of a note. A list item added after a list item joins that list |
 | `tagdown journal [day] [text \| -]` | Print a day's [journal](journal.md) page, or add text to it; `day` is `YYYY-MM-DD`, `today` (the default), `yesterday` or `tomorrow` |
 | `tagdown today [text \| -]` | Quick capture: add text to today's journal page (without text, print it). Short for `tagdown journal today …`. List items join the list at the end of the page |
 | `tagdown tasks [--done \| --all] [--tag TAG]` | Checklist items across notes (open ones by default) |

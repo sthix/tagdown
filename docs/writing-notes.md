@@ -84,13 +84,25 @@ Lists continue as you type. Press **↩** at the end of a bullet, a numbered ite
 
 Lists nest like an outliner. **Tab** makes the current item a child of the item above it, and takes its own children along. **⇧Tab** moves it back out. Nested items show a thin guide line in the preview, and numbered lists renumber themselves as items move. **⇧↩** adds a line inside an item without starting a new one.
 
+## Images
+
+Paste an image, drop one on the editor or the preview, or choose **Image** in the `/` menu to pick files. Each image is copied into the vault's `attachments/` folder and added to the note as a figure:
+
+```tagdown
+<figure src="attachments/Pasted image 2026-10-17 09.12.04.png" />
+```
+
+In the preview, point at a figure for a small bar: **S**, **M**, **L** and **Full** set its width to a third, half, three quarters or all of the text width (click the active one again for the image's own size), and **Add caption** puts a caption under it. Click a caption to change it; **↩** saves and **Esc** keeps the old one. The bar writes `size=` and `caption=` into the figure tag, so the note stays plain text.
+
+Images written the Markdown way, `![alt](path)`, or the Obsidian way, `![[photo.png]]`, show up too, inline with the text. A number after `|` sets the width in pixels: `![[photo.png|300]]`. See [Media](syntax.md#media) for every option.
+
 ## The formatting toolbar
 
 The floating toolbar at the bottom of the editor inserts headings, bold, italic, and code. Its **Components** menu inserts any Tagdown component (callouts, tabs, grids, figures, queries, math, diagrams, and more) as a ready-to-edit template.
 
 ## The command palette
 
-**⌘K** opens the command palette. Type to jump to a note by title or search inside notes (the [search syntax](organizing.md#search) works here), or run any app action: switch views, export, present, show tasks or history, change theme, and open settings. Use the arrow keys and **↩** to choose.
+**⌘K** opens the command palette. Type to jump to a note by title or search inside notes (the [search syntax](organizing.md#search) works here), or run any app action: switch views, export, present, show tasks or history, show a note's [graph](organizing.md#graph), [quick capture](journal.md#quick-capture) to today's journal, [save a web link](organizing.md#saved-web-links), change theme, and open settings. Use the arrow keys and **↩** to choose.
 
 ## Themes and accents
 

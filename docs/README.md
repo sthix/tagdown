@@ -12,11 +12,11 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 | Guide | What's in it |
 | --- | --- |
 | [Getting started](getting-started.md) | Download or build the app; what happens on first launch |
-| [Writing notes](writing-notes.md) | The workspace, tabs and panes, properties, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, the toolbar, themes and accents |
+| [Writing notes](writing-notes.md) | The workspace, tabs and panes, properties, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, images with sizes and captions, the toolbar, themes and accents |
 | [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
-| [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, note types and their templates, pinning, the archive, search, and wikilinks |
-| [Journal](journal.md) | A page for every day, date links, and a template for new days |
-| [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks, filtering by property, tables, boards and cards, and the open-tasks view |
+| [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, note types with templates and link fields, saved web links, pinning, the archive, search, wikilinks, and the local graph |
+| [Journal](journal.md) | A page for every day, date links, quick capture, what happened on a day, and a template for new days |
+| [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks, filtering by property, tables (with bulk edits), boards and cards, task days, priorities and repeats, and the Today, Upcoming and Inbox views |
 | [Version history](version-history.md) | How snapshots are kept and how to restore one |
 | [Sharing your notes](sharing.md) | HTML and PDF export, slides, and publishing a static website |
 | [Command line and AI assistants](cli-and-mcp.md) | The `tagdown` CLI and its MCP server for Claude and other assistants |

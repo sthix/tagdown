@@ -14,6 +14,8 @@ Tagdown Editor is a [Tauri v2](https://v2.tauri.app) app:
 
 The UI never touches the filesystem directly; it calls Tauri commands, which go through `tagdown-core`. The CLI and MCP server use the same crate, so the app, the command line, and AI assistants all read and write notes the same way, with the same version history.
 
+The one thing that reaches the network is saving a web link (`weblink.rs`): it fetches the page with the system's `curl`, http and https only, so the app carries no HTTP or TLS stack of its own.
+
 ## Project layout
 
 ```text
@@ -27,6 +29,17 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   ├── blockDrag.ts        # drag-and-drop reordering of preview blocks
 │   ├── queries.ts          # <query /> blocks (lists, tables, boards, cards) and the open-tasks view
 │   ├── boardLanes.ts       # which lane a board card goes in, and moving it
+│   ├── tableSelection.ts   # rows ticked in a table, for setting a property on all of them
+│   ├── queryText.ts        # rewriting a query's text (sorting, columns)
+│   ├── propertiesPanel.ts  # the properties panel and its value fields
+│   ├── linkFields.ts       # properties that link to notes of another type
+│   ├── taskRepeat.ts       # the next task of a repeating one
+│   ├── journal.ts          # day keys, the journal calendar, appending to a page
+│   ├── quickCapture.ts     # ⌥⌘J quick capture box
+│   ├── localGraph.ts       # the ⌘⇧G graph of a note's links
+│   ├── webLinks.ts         # saving a web link as a Link note (box and paste offer)
+│   ├── localImages.ts      # images copied into attachments/ and loaded from the vault
+│   ├── figures.ts          # the size and caption bar on figures
 │   ├── history.ts          # version history dialog
 │   ├── presentation.ts     # slides
 │   ├── export.ts           # HTML export and print
@@ -36,12 +49,15 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   └── tagdown/            # parser, renderer, blocks, slides, syntax reference data
 ├── src-tauri/
 │   ├── src/commands/       # Tauri commands called from the UI
-│   └── core/src/           # vault, vaults, folders, frontmatter, search_index,
-│                           # links, history, tasks, query, types, watcher, site,
-│                           # library, mcp
+│   └── core/src/           # vault, vaults, folders, frontmatter, properties,
+│                           # search_index, links (backlinks, local graph), history,
+│                           # tasks, query, types, journal (day pages, "This day"),
+│                           # weblink (fetching pages for Link notes), watcher,
+│                           # site, library, mcp
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data
 ├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides,
-│                           # board lanes, syntax
+│                           # board lanes, table selection, journal, graph layout,
+│                           # web links, figures, task repeats, syntax
 └── docs/                   # this documentation
 ```
 

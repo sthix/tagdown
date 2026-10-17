@@ -36,7 +36,7 @@ Tagdown is a note format built on Markdown with extra structure for knowledge wo
 
 - familiar Markdown for headings, lists, links, quotes, tables, and code
 - `#tags` (nested with `/`) and `[[wikilinks]]` between notes
-- document components such as callouts, tabs, grids, collapsible details, asides, figures, quotes, and keyboard hints
+- document components such as callouts, tabs, grids, collapsible details, asides, figures with captions and sizes, quotes, and keyboard hints
 - technical writing with KaTeX math and Mermaid diagrams
 - live `<query />` blocks that list notes or tasks from across the vault
 
@@ -64,6 +64,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
 - **Outliner lists**: ↩ continues bullets, numbers, and tasks; Tab and ⇧Tab nest and un-nest items with their children.
 - **Drag to reorder** blocks in the preview by their grip, or move the block you're editing with ⌘⇧↑ / ⌘⇧↓. Headings bring their whole section along (a setting you can turn off).
+- **Images**: paste or drop them into a note and they're copied into the vault. Point at one in the preview to make it small, medium, large or full width, or to add a caption. Markdown `![alt](path)` and Obsidian `![[photo.png|300]]` images work too.
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
@@ -81,9 +82,10 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Wikilinks** with autocomplete, by title or, Obsidian-style, by file path. Links follow renames automatically and show up as *Linked mentions* under the target note. A local graph (⌘⇧G) shows a note's links both ways, colored by note type.
 - **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J, or `tagdown today "…"`) adds a line to today's page from anywhere.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
-- **Note types** like Book, Person or Project: a `type:` property, a sidebar section, and a template note that new notes of the type start from.
+- **Note types** like Book, Person or Project: a `type:` property, a sidebar section, and a template note that new notes of the type start from. A template property such as `author: "[[Person]]"` makes a link field that suggests (and creates) notes of that type.
 - **Saved web links**: paste a link on an empty line (or use *Save web link…*) to keep the page as a Link note with its title, description and opening text.
-- **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables, kanban **boards** (drag a card to change its status) or **cards** with cover images. Tick tasks right in the list; ⌘⇧T shows every open task.
+- **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables (tick rows to set a property on all of them at once), kanban **boards** (drag a card to change its status) or **cards** with cover images.
+- **Tasks** with a day (`[[2026-10-20]]`), a priority (`!high`) and repeats (`every:week`), ticked right in any list. ⌘⇧T shows them as **Today**, **Upcoming** and **Inbox**.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
 
 ### Safety
@@ -98,7 +100,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 ### AI-ready
 
-- The **`tagdown` CLI** searches, reads, creates (typed notes too), and appends to notes from the terminal.
+- The **`tagdown` CLI** searches, reads, creates (typed notes too), and appends to notes from the terminal; `tagdown today "…"` is a quick capture to today's journal page.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
 ## How it compares
@@ -113,6 +115,8 @@ Tagdown sits between Obsidian and Notion: plain Markdown files you own, with ric
 | Wikilinks and backlinks | ✅ | ✅ | ✅ | ⚠️ @-mentions |
 | Nested tags | ✅ | ✅ | ✅ | ⚠️ properties |
 | Daily journal | ✅ | ✅ | ✅ | ⚠️ templates |
+| Graph of linked notes | ⚠️ local graph per note | ✅ global and local | ✅ global and per page | ❌ |
+| Save web pages as notes | ⚠️ paste a link in the app | ✅ Web Clipper extension | ⚠️ via plugins | ✅ Web Clipper |
 | Tabs and side-by-side notes | ✅ | ✅ | ⚠️ right sidebar only | ⚠️ side peek |
 | Callouts, tabs, grids, cards | ✅ built in | ⚠️ callouts; rest via plugins | ⚠️ admonitions | ✅ blocks |
 | Math and Mermaid diagrams | ✅ | ✅ | ⚠️ Mermaid via plugin | ✅ |
@@ -195,11 +199,11 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | | |
 | --- | --- |
 | [Getting started](docs/getting-started.md) | Download, build from source, first launch |
-| [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes and accents |
+| [Writing notes](docs/writing-notes.md) | Workspace, view modes, images, toolbar, themes and accents |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
-| [Organizing your vault](docs/organizing.md) | Vaults, folders, tags, note types, pinning, archive, search, wikilinks |
-| [Journal](docs/journal.md) | Daily pages, date links, journal template |
-| [Queries and tasks](docs/queries-and-tasks.md) | Live queries, tables, boards, cards, and the open-tasks view |
+| [Organizing your vault](docs/organizing.md) | Vaults, folders, tags, note types, web links, pinning, archive, search, wikilinks, graph |
+| [Journal](docs/journal.md) | Daily pages, date links, quick capture, what happened on a day, journal template |
+| [Queries and tasks](docs/queries-and-tasks.md) | Live queries, tables, boards, cards, task days, priorities and repeats, and the open-tasks view |
 | [Version history](docs/version-history.md) | Snapshots and restoring |
 | [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
 | [Command line and AI assistants](docs/cli-and-mcp.md) | The `tagdown` CLI and MCP server |
@@ -229,7 +233,7 @@ node --test tests/*.mjs
 
 ## Current status
 
-Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), multiple vaults with folders on disk, full-text search, wikilinks and backlinks, the daily journal, live queries, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
+Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), multiple vaults with folders on disk, full-text search, wikilinks and backlinks with a local graph, the daily journal with quick capture, note types, live queries with tables, boards and cards, tasks with days and repeats, saved web links, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
 See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
 

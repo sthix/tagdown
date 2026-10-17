@@ -96,7 +96,7 @@ A task can carry a few words that Tagdown reads, all plain text:
 - [ ] Read the CRDT paper !low
 ```
 
-- **Its day** is the first date link in it. The date link also puts the task on that day's [journal page](journal.md) under *Linked mentions*. The preview shows it as *Today*, *Tomorrow* or *Tue, Oct 20*, highlighted when it's today or overdue. Type `/date` to insert today's date and change it.
+- **Its day** is the first date link in it. The date link also puts the task on that day's [journal page](journal.md), under *This day* while it's open and under *Linked mentions*. The preview shows it as *Today*, *Tomorrow* or *Tue, Oct 20*, highlighted when it's today or overdue. Type `/date` to insert today's date and change it.
 - **Its priority** is `!high`, `!medium` or `!low`, shown as a flag.
 - **`every:day`**, `every:weekday`, `every:week`, `every:month` or `every:year` makes it **repeat**. Ticking it adds the next one above it, with its day moved on (a task without a day repeats from today). The ticked one stays as a record.
 

@@ -484,6 +484,20 @@ fn has_markdown(root: &Path) -> bool {
         .any(|entry| entry.file_type().is_file() && entry.path().extension().and_then(|s| s.to_str()) == Some(NOTE_EXT))
 }
 
+/// The vault-relative path of a file called `name` anywhere in the vault, for
+/// Obsidian's `![[photo.png]]`, which names an image without its folder. The
+/// one nearest the top wins, as in Obsidian.
+pub fn find_file_by_name(root: &Path, name: &str) -> Option<String> {
+    let wanted = name.to_lowercase();
+    WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|entry| entry.depth() == 0 || !is_skipped(entry))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file() && entry.file_name().to_str().is_some_and(|n| n.to_lowercase() == wanted))
+        .min_by_key(|entry| entry.depth())
+        .and_then(|entry| entry.path().strip_prefix(root).ok()?.to_str().map(str::to_string))
+}
+
 /// `dir/name`, or `dir/name 2.md` and so on when that's taken.
 pub(crate) fn free_path(dir: &Path, name: &str) -> PathBuf {
     let (stem, ext) = name.rsplit_once('.').map_or((name, String::new()), |(s, e)| (s, format!(".{e}")));
@@ -514,6 +528,19 @@ fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {
 mod tests {
     use super::*;
     use std::env;
+
+    #[test]
+    fn files_are_found_by_name_nearest_the_top() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(dir.join("a/b")).unwrap();
+        fs::create_dir_all(dir.join(".obsidian")).unwrap();
+        fs::write(dir.join("a/b/Photo.png"), b"1").unwrap();
+        fs::write(dir.join("a/photo.png"), b"2").unwrap();
+        fs::write(dir.join(".obsidian/other.png"), b"3").unwrap();
+        assert_eq!(find_file_by_name(&dir, "photo.PNG").as_deref(), Some("a/photo.png"));
+        assert_eq!(find_file_by_name(&dir, "other.png"), None, "hidden folders are skipped");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn save_note_derives_tags_from_body() {

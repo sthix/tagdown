@@ -10,8 +10,26 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'h
 
 let vaultRoot: string | null = null;
 
+// Where `![[photo.png]]` images are, by name. A file that was found stays
+// where it is; a miss is asked again after a while, in case it was added since.
+const found = new Map<string, string>();
+const asked = new Map<string, { path: Promise<string | null>; at: number }>();
+const MISS_TTL = 5000;
+
 export function setVaultRoot(path: string | null) {
   vaultRoot = path ? path.replace(/\/+$/, '') : null;
+  found.clear();
+  asked.clear();
+}
+
+function findImage(name: string): Promise<string | null> {
+  const key = name.toLowerCase();
+  const last = asked.get(key);
+  if (last && Date.now() - last.at < MISS_TTL) return last.path;
+  const path = invoke<string | null>('find_attachment', { name }).catch(() => null);
+  asked.set(key, { path, at: Date.now() });
+  void path.then((p) => { if (p) found.set(key, p); });
+  return path;
 }
 
 /** Point images with a local path (`attachments/a.png`, `/Users/…/b.jpg`) at their file. */
@@ -27,6 +45,18 @@ export function resolveLocalImages(root: HTMLElement) {
         figure.classList.add('is-missing');
         figure.dataset.missing = `Image not found: ${src}`;
       }, { once: true });
+    }
+    // `![[photo.png]]` names the image without its folder.
+    const name = img.dataset.vaultName;
+    if (name) {
+      const show = (path: string | null) => {
+        if (!path || !vaultRoot) return;
+        try { img.src = convertFileSrc(`${vaultRoot}/${path}`); } catch { /* not in the app */ }
+      };
+      const known = found.get(name.toLowerCase());
+      if (known) show(known);
+      else void findImage(name).then(show);
+      return;
     }
     // URLs (https:, data:, asset:, …) load as they are.
     if (/^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//')) return;

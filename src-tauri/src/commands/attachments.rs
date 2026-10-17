@@ -6,7 +6,7 @@ use std::{fs, path::{Path, PathBuf}, sync::Mutex};
 
 use tauri::{ipc::{InvokeBody, Request}, State};
 
-use crate::AppState;
+use crate::{vault::find_file_by_name, AppState};
 
 const ATTACHMENTS: &str = "attachments";
 const IMAGE_EXTENSIONS: [&str; 11] = ["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "heic", "heif", "bmp", "tiff"];
@@ -29,6 +29,13 @@ pub async fn import_attachment(path: String, state: State<'_, Mutex<AppState>>) 
     let name = source.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
     let root = state.lock().map_err(|e| e.to_string())?.vault.root.clone();
     store(&root, &name, &bytes)
+}
+
+/// Where in the vault the image called `name` is, for `![[photo.png]]`.
+#[tauri::command]
+pub async fn find_attachment(name: String, state: State<'_, Mutex<AppState>>) -> Result<Option<String>, String> {
+    let root = state.lock().map_err(|e| e.to_string())?.vault.root.clone();
+    Ok(find_file_by_name(&root, &name))
 }
 
 fn store(root: &Path, name: &str, bytes: &[u8]) -> Result<String, String> {

@@ -57,3 +57,10 @@ test('figure sizes and percentage widths', () => {
   assert.equal(tagdown('<figure src=a.png width=60% />'), '<figure class="td-figure"><img src="a.png" alt="" style="width: 60%"></figure>');
   assert.equal(tagdown('<figure src=a.png width=200 size=huge />'), '<figure class="td-figure"><img src="a.png" alt="" width="200"></figure>');
 });
+
+test('Obsidian image embeds render as images', () => {
+  assert.equal(tagdown('![[photo.png]]'), '<p><img class="td-image" src="photo.png" alt="photo.png" data-vault-name="photo.png"></p>', 'a bare name is looked up in the vault');
+  assert.equal(tagdown('![[attachments/photo.png|300]]'), '<p><img class="td-image" src="attachments/photo.png" alt="photo.png" width="300"></p>');
+  assert.equal(tagdown('See ![[a_b_.JPG|200x100]] and ![[cat.webp|Our cat]]'), '<p>See <img class="td-image" src="a_b_.JPG" alt="a_b_.JPG" width="200" height="100" data-vault-name="a_b_.JPG"> and <img class="td-image" src="cat.webp" alt="Our cat" data-vault-name="cat.webp"></p>');
+  assert.doesNotMatch(tagdown('![[Plan]] ![[Plan#^ab12cd]]'), /td-image/, 'a note is not an image');
+});

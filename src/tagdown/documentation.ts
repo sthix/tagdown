@@ -208,8 +208,8 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Image',
-        description: 'A plain Markdown image, inline with the text. A number after | sets the width in pixels, as Obsidian writes it.',
-        syntax: '![The team at the offsite|320](attachments/offsite.jpg)'
+        description: 'A plain Markdown image, inline with the text, or Obsidian’s ![[offsite.jpg]], which finds the image by name anywhere in the vault. A number after | sets the width in pixels.',
+        syntax: '![The team at the offsite|320](attachments/offsite.jpg)\n\n![[offsite.jpg|320]]'
       },
       {
         title: 'Quote',

@@ -338,10 +338,12 @@ An image with a caption. size= is small, medium, large or full (a third, half, t
 
 ### Image
 
-A plain Markdown image, inline with the text. A number after | sets the width in pixels, as Obsidian writes it.
+A plain Markdown image, inline with the text, or Obsidian’s ![[offsite.jpg]], which finds the image by name anywhere in the vault. A number after | sets the width in pixels.
 
 ```tagdown
 ![The team at the offsite|320](attachments/offsite.jpg)
+
+![[offsite.jpg|320]]
 ```
 
 ### Quote

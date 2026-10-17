@@ -122,6 +122,8 @@ Math is rendered with KaTeX and diagrams with Mermaid.
 
 ![The team at the offsite|320](attachments/offsite.jpg)
 
+![[offsite.jpg|320]]
+
 <quote "Grace Hopper">
 The most dangerous phrase is: we have always done it this way.
 </quote>
@@ -131,7 +133,7 @@ The most dangerous phrase is: we have always done it this way.
 
 A figure's `size=` is `small`, `medium`, `large` or `full`: a third, half, three quarters or all of the text width. `width=` takes pixels (`width=320`) or a percentage (`width=60%`) instead. In the preview, point at a figure for a bar that sets its size and adds or edits its caption; clicking a caption edits it too. Images you paste or drop into a note arrive as figures.
 
-A plain Markdown image `![alt](path)` sits inline with the text. A number after `|` sets its width in pixels, the way Obsidian writes it.
+A plain Markdown image `![alt](path)` sits inline with the text. A number after `|` sets its width in pixels, the way Obsidian writes it. Obsidian's own `![[offsite.jpg]]` works too: with just a file name, Tagdown finds the image wherever it is in the vault, so notes from an Obsidian vault show their pictures. `![[attachments/offsite.jpg|320]]` gives the path and a width.
 
 YouTube and Vimeo embeds show a thumbnail that opens the video in your browser.
 

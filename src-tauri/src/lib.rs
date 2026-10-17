@@ -97,6 +97,7 @@ pub fn run() {
             commands::vaults::forget_vault,
             commands::attachments::save_attachment,
             commands::attachments::import_attachment,
+            commands::attachments::find_attachment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

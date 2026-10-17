@@ -408,7 +408,21 @@ function inline(text) {
   //     `[[Note#^ab12cd]]`, not text.
   s = s.replace(BLOCK_MARKER_RE, (_, lead, id) => `<span class="td-block-id" data-block-id="${id}"></span>`);
 
-  // 3c. Wikilinks [[Note]] or [[Note|alias]] — internal references for notes apps.
+  // 3c. Image embeds ![[photo.png]] or ![[attachments/photo.png|300]], as
+  //     Obsidian writes them. Held aside like code (see 5a). A bare file name
+  //     says nothing about its folder, so the app looks it up in the vault.
+  const images = [];
+  s = s.replace(IMAGE_EMBED_RE, (_, target, alias) => {
+    const src = target.trim();
+    const sized = alias?.trim().match(/^(\d+)(?:x(\d+))?$/);
+    const alt = sized || !alias ? src.split('/').pop() : alias.trim();
+    const width = sized ? ` width="${sized[1]}"${sized[2] ? ` height="${sized[2]}"` : ''}` : '';
+    const lookup = src.includes('/') ? '' : ` data-vault-name="${src}"`;
+    images.push(`<img class="td-image" src="${src}" alt="${alt}"${width}${lookup}>`);
+    return ` IMG${images.length - 1} `;
+  });
+
+  // 3d. Wikilinks [[Note]] or [[Note|alias]] — internal references for notes apps.
   //     A block link [[Note#^id]] reads as the note's title.
   s = s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => {
     const t = target.trim();
@@ -422,7 +436,6 @@ function inline(text) {
     `<sup class="td-fn-ref" id="td-fnref-${id}"><a href="#td-fn-${id}">${id}</a></sup>`
   );
 
-  const images = [];
   // 5a. Images ![alt](src "optional title"). `![alt|300](src)` gives the
   //     width in pixels, as Obsidian writes it.
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;(.*?)&quot;)?\)/g, (_, alt, src, title) => {
@@ -487,6 +500,8 @@ const BLOCK_MARKER_RE = /(^|[ \t])\^([A-Za-z0-9-]+)[ \t]*(?=\n|$)/gm;
 const STANDALONE_MARKER_RE = /(^|\n)[ \t]*\^([A-Za-z0-9-]+)[ \t]*$/;
 const BLOCK_TARGET_RE = /^([^#]*)#\^([A-Za-z0-9-]+)$/;
 const BLOCK_EMBED_RE = /!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]/g;
+// Obsidian's `![[photo.png|300]]`: an embed whose target is an image file.
+const IMAGE_EMBED_RE = /!\[\[([^\]|#]+\.(?:png|jpe?g|gif|webp|avif|svg|heic|heif|bmp|tiff?))\s*(?:\|([^\]]*))?\]\]/gi;
 const BLOCK_EMBED_LINE_RE = /^!\[\[([^\]|#]+#\^[A-Za-z0-9-]+)\s*(?:\|([^\]]+))?\]\]$/;
 
 /* A `^` in an attribute would look like superscript to inline(); spell it as an entity. */

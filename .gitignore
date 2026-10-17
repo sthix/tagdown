@@ -5,3 +5,8 @@ src-tauri/target/
 src-tauri/gen/
 .DS_Store
 .env
+docs/_site/
+docs/.jekyll-cache/
+docs/.jekyll-metadata
+docs/.bundle/
+docs/vendor/

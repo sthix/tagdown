@@ -62,6 +62,8 @@ A note titled after the type plus "Template" (**Book Template**, **Person Templa
 - its **text** below the title;
 - its **`icon:`** property, an emoji, is the type's icon in the sidebar and the note list. It isn't copied into new notes.
 
+<!-- {% raw %} -->
+
 In the template, `{{title}}`, `{{date}}`, `{{weekday}}`, `{{yesterday}}` and `{{tomorrow}}` are filled in for each new note, in the text and in property values (`started: "{{date}}"` becomes that day's date).
 
 ```tagdown
@@ -78,6 +80,8 @@ started: "{{date}}"
 
 ## Notes
 ```
+
+<!-- {% endraw %} -->
 
 Press **+** next to **Types** to start a type: it creates the template note with an empty `icon` for you. Right-click a type to edit its template or make one.
 

@@ -1,30 +1,44 @@
-# Tagdown documentation
+# Get to know Tagdown
 
-Everything about using Tagdown Editor, from your first note to publishing a website and letting an AI assistant work with your vault.
+> A practical guide to writing, connecting, and sharing your notes. Start small and explore as you go.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
-  <img width="1440" alt="Tagdown Editor in split view, with three notes open as tabs and the launch plan's properties folded to one line" src="images/tagdown-editor-light.png" />
-</picture>
+A daily thought, a project plan, a collection of ideas. Tagdown gives them a home in plain Markdown files on your Mac, with a little extra structure when you need it.
 
-## Guides
+These guides will help you find your way around, build a habit of taking notes, and make useful connections between them.
 
-| Guide | What's in it |
-| --- | --- |
-| [Getting started](getting-started.md) | Download or build the app; what happens on first launch |
-| [Writing notes](writing-notes.md) | The workspace, tabs and panes, properties, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, images with sizes and captions, the toolbar, themes and accents |
-| [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
-| [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, note types with templates and link fields, saved web links, pinning, the archive, search, wikilinks, and the local graph |
-| [Journal](journal.md) | A page for every day, date links, quick capture, what happened on a day, and a template for new days |
-| [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks, filtering by property, tables (with bulk edits), boards and cards, task days, priorities and repeats, and the Today, Upcoming and Inbox views |
-| [Version history](version-history.md) | How snapshots are kept and how to restore one |
-| [Sharing your notes](sharing.md) | HTML and PDF export, slides, and publishing a static website |
-| [Command line and AI assistants](cli-and-mcp.md) | The `tagdown` CLI and its MCP server for Claude and other assistants |
-| [Keyboard shortcuts](keyboard-shortcuts.md) | Every shortcut on one page |
-| [Development](development.md) | Architecture, project layout, tests, releasing, and contributing |
+## Quick start
 
-## At a glance
+<div class="guide-grid">
+  <a class="guide-card" href="getting-started.md">
+    <div class="guide-cover cover-start"><img src="images/tagdown-editor-light.png" alt="Tagdown's note editor and library" width="1440" height="900" /></div>
+    <div class="guide-card-body"><span class="guide-card-title">Your first note</span><span class="guide-card-description">Install Tagdown and make yourself at home.</span></div>
+  </a>
+  <a class="guide-card" href="writing-notes.md">
+    <div class="guide-cover cover-write"><img src="images/panes-light.png" alt="Two notes open side by side" width="1440" height="900" /></div>
+    <div class="guide-card-body"><span class="guide-card-title">Find your writing flow</span><span class="guide-card-description">Explore the editor, tabs, and preview.</span></div>
+  </a>
+  <a class="guide-card" href="journal.md">
+    <div class="guide-cover cover-journal"><img src="images/journal-light.png" alt="The daily journal in Tagdown" width="1440" height="900" loading="lazy" /></div>
+    <div class="guide-card-body"><span class="guide-card-title">A page for every day</span><span class="guide-card-description">Capture thoughts and keep a daily journal.</span></div>
+  </a>
+  <a class="guide-card" href="organizing.md">
+    <div class="guide-cover cover-connect"><img src="images/local-graph-light.png" alt="A graph of connections between notes" width="1440" height="900" loading="lazy" /></div>
+    <div class="guide-card-body"><span class="guide-card-title">Connect your ideas</span><span class="guide-card-description">Bring notes together with links and tags.</span></div>
+  </a>
+</div>
 
-- Notes are plain `.md` files in `~/Documents/Tagdown`. You own them; any editor, sync service, or git can read them.
-- Tagdown is Markdown with a small tag layer on top. Plain Markdown is always valid Tagdown.
-- The app is built with Tauri v2, TypeScript, and Rust, and is designed for macOS.
+## Go a little further
+
+- [🧩 Tagdown syntax](syntax.md): Markdown, callouts, tabs, columns, math, and diagrams.
+- [✅ Queries and tasks](queries-and-tasks.md): Find notes, build live views, and keep track of what needs doing.
+- [📜 Version history](version-history.md): Look back at earlier versions and restore a snapshot.
+- [🌐 Sharing your notes](sharing.md): Export a document, present slides, or publish a website.
+- [⌨️ Keyboard shortcuts](keyboard-shortcuts.md): Keep your hands on the keyboard.
+- [🤖 Command line and AI assistants](cli-and-mcp.md): Work with your vault through the CLI and MCP server.
+- [🛠️ Development](development.md): Build Tagdown, run the tests, and contribute.
+
+## Your notes stay yours
+
+Notes are plain `.md` files in `~/Documents/Tagdown`. Open them in another editor, sync them with your preferred service, or keep them in git. Plain Markdown is always valid Tagdown.
+
+Tagdown is an open-source macOS app built with Tauri, TypeScript, and Rust. You can [download the latest release](https://github.com/sthix/tagdown/releases/latest) or [explore the source on GitHub](https://github.com/sthix/tagdown).

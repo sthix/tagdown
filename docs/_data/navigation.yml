@@ -1,0 +1,42 @@
+- title: Getting started
+  pages:
+    - title: Welcome to Tagdown
+      url: /
+      icon: "👋"
+    - title: Getting started
+      url: /getting-started.html
+      icon: "🚀"
+    - title: Writing notes
+      url: /writing-notes.html
+      icon: "✍️"
+    - title: Daily journaling
+      url: /journal.html
+      icon: "📓"
+    - title: Connecting your notes
+      url: /organizing.html
+      icon: "🔗"
+- title: Using Tagdown
+  pages:
+    - title: Tagdown syntax
+      url: /syntax.html
+      icon: "🧩"
+    - title: Queries and tasks
+      url: /queries-and-tasks.html
+      icon: "✅"
+    - title: Version history
+      url: /version-history.html
+      icon: "📜"
+    - title: Sharing your notes
+      url: /sharing.html
+      icon: "🌐"
+    - title: Keyboard shortcuts
+      url: /keyboard-shortcuts.html
+      icon: "⌨️"
+- title: Build with Tagdown
+  pages:
+    - title: CLI and AI assistants
+      url: /cli-and-mcp.html
+      icon: "🤖"
+    - title: Development
+      url: /development.html
+      icon: "🛠️"

@@ -49,6 +49,8 @@ Click any of them to open it. **Linked mentions** follows below.
 
 Create a note titled **Journal Template**. Each new day's page starts with its body (everything after the title heading). These placeholders are filled in:
 
+<!-- {% raw %} -->
+
 | Placeholder | Becomes |
 | --- | --- |
 | `{{date}}` | The day, e.g. `2026-10-13` |
@@ -65,6 +67,8 @@ Create a note titled **Journal Template**. Each new day's page starts with its b
 
 ### Notes
 ```
+
+<!-- {% endraw %} -->
 
 Changing the template only affects pages created afterwards.
 

@@ -24,6 +24,7 @@ import { renderPropertiesPanel } from './propertiesPanel';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
+import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
 import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import './styles/tokens.css';
 import './styles/layout.css';
@@ -146,6 +147,11 @@ void invoke<string>('vault_path').then((path) => {
   const preview = document.querySelector<HTMLDivElement>('#editor-root .preview');
   if (preview && !blockEdit) paintPreview(preview);
 }).catch(() => {});
+
+// Other vaults, for the palette; a switch saves what's pending first.
+let vaults: VaultEntry[] = [];
+void listVaults().then((list) => { vaults = list; });
+onBeforeVaultSwitch(settlePendingWork);
 
 // A file dropped outside the editor would otherwise replace the app with it.
 for (const type of ['dragover', 'drop'] as const) {
@@ -434,6 +440,10 @@ function paletteActions(): PaletteAction[] {
       { id: 'tasks', label: 'Show open tasks', hint: 'Every unticked task across your notes', shortcut: '⌘⇧T', icon: uiIcon('checklist', 15), run: showOpenTasks },
       { id: 'history', label: 'Show version history', hint: 'Restore an earlier version of this note', shortcut: '⌘⇧H', icon: uiIcon('clock', 15), run: showVersionHistory },
     ] : []),
+    ...vaults.filter((vault) => !vault.active && vault.available).map((vault) => (
+      { id: `vault-${vault.path}`, label: `Switch to vault “${vault.name}”`, hint: shortPath(vault.path), icon: uiIcon('folder', 15), run: () => switchVault(vault.path) }
+    )),
+    { id: 'open-vault', label: 'Open folder as vault…', hint: 'Keep notes in another folder', icon: uiIcon('folder', 15), run: chooseVaultFolder },
     { id: 'reference', label: 'Open Tagdown reference', hint: 'Syntax for callouts, tabs, math and more', icon: uiIcon('book', 15), run: () => openSettings('tagdown-reference') },
     { id: 'settings', label: 'Open settings', shortcut: '⌘,', icon: uiIcon('sliders', 15), run: () => openSettings('general') },
   ];

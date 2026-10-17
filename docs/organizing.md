@@ -2,7 +2,7 @@
 
 ## Where notes live
 
-Your vault is `~/Documents/Tagdown`. Each note is a Markdown file named `note-<id>.md`, with a small frontmatter block Tagdown maintains for you:
+Your vault is `~/Documents/Tagdown` unless you choose another folder (see [More than one vault](#more-than-one-vault)). Each note is a Markdown file named `note-<id>.md`, with a small frontmatter block Tagdown maintains for you:
 
 ```markdown
 ---
@@ -19,6 +19,13 @@ updated: 2026-10-12T09:42:00Z
 ```
 
 Folders and tag colours are recorded in `.tagdown/vault.json`. Because notes are ordinary files, you can back the vault up, sync it, or keep it in git. Changes made outside the app are picked up while it runs.
+
+
+## More than one vault
+
+A vault is any folder Tagdown keeps notes in, and you can have several: one for work, one for home, one on an external drive. In **Settings → General → Vault**, click **Open folder as vault…** and pick a folder; an empty or existing folder becomes a vault the first time you open it. Every vault you've opened stays in the list, and **Open** next to one switches to it. ⌘K finds the same commands: *Switch to vault …* and *Open folder as vault…*.
+
+Switching restarts Tagdown in the other vault, after saving whatever you were writing. Removing a vault from the list (the × on hover) only forgets it; its files stay where they are. The `tagdown` CLI and MCP server use whichever vault the app opened last.
 
 ## Folders
 

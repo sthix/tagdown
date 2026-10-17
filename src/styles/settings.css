@@ -1090,3 +1090,52 @@
 .confirm-button.is-danger:hover {
   background: #a3291c;
 }
+
+/* ---- Vault list ---- */
+
+.vault-list { display: grid; gap: 2px; }
+.vault-list:empty { display: none; }
+.vault-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 5px 6px 5px 8px;
+  border-radius: 8px;
+}
+.vault-item.is-active { background: var(--bg-segment); }
+.vault-item-icon { flex-shrink: 0; display: flex; color: var(--ink-3); }
+.vault-item.is-active .vault-item-icon { color: var(--ink-2); }
+.vault-item-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.vault-item-text strong { color: var(--ink); font-size: 13px; font-weight: 500; }
+.vault-item-text code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.vault-item.is-missing .vault-item-text { opacity: .6; }
+.vault-item-badge,
+.vault-item-missing { padding: 0 8px; color: var(--ink-3); font-size: 12px; }
+.vault-item-remove {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease;
+}
+.vault-item:hover .vault-item-remove,
+.vault-item-remove:focus-visible { opacity: 1; }
+.vault-item-remove:hover { background: var(--pressed-overlay); color: var(--ink); }
+.vault-list-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.vault-list-foot p { margin: 0; color: var(--ink-3); font-size: 12px; line-height: 1.45; }

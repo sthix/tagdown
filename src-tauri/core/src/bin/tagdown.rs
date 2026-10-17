@@ -9,7 +9,7 @@ use std::{
 use tagdown_core::{
     library::{day_title, resolve_day, Library, TaskFilter, SYNTAX},
     mcp,
-    vault::Vault,
+    vaults::VaultList,
 };
 
 const USAGE: &str = "\
@@ -33,7 +33,8 @@ Commands:
   syntax                      The Tagdown syntax reference
   mcp                         Run the MCP server on stdin/stdout for AI assistants
 
-The vault is ~/Documents/Tagdown unless --vault or TAGDOWN_VAULT says otherwise.
+The vault is the one the app has open (~/Documents/Tagdown at first) unless
+--vault or TAGDOWN_VAULT says otherwise.
 ";
 
 fn main() -> ExitCode {
@@ -82,7 +83,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
     }
     let vault = match take_option(&mut args, "--vault")?.or_else(|| std::env::var("TAGDOWN_VAULT").ok()) {
         Some(path) => PathBuf::from(path),
-        None => Vault::default_root()?,
+        None => VaultList::load().active_root()?,
     };
     if args.is_empty() {
         return Err("missing command; see tagdown --help".into());

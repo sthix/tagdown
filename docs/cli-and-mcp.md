@@ -16,7 +16,7 @@ This puts `tagdown` in `~/.cargo/bin`.
 
 ## Choosing the vault
 
-The vault is `~/Documents/Tagdown` unless you say otherwise:
+The vault is the one the app has open (`~/Documents/Tagdown` until you pick another) unless you say otherwise:
 
 ```sh
 tagdown --vault ~/Notes/Work list

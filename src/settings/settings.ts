@@ -5,6 +5,7 @@ import { uiIcon, UI_ICONS } from '../icons';
 import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThemePreference, type ThemePreference } from './theme';
 import { ACCENTS, getPreference, onPreferenceChange, setPreference, type Preferences } from './preferences';
 import { SHORTCUT_GROUPS } from './shortcuts';
+import { chooseVaultFolder, forgetVault, listVaults, shortPath, switchVault } from '../vaults';
 
 // ---- What the pages hold ----
 //
@@ -76,6 +77,7 @@ const PAGES: Page[] = [
             description: 'Your notes are plain Markdown files in this folder.',
             control: { kind: 'html', render: renderVaultControl },
           },
+          { label: 'Vaults', stacked: true, control: { kind: 'html', render: renderVaultList } },
         ],
       },
     ],
@@ -182,6 +184,7 @@ export function initSettings() {
   dialog.querySelector('[data-reveal-vault]')?.addEventListener('click', () => {
     void invoke('reveal_vault').catch(() => undefined);
   });
+  bindVaultList();
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     tab.addEventListener('click', () => activateTab(tab));
@@ -286,7 +289,7 @@ export function openSettings(panelId = 'general') {
   initSettings();
   const tab = dialog?.querySelector<HTMLButtonElement>(`[role="tab"][data-panel="${panelId}"]`);
   if (tab) activateTab(tab);
-  void loadVaultPath();
+  void loadVaults();
   window.clearTimeout(closeTimer);
   dialog?.classList.remove('is-closing');
   if (!dialog?.open) dialog?.showModal();
@@ -465,6 +468,30 @@ function renderVaultControl() {
   `;
 }
 
+function renderVaultList() {
+  return `
+    <div class="vault-list" data-vault-list></div>
+    <div class="vault-list-foot">
+      <p>Each vault is its own folder of notes. Opening one restarts Tagdown in it; removing one from the list leaves its files alone.</p>
+      <button type="button" class="td-button" data-choose-vault>${uiIcon('plus', 14)}<span>Open folder as vault…</span></button>
+    </div>
+  `;
+}
+
+function bindVaultList() {
+  dialog?.querySelector('[data-choose-vault]')?.addEventListener('click', () => void chooseVaultFolder());
+  dialog?.querySelector('[data-vault-list]')?.addEventListener('click', async (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('button[data-path]');
+    if (!button) return;
+    const path = button.dataset.path!;
+    if (button.hasAttribute('data-switch-vault')) await switchVault(path);
+    else if (button.hasAttribute('data-forget-vault')) {
+      await forgetVault(path).catch(() => undefined);
+      await loadVaults();
+    }
+  });
+}
+
 function renderThemePicker() {
   const current = getThemePreference();
   const choices: Array<{ value: ThemePreference; title: string }> = [
@@ -559,16 +586,32 @@ function syncControl(name: keyof Preferences) {
   if (output) output.textContent = `${value}px`;
 }
 
-async function loadVaultPath() {
-  const el = dialog?.querySelector<HTMLElement>('[data-vault-path]');
-  if (!el) return;
-  try {
-    const path = await invoke<string>('vault_path');
-    el.textContent = path.replace(/^\/Users\/[^/]+/, '~');
-    el.title = path;
-  } catch {
-    // Outside the app (the browser preview) there is no vault to ask about.
+async function loadVaults() {
+  const pathEl = dialog?.querySelector<HTMLElement>('[data-vault-path]');
+  const listEl = dialog?.querySelector<HTMLElement>('[data-vault-list]');
+  const vaults = await listVaults();
+  const open = vaults.find((vault) => vault.active);
+  if (pathEl && open) {
+    pathEl.textContent = shortPath(open.path);
+    pathEl.title = open.path;
   }
+  if (!listEl) return;
+  listEl.innerHTML = vaults.map((vault) => {
+    const path = escapeHtml(vault.path);
+    const action = vault.active
+      ? '<span class="vault-item-badge">Current</span>'
+      : vault.available
+        ? `<button type="button" class="td-button" data-switch-vault data-path="${path}">Open</button>`
+        : '<span class="vault-item-missing">Not found</span>';
+    const remove = vault.active ? '' : `
+      <button type="button" class="vault-item-remove" data-forget-vault data-path="${path}" title="Remove from list" aria-label="Remove ${escapeHtml(vault.name)} from list">${uiIcon('close', 12)}</button>`;
+    return `
+      <div class="vault-item ${vault.active ? 'is-active' : ''} ${vault.available ? '' : 'is-missing'}">
+        <span class="vault-item-icon">${uiIcon('folder', 15)}</span>
+        <span class="vault-item-text"><strong>${escapeHtml(vault.name)}</strong><code title="${path}">${escapeHtml(shortPath(vault.path))}</code></span>
+        ${action}${remove}
+      </div>`;
+  }).join('');
 }
 
 function bindThemePicker() {

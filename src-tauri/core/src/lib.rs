@@ -10,6 +10,7 @@ pub mod search_index;
 pub mod site;
 pub mod tasks;
 pub mod vault;
+pub mod vaults;
 pub mod watcher;
 pub mod library;
 pub mod mcp;

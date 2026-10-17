@@ -25,11 +25,12 @@ pub struct Vault {
 }
 
 impl Vault {
-    pub fn open_or_create_default() -> Result<Self, String> {
-        Self::open_or_create(Self::default_root()?)
+    /// Open the vault the app last had open (see `vaults`), creating the default one if needed.
+    pub fn open_or_create_active() -> Result<Self, String> {
+        Self::open_or_create(crate::vaults::VaultList::load().active_root()?)
     }
 
-    /// The vault the app uses: `~/Documents/Tagdown`.
+    /// The vault used until another is chosen: `~/Documents/Tagdown`.
     pub fn default_root() -> Result<PathBuf, String> {
         let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
         Ok(PathBuf::from(home).join("Documents").join("Tagdown"))

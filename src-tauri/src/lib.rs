@@ -5,7 +5,7 @@ use tauri::{Emitter, Manager};
 mod commands;
 
 // The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
-pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, vault, watcher};
+pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, vault, vaults, watcher};
 
 use commands::search::SearchState;
 use search_index::SearchIndex;
@@ -17,7 +17,7 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let vault = Vault::open_or_create_default().expect("failed to open or create default vault");
+    let vault = Vault::open_or_create_active().expect("failed to open or create the vault");
     let search = open_search_index(&vault);
     let (watch_vault, watch_search) = (vault.clone(), search.0.clone());
     let vault_root = vault.root.clone();
@@ -75,6 +75,9 @@ pub fn run() {
             commands::export::vault_path,
             commands::export::reveal_vault,
             commands::export::reveal_note,
+            commands::vaults::list_vaults,
+            commands::vaults::open_vault,
+            commands::vaults::forget_vault,
             commands::attachments::save_attachment,
             commands::attachments::import_attachment,
         ])

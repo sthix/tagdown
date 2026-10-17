@@ -34,7 +34,7 @@ The app bundle lands in `src-tauri/target/release/bundle/`.
 
 ## First launch
 
-On first launch Tagdown creates a vault at `~/Documents/Tagdown`:
+On first launch Tagdown creates a vault at `~/Documents/Tagdown` (you can switch to another folder, or keep several vaults, in Settings; see [Organizing](organizing.md#more-than-one-vault)):
 
 ```text
 ~/Documents/Tagdown/

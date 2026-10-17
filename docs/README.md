@@ -14,9 +14,9 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 | [Getting started](getting-started.md) | Download or build the app; what happens on first launch |
 | [Writing notes](writing-notes.md) | The workspace, tabs and panes, properties, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, the toolbar, themes and accents |
 | [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
-| [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, pinning, the archive, search, and wikilinks |
+| [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, note types and their templates, pinning, the archive, search, and wikilinks |
 | [Journal](journal.md) | A page for every day, date links, and a template for new days |
-| [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks and the open-tasks view |
+| [Queries and tasks](queries-and-tasks.md) | Live `<query />` blocks, filtering by property, tables, boards and cards, and the open-tasks view |
 | [Version history](version-history.md) | How snapshots are kept and how to restore one |
 | [Sharing your notes](sharing.md) | HTML and PDF export, slides, and publishing a static website |
 | [Command line and AI assistants](cli-and-mcp.md) | The `tagdown` CLI and its MCP server for Claude and other assistants |

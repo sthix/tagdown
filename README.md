@@ -6,7 +6,7 @@ Tagdown Editor is a macOS-focused Tauri app for writing structured notes without
 
 <p align="center">
   <strong>Plain text in. Beautiful documents out.</strong><br />
-  Local vaults · Wikilinks · Live queries · Full-text search · Slides · Publishing · MCP
+  Local vaults · Wikilinks · Note types · Live queries · Full-text search · Slides · Publishing · MCP
 </p>
 
 <p align="center">
@@ -97,12 +97,12 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 ### AI-ready
 
-- The **`tagdown` CLI** searches, reads, creates, and appends to notes from the terminal.
+- The **`tagdown` CLI** searches, reads, creates (typed notes too), and appends to notes from the terminal.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
 ## How it compares
 
-Tagdown sits between Obsidian and Notion: plain Markdown files you own, with rich document components, live queries, slides, and publishing built in rather than added through plugins or paid tiers.
+Tagdown sits between Obsidian and Notion: plain Markdown files you own, with rich document components, note types, live queries with table and board views, slides, and publishing built in rather than added through plugins or paid tiers.
 
 | | Tagdown | Obsidian | Logseq | Notion |
 | --- | :---: | :---: | :---: | :---: |
@@ -116,6 +116,8 @@ Tagdown sits between Obsidian and Notion: plain Markdown files you own, with ric
 | Callouts, tabs, grids, cards | ✅ built in | ⚠️ callouts; rest via plugins | ⚠️ admonitions | ✅ blocks |
 | Math and Mermaid diagrams | ✅ | ✅ | ⚠️ Mermaid via plugin | ✅ |
 | Live queries over notes and tasks | ✅ built in | ⚠️ Bases / Dataview | ✅ | ✅ databases |
+| Table, board, and card views | ✅ built in | ⚠️ Bases tables and cards; boards via plugins | ⚠️ tables; boards via plugins | ✅ |
+| Note types with templates | ✅ built in | ⚠️ Templates; no types | ⚠️ tag classes in DB version | ✅ database templates |
 | Version history | ✅ local, free | ⚠️ File recovery; full history with paid Sync | ⚠️ via git | ⚠️ limited on free plan |
 | Present as slides | ✅ | ✅ | ✅ | ❌ |
 | Publish as a website | ✅ free static site | ⚠️ paid Publish | ✅ static export | ✅ Notion Sites |
@@ -172,6 +174,7 @@ cargo install --path src-tauri/core
 
 tagdown search "tag:project budget"
 tagdown new "Meeting notes" "Agenda for [[Project Atlas]]"
+tagdown new "Dune" --type Book
 tagdown append "Meeting notes" "- [ ] Send recap"
 tagdown tasks
 ```
@@ -193,9 +196,9 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | [Getting started](docs/getting-started.md) | Download, build from source, first launch |
 | [Writing notes](docs/writing-notes.md) | Workspace, view modes, toolbar, themes and accents |
 | [Tagdown syntax](docs/syntax.md) | Everything Tagdown adds to Markdown |
-| [Organizing your vault](docs/organizing.md) | Vaults, folders, tags, pinning, archive, search, wikilinks |
+| [Organizing your vault](docs/organizing.md) | Vaults, folders, tags, note types, pinning, archive, search, wikilinks |
 | [Journal](docs/journal.md) | Daily pages, date links, journal template |
-| [Queries and tasks](docs/queries-and-tasks.md) | Live queries and the open-tasks view |
+| [Queries and tasks](docs/queries-and-tasks.md) | Live queries, tables, boards, cards, and the open-tasks view |
 | [Version history](docs/version-history.md) | Snapshots and restoring |
 | [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
 | [Command line and AI assistants](docs/cli-and-mcp.md) | The `tagdown` CLI and MCP server |

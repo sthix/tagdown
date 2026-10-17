@@ -30,11 +30,9 @@ The query uses the [search syntax](organizing.md#search) (words, `"phrases"`, `t
 
 A note never lists itself. When a query shows tasks, ticking one in the list ticks it in the note it lives in.
 
-## Properties
+## Filtering by property
 
-Properties are typed fields under a note's title: text, numbers, true/false, dates (`2026-11-14`), lists, and `[[links]]`, which count as backlinks. Add one with **Add property** in the command palette (⌘K). They live in the note's frontmatter as plain YAML.
-
-Queries filter on them:
+Queries filter on a note's [properties](writing-notes.md#properties):
 
 | Filter | Matches |
 | --- | --- |
@@ -42,6 +40,12 @@ Queries filter on them:
 | `status!=done` | Notes whose value isn't that, including notes without it |
 | `priority=2..`, `due=..today+7` | Ranges of numbers or dates, either end open; `today`, `today+N`, `today-N` |
 | `has:owner`, `-has:owner` | Notes with (or without) a value |
+
+```tagdown
+## Due this week
+
+<query status=active due=..today+7 sort:due />
+```
 
 ## Tables, boards and cards
 

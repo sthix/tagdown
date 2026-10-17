@@ -5,7 +5,7 @@
 | Shortcut | Action |
 | --- | --- |
 | ⌘K | Command palette: jump to a note, search, or run an action |
-| ⌘N | New note (in the selected folder) |
+| ⌘N | New note (in the selected folder; with a [type](organizing.md#note-types) selected, a note of that type) |
 | ⌘⇧J | Today's journal page |
 | ⌘S | Save now |
 | ⌘, | Settings |

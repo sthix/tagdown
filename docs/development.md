@@ -25,7 +25,8 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 │   ├── slashCommands.ts    # the / command menu
 │   ├── listEditing.ts      # ↩, Tab and ⇧Tab in lists (continue, nest, renumber)
 │   ├── blockDrag.ts        # drag-and-drop reordering of preview blocks
-│   ├── queries.ts          # <query /> blocks and the open-tasks view
+│   ├── queries.ts          # <query /> blocks (lists, tables, boards, cards) and the open-tasks view
+│   ├── boardLanes.ts       # which lane a board card goes in, and moving it
 │   ├── history.ts          # version history dialog
 │   ├── presentation.ts     # slides
 │   ├── export.ts           # HTML export and print
@@ -36,9 +37,11 @@ The UI never touches the filesystem directly; it calls Tauri commands, which go 
 ├── src-tauri/
 │   ├── src/commands/       # Tauri commands called from the UI
 │   └── core/src/           # vault, vaults, folders, frontmatter, search_index,
-│                           # links, history, tasks, query, watcher, site, library, mcp
+│                           # links, history, tasks, query, types, watcher, site,
+│                           # library, mcp
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data
-├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides, syntax
+├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides,
+│                           # board lanes, syntax
 └── docs/                   # this documentation
 ```
 

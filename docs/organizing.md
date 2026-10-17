@@ -46,7 +46,7 @@ The sidebar shows tags as a tree. Click a tag to list its notes; a parent tag in
 
 ## Note types
 
-A note can say what kind of thing it is: a book, a person, a project, a meeting. Its type is a `type:` [property](queries-and-tasks.md#properties), so it stays plain YAML in the file:
+A note can say what kind of thing it is: a book, a person, a project, a meeting. Its type is a `type:` [property](writing-notes.md#properties), so it stays plain YAML in the file:
 
 ```yaml
 type: Book

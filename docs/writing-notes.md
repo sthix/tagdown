@@ -4,7 +4,7 @@
 
 The window has three areas:
 
-1. **Sidebar.** The library (All Notes, Archive, and your folders) and the tag tree. Search, the theme switch, and focus mode sit at the top; **New note** and **Settings** at the bottom.
+1. **Sidebar.** The library (All Notes, Journal, Archive, and your folders), your [note types](organizing.md#note-types), and the tag tree. Search, the theme switch, and focus mode sit at the top; **New note** and **Settings** at the bottom.
 2. **Note list.** Notes in the current folder or tag, grouped by date (Today, Yesterday, Previous 7 days, and so on). The pills at the top filter it: **All**, **Pinned**, **Untagged**, **Recent**.
 3. **Editor.** The open notes as tabs, with save status, view switcher, and note actions. Rarer actions (export, publish, and in a narrow pane slides and history) sit in the **⋯** menu.
 
@@ -34,6 +34,8 @@ Notes open in a tab somewhere have a small dot in the note list. Tagdown remembe
 ## Properties
 
 A note's properties (its frontmatter fields) sit under the title. When a note has more than three, they fold to one line of chips; click **Properties** (or press **⌘⇧I**) to open or fold them, and each note remembers your choice. Click a chip to jump straight to editing that value. **Settings → Editor → Fold properties** sets when they start folded: always, never, or when there are more than three.
+
+Properties are typed: text, numbers, true/false, dates (`2026-11-14`), lists, and `[[links]]`, which count as backlinks. Add one with **Add property** under the title or in the command palette (⌘K); they stay plain YAML in the note's frontmatter. A `type` property makes the note a [Book, Person or any other type](organizing.md#note-types), and [queries](queries-and-tasks.md#filtering-by-property) filter on properties and show them as tables, boards and cards.
 
 Fields you rarely look at, such as an `id` or a sync timestamp, can be hidden in every note: hover the row and click the eye. **Show hidden** under the list brings them back for a moment; unhide them for good from the row, or in **Settings → Editor → Hidden properties**. Hiding only changes the view; the field stays in the file.
 

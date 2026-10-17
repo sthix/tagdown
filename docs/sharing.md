@@ -68,5 +68,6 @@ What to know:
 
 - **Links between published notes** become links between pages, and each page lists the published notes that link to it.
 - **Links to notes that aren't published** become plain text, so the title of a private note never leaks.
+- **Queries** show only published notes. Tables, boards and cards appear as they look in the app, without editing.
 - **Republishing** to the same folder replaces the previous publish and removes pages for notes that are no longer included. Tagdown only deletes files it wrote itself, as recorded in its own manifest.
 - If the folder isn't empty, Tagdown asks before publishing into it. An empty folder keeps things tidy.

@@ -9,19 +9,19 @@ These guides will help you find your way around, build a habit of taking notes, 
 ## Quick start
 
 <div class="guide-grid">
-  <a class="guide-card" href="getting-started.md">
+  <a class="guide-card" href="getting-started.html">
     <div class="guide-cover cover-start"><img src="images/tagdown-editor-light.png" alt="Tagdown's note editor and library" width="1440" height="900" /></div>
     <div class="guide-card-body"><span class="guide-card-title">Your first note</span><span class="guide-card-description">Install Tagdown and make yourself at home.</span></div>
   </a>
-  <a class="guide-card" href="writing-notes.md">
+  <a class="guide-card" href="writing-notes.html">
     <div class="guide-cover cover-write"><img src="images/panes-light.png" alt="Two notes open side by side" width="1440" height="900" /></div>
     <div class="guide-card-body"><span class="guide-card-title">Find your writing flow</span><span class="guide-card-description">Explore the editor, tabs, and preview.</span></div>
   </a>
-  <a class="guide-card" href="journal.md">
+  <a class="guide-card" href="journal.html">
     <div class="guide-cover cover-journal"><img src="images/journal-light.png" alt="The daily journal in Tagdown" width="1440" height="900" loading="lazy" /></div>
     <div class="guide-card-body"><span class="guide-card-title">A page for every day</span><span class="guide-card-description">Capture thoughts and keep a daily journal.</span></div>
   </a>
-  <a class="guide-card" href="organizing.md">
+  <a class="guide-card" href="organizing.html">
     <div class="guide-cover cover-connect"><img src="images/local-graph-light.png" alt="A graph of connections between notes" width="1440" height="900" loading="lazy" /></div>
     <div class="guide-card-body"><span class="guide-card-title">Connect your ideas</span><span class="guide-card-description">Bring notes together with links and tags.</span></div>
   </a>

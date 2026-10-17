@@ -23,6 +23,17 @@ A day's page is titled with its date in `YYYY-MM-DD` form, so `[[2026-10-13]]` l
 - Clicking a link to a day without a page starts that page.
 - **Linked mentions** at the bottom of a day lists every note that links to it. Writing "Call the bank on [[2026-10-20]]" in any note puts that line under October 20.
 
+## What happened that day
+
+Below a day's page, **This day** collects the rest of the day from across the vault:
+
+- **Open tasks** whose day is this one (their first `[[YYYY-MM-DD]]` link). Tick them right there.
+- **Created**: notes you started that day, with the time.
+- **Edited**: older notes you last changed that day. A note edited again later moves to that later day.
+- **Dated this day**: notes with a date property set to the day, such as `date: 2026-10-13` on a meeting note.
+
+Click any of them to open it. **Linked mentions** follows below.
+
 ## A template for new days
 
 Create a note titled **Journal Template**. Each new day's page starts with its body (everything after the title heading). These placeholders are filled in:

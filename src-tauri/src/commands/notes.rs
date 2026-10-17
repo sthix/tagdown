@@ -99,6 +99,14 @@ pub async fn open_journal(day: String, app: tauri::AppHandle, state: State<'_, M
     Ok(note)
 }
 
+/// The notes and open tasks of `day` (YYYY-MM-DD), shown under its journal page `id`.
+#[tauri::command]
+pub async fn journal_day(day: String, id: String, state: State<'_, Mutex<AppState>>) -> Result<crate::journal::DaySummary, String> {
+    let day = crate::journal::parse_day(&day).ok_or_else(|| format!("not a day: {day}"))?;
+    let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
+    Ok(crate::journal::day_summary(notes, day, &id, &chrono::Local))
+}
+
 /// Every note type: the ones with a "<Type> Template" note and the ones notes use.
 #[tauri::command]
 pub async fn list_types(state: State<'_, Mutex<AppState>>) -> Result<Vec<NoteType>, String> {

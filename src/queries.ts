@@ -15,7 +15,7 @@ import { resolveLocalImages } from './localImages';
 
 type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string };
 export type NewNote = { folderId: string | null; tags: string[]; properties: Property[] };
-type QueryTask = {
+export type QueryTask = {
   noteId: string; noteTitle: string; text: string; done: boolean; line: number;
   /** Its day (YYYY-MM-DD), priority (1 high to 3 low) and repeat, and its text without those words. */
   date?: string | null; priority?: number | null; repeat?: string | null; label?: string;
@@ -152,18 +152,23 @@ function paint(body: HTMLElement, result: Result, options: FillOptions, query: s
     if (last?.id === id) last.tasks.push(task);
     else groups.push({ id, title: byDay ? dayGroupTitle(id) : task.noteTitle, tasks: [task] });
   }
-  const item = (task: QueryTask) => `
-        <li class="td-query-task${task.done ? ' is-done' : ''}${task.priority ? ` is-${PRIORITIES[task.priority]}` : ''}">
-          <input type="checkbox"${task.done ? ' checked' : ''}${options.interactive === false ? ' disabled' : ''}
-                 data-task-note="${escapeHtml(task.noteId)}" data-task-line="${task.line}" data-task-text="${escapeHtml(task.text)}"
-                 aria-label="${task.done ? 'Mark not done' : 'Mark done'}: ${escapeHtml(task.text)}">
-          <span>${inline(taskText(task))}${taskChips(task, !byDay)}${byDay ? ` <a class="td-query-task-note" href="#" data-open-note="${escapeHtml(task.noteId)}">${escapeHtml(task.noteTitle || 'Untitled')}</a>` : ''}</span>
-        </li>`;
+  const item = (task: QueryTask) => taskItemHtml(task, { interactive: options.interactive !== false, withDay: !byDay, withNote: byDay });
   body.innerHTML = groups.map((group) => `
     <div class="td-query-group${byDay ? ` is-day${group.id === 'overdue' ? ' is-overdue' : ''}` : ''}">
       ${byDay ? `<h4 class="td-query-day">${escapeHtml(group.title)}</h4>` : `<a class="td-query-note" href="#" data-open-note="${escapeHtml(group.id)}">${escapeHtml(group.title || 'Untitled')}</a>`}
       <ul class="td-query-tasks">${group.tasks.map(item).join('')}</ul>
     </div>`).join('') + more;
+}
+
+/** A task's row, ticked through `toggleQueryTask`; `withNote` links the note it's in. */
+export function taskItemHtml(task: QueryTask, { interactive = true, withDay = true, withNote = false } = {}) {
+  return `
+        <li class="td-query-task${task.done ? ' is-done' : ''}${task.priority ? ` is-${PRIORITIES[task.priority]}` : ''}">
+          <input type="checkbox"${task.done ? ' checked' : ''}${interactive ? '' : ' disabled'}
+                 data-task-note="${escapeHtml(task.noteId)}" data-task-line="${task.line}" data-task-text="${escapeHtml(task.text)}"
+                 aria-label="${task.done ? 'Mark not done' : 'Mark done'}: ${escapeHtml(task.text)}">
+          <span>${inline(taskText(task))}${taskChips(task, withDay)}${withNote ? ` <a class="td-query-task-note" href="#" data-open-note="${escapeHtml(task.noteId)}">${escapeHtml(task.noteTitle || 'Untitled')}</a>` : ''}</span>
+        </li>`;
 }
 
 const PRIORITIES: Record<number, string> = { 1: 'high', 2: 'medium', 3: 'low' };

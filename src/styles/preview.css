@@ -838,6 +838,10 @@
 .preview .backlinks-group span { color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
 .preview .backlinks-group .type-emoji, .preview .backlink-title .type-emoji { width: auto; line-height: 1; }
 .preview .backlinks-empty code { font-size: 11.5px; }
+/* A journal page's "This day" comes first; Linked mentions follow closer under it. */
+.preview .day-summary:not([hidden]) + .backlinks { margin-top: 28px; }
+.preview .day-note-meta { margin-left: auto; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.preview .day-tasks { margin: 2px 0 6px; }
 .preview .backlink {
   display: block;
   margin: 0 -12px;

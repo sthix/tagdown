@@ -3,12 +3,15 @@
 // `[[2026-10-13]]` links to it) and marked with a `journal:` frontmatter line.
 // A note titled "Journal Template" supplies the body of each new day.
 
-use chrono::{Days, NaiveDate};
+use chrono::{Days, NaiveDate, TimeZone};
+use serde::Serialize;
 
 use crate::{
     frontmatter::derive_title,
     links::normalize_title,
     models::Note,
+    properties::PropertyValue,
+    tasks::{parse_tasks, Task},
     vault::Vault,
 };
 
@@ -91,6 +94,56 @@ pub fn fill_template(template: &str, day: NaiveDate) -> String {
         .replace("{{weekday}}", &day.format("%A").to_string())
 }
 
+/// A note with date properties set to the day.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatedNote {
+    pub note: Note,
+    /// The properties holding the day (`due`, `meeting`).
+    pub keys: Vec<String>,
+}
+
+/// What happened on a day, for its journal page.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySummary {
+    /// Notes created that day, earliest first.
+    pub created: Vec<Note>,
+    /// Notes last edited that day (and created before it), earliest first.
+    pub edited: Vec<Note>,
+    /// Notes with a date property set to the day.
+    pub dated: Vec<DatedNote>,
+    /// Open tasks for the day, by priority.
+    pub tasks: Vec<Task>,
+}
+
+/// The notes and open tasks of `day` among `notes`, leaving out the day's own
+/// page `page_id` and archived notes. Times are read in `tz`, the user's.
+pub fn day_summary<Tz: TimeZone>(notes: Vec<(Note, String)>, day: NaiveDate, page_id: &str, tz: &Tz) -> DaySummary {
+    let on_day = |at: &chrono::DateTime<chrono::Utc>| at.with_timezone(tz).date_naive() == day;
+    let mut summary = DaySummary::default();
+    for (note, content) in notes {
+        if note.id == page_id || note.folder_id.as_deref() == Some(ARCHIVE) {
+            continue;
+        }
+        summary.tasks.extend(parse_tasks(&note, &content).into_iter().filter(|t| !t.done && t.date == Some(day)));
+        let keys: Vec<String> = note.properties.iter().filter(|p| p.value == PropertyValue::Date(day)).map(|p| p.key.clone()).collect();
+        if !keys.is_empty() {
+            summary.dated.push(DatedNote { note: note.clone(), keys });
+        }
+        if on_day(&note.created_at) {
+            summary.created.push(note);
+        } else if on_day(&note.updated_at) {
+            summary.edited.push(note);
+        }
+    }
+    summary.created.sort_by_key(|n| n.created_at);
+    summary.edited.sort_by_key(|n| n.updated_at);
+    summary.dated.sort_by_key(|d| normalize_title(&d.note.title));
+    summary.tasks.sort_by(|a, b| (a.priority.unwrap_or(4), &a.note_title, a.line).cmp(&(b.priority.unwrap_or(4), &b.note_title, b.line)));
+    summary
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,5 +208,35 @@ mod tests {
         let listed = vault.list_notes(Some("journal".into()), crate::models::SortOrder::UpdatedDesc).unwrap();
         assert_eq!(listed.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), vec![fresh.id.as_str()]);
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn a_day_collects_its_notes_and_open_tasks() {
+        use chrono::{FixedOffset, Utc};
+        let at = |value: &str| chrono::DateTime::parse_from_rfc3339(value).unwrap().with_timezone(&Utc);
+        let note = |id: &str, created: &str, updated: &str| Note {
+            id: id.into(), title: id.into(), preview: String::new(), tags: vec![], starred: false, folder_id: None,
+            created_at: at(created), updated_at: at(updated), word_count: 0, journal: None, properties: Vec::new(), path: String::new(),
+        };
+        let mut meeting = note("Kickoff", "2026-09-01T10:00:00Z", "2026-09-01T10:00:00Z");
+        meeting.properties = crate::properties::parse_properties(&["date: 2026-10-13".into(), "follow_up: 2026-10-14".into()]);
+        let mut archived = note("Old", "2026-10-13T09:00:00Z", "2026-10-13T09:00:00Z");
+        archived.folder_id = Some("archive".into());
+        let notes = vec![
+            (note("Page", "2026-10-13T06:00:00Z", "2026-10-13T20:00:00Z"), "- [ ] Mine [[2026-10-13]]".into()),
+            (note("Later", "2026-10-13T15:00:00Z", "2026-10-14T08:00:00Z"), String::new()),
+            (note("Early", "2026-10-13T07:00:00Z", "2026-10-13T07:30:00Z"), String::new()),
+            (note("Touched", "2026-10-01T07:00:00Z", "2026-10-13T12:00:00Z"), "- [ ] Call [[2026-10-13]]\n- [ ] Ship [[2026-10-13]] !high\n- [x] Done [[2026-10-13]]\n- [ ] Next [[2026-10-14]]".into()),
+            // 23:30 in UTC is already the next day two hours east.
+            (note("Late night", "2026-10-12T23:30:00Z", "2026-10-12T23:30:00Z"), String::new()),
+            (meeting, String::new()),
+            (archived, "- [ ] Archived [[2026-10-13]]".into()),
+        ];
+        let summary = day_summary(notes, day("2026-10-13"), "Page", &FixedOffset::east_opt(2 * 3600).unwrap());
+        let ids = |list: &[Note]| list.iter().map(|n| n.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&summary.created), vec!["Late night", "Early", "Later"], "the page itself and archived notes are left out");
+        assert_eq!(ids(&summary.edited), vec!["Touched"]);
+        assert_eq!(summary.dated.iter().map(|d| (d.note.id.as_str(), d.keys.clone())).collect::<Vec<_>>(), vec![("Kickoff", vec!["date".to_string()])]);
+        assert_eq!(summary.tasks.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), vec!["Ship [[2026-10-13]] !high", "Call [[2026-10-13]]"]);
     }
 }

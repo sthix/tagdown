@@ -15,7 +15,7 @@ import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
 import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
-import { fillQueries, invalidateQueries, openTaskList, toggleQueryTask, type TableActions } from './queries';
+import { fillQueries, invalidateQueries, openTaskList, taskItemHtml, toggleQueryTask, type QueryTask, type TableActions } from './queries';
 import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
@@ -49,6 +49,7 @@ type Note = {
   tags: string[];
   starred: boolean;
   folderId: string | null;
+  createdAt: string;
   updatedAt: string;
   wordCount: number;
   /** The day (YYYY-MM-DD) this note is the journal page for. */
@@ -77,6 +78,9 @@ type FolderIcon = { key: string; label: string; svg: string };
 type NoteContent = { id: string; content: string };
 
 type Backlink = { note: Note; mentions: string[] };
+
+/** What else happened on a journal page's day (journal.rs `DaySummary`). */
+type DaySummary = { created: Note[]; edited: Note[]; dated: Array<{ note: Note; keys: string[] }>; tasks: QueryTask[] };
 
 /** A note type: the `type:` notes give themselves, and its "<Type> Template" note. */
 type NoteType = { name: string; icon: string | null; templateId: string | null; count: number; links: LinkField[] };
@@ -145,8 +149,8 @@ let suppressPreviewClick = false;
 // to, and pending syncs (with the title to sync to).
 const linkTitles = new Map<string, string>();
 const linkSyncs = new Map<string, { timer: number; title: string }>();
-// "Linked mentions" for the open note, once loaded.
-let backlinks: { id: string; items: Backlink[] } | null = null;
+// "Linked mentions" for the open note, once loaded, and on a journal page what else happened that day.
+let backlinks: { id: string; items: Backlink[]; day: DaySummary | null } | null = null;
 const TAG_PREVIEW_LIMIT = 6;
 let tagDraftColor: TagColorKey = 'blue';
 // The month the journal calendar shows.
@@ -634,7 +638,7 @@ type PaneEditor = {
   blockEdit: BlockEdit | null;
   previewBlocks: SourceBlock[];
   suppressPreviewClick: boolean;
-  backlinks: { id: string; items: Backlink[] } | null;
+  backlinks: { id: string; items: Backlink[]; day: DaySummary | null } | null;
   saveTimer: number | undefined;
   savedMessage: string;
   caretLine: number | null;
@@ -2601,20 +2605,53 @@ async function copyText(text: string) {
 
 async function loadBacklinks(id: string) {
   const pane = activePane;
-  const items = await invoke<Backlink[]>('backlinks', { id }).catch(() => [] as Backlink[]);
+  const journal = selectedNote?.id === id ? selectedNote.journal : null;
+  const [items, day] = await Promise.all([
+    invoke<Backlink[]>('backlinks', { id }).catch(() => [] as Backlink[]),
+    journal ? invoke<DaySummary>('journal_day', { day: journal, id }).catch(() => null) : null,
+  ]);
   if (!panes.includes(pane)) return;
   withPane(pane, () => {
     if (selectedNote?.id !== id) return;
-    backlinks = { id, items };
-    const section = editorRoot.querySelector<HTMLElement>('.preview [data-backlinks]');
-    if (!section) return;
-    const holder = document.createElement('div');
-    holder.innerHTML = backlinksHtml();
-    const fresh = holder.firstElementChild as HTMLElement;
-    section.replaceWith(fresh);
-    resolveLocalImages(fresh);
-    void applyExternals(fresh, getEffectiveTheme());
+    backlinks = { id, items, day };
+    for (const [selector, html] of [['[data-day-summary]', daySummaryHtml()], ['[data-backlinks]', backlinksHtml()]] as const) {
+      const section = editorRoot.querySelector<HTMLElement>(`.preview ${selector}`);
+      if (!section) continue;
+      const holder = document.createElement('div');
+      holder.innerHTML = html;
+      const fresh = holder.firstElementChild as HTMLElement;
+      section.replaceWith(fresh);
+      resolveLocalImages(fresh);
+      void applyExternals(fresh, getEffectiveTheme());
+    }
   });
+}
+
+/** On a journal page: the day's open tasks and the notes created, edited or dated that day. */
+function daySummaryHtml() {
+  const day = selectedNote?.journal && backlinks?.id === selectedNote.id ? backlinks.day : null;
+  if (!day) return '<section class="backlinks day-summary" data-day-summary hidden></section>';
+  const time = (at: string) => new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const row = (note: Note, meta: string) => {
+    const type = findType(typeOfNote(note));
+    return `
+    <div class="backlink day-note" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
+      <div class="backlink-title">${type ? typeIconHtml(type, 13) : iconSvg(note.journal ? 'calendar' : 'notes', 13)}<strong>${escapeHtml(tabTitleOf(note))}</strong><span class="day-note-meta">${escapeHtml(meta)}</span></div>
+    </div>`;
+  };
+  const group = (label: string, count: number, body: string) => count ? `<h3 class="backlinks-group">${label}<span>${count}</span></h3>${body}` : '';
+  const total = day.tasks.length + day.created.length + day.edited.length + day.dated.length;
+  const list = [
+    group('Open tasks', day.tasks.length, `<ul class="td-query-tasks day-tasks">${day.tasks.map((task) => taskItemHtml(task, { withDay: false, withNote: true })).join('')}</ul>`),
+    group('Created', day.created.length, day.created.map((note) => row(note, time(note.createdAt))).join('')),
+    group('Edited', day.edited.length, day.edited.map((note) => row(note, time(note.updatedAt))).join('')),
+    group('Dated this day', day.dated.length, day.dated.map(({ note, keys }) => row(note, keys.join(', '))).join('')),
+  ].join('');
+  return `
+    <section class="backlinks day-summary" data-day-summary aria-label="This day">
+      <h2>This day${total ? `<span>${total}</span>` : ''}</h2>
+      ${list || '<p class="backlinks-empty">Notes created or edited on this day, notes with this date, and tasks for it show up here.</p>'}
+    </section>`;
 }
 
 function backlinksHtml() {
@@ -2693,7 +2730,7 @@ function paintPreview(el: HTMLElement) {
   const append = blocks.length || empty
     ? `<div class="td-block-append" data-append-block>${empty ? 'Start writing, or type / for commands' : 'Click to add a block'}</div>`
     : '';
-  el.innerHTML = html + append + backlinksHtml();
+  el.innerHTML = html + append + daySummaryHtml() + backlinksHtml();
   resolveLocalImages(el);
   markDocTitle(el);
   markWikilinks(el);
@@ -3199,6 +3236,7 @@ function renderEditor() {
           await reloadNotes();
           const preview = editorRoot.querySelector<HTMLElement>('.preview');
           if (preview) await fillQueries(preview, { excludeId: selectedNote?.id ?? null, table: tableActions });
+          if (selectedNote && queryTask.closest('[data-day-summary]')) await loadBacklinks(selectedNote.id);
         })
         .catch(async (error) => {
           queryTask.checked = !queryTask.checked;

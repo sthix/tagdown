@@ -4,7 +4,7 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
-  <img width="1440" alt="Tagdown Editor in split view" src="images/tagdown-editor-light.png" />
+  <img width="1440" alt="Tagdown Editor in split view, with three notes open as tabs and the launch plan's properties folded to one line" src="images/tagdown-editor-light.png" />
 </picture>
 
 ## Guides
@@ -12,7 +12,7 @@ Everything about using Tagdown Editor, from your first note to publishing a webs
 | Guide | What's in it |
 | --- | --- |
 | [Getting started](getting-started.md) | Download or build the app; what happens on first launch |
-| [Writing notes](writing-notes.md) | The workspace, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, the toolbar, themes and accents |
+| [Writing notes](writing-notes.md) | The workspace, tabs and panes, properties, view modes, editing and reordering blocks in the preview, the `/` command menu, lists and outlines, the toolbar, themes and accents |
 | [Tagdown syntax](syntax.md) | Markdown plus callouts, tabs, grids, math, diagrams, and more |
 | [Organizing your vault](organizing.md) | Where notes live, several vaults, folders, tags, pinning, the archive, search, and wikilinks |
 | [Journal](journal.md) | A page for every day, date links, and a template for new days |

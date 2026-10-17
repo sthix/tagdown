@@ -902,6 +902,8 @@ async function displayTab(pane: Pane, fresh?: Note) {
   }
   if (!panes.includes(pane) || pane.tabs[pane.active] !== tab) return;
   if (!note) Object.assign(tab, blankTab());
+  // Inside withPane the swapped-in pane is always the "active" one; ask before.
+  const isActive = pane === activePane;
   withPane(pane, () => {
     selectedNote = note;
     content = text;
@@ -910,7 +912,7 @@ async function displayTab(pane: Pane, fresh?: Note) {
       tab.title = tabTitleOf(note);
       if (!linkSyncs.has(note.id)) linkTitles.set(note.id, note.title);
     }
-    if (pane === activePane) {
+    if (isActive) {
       setDocumentTitle(note ? note.title || 'Untitled' : 'Tagdown Editor');
       if (note) setPreference('lastNoteId', note.id);
     }
@@ -918,7 +920,7 @@ async function displayTab(pane: Pane, fresh?: Note) {
     restoreScroll(pane, tab);
     if (note) void loadBacklinks(note.id);
   });
-  if (pane === activePane) renderNotes();
+  if (isActive) renderNotes();
   saveWorkspace();
 }
 
@@ -3210,12 +3212,13 @@ async function flushSave() {
     });
   }
   if (panes.includes(pane)) {
+    const isActive = pane === activePane;
     withPane(pane, () => {
       if (selectedNote?.id !== id) return;
       selectedNote = saved;
       // More typing since this save started: that save is still to come.
       if (saveTimer === undefined) savedMessage = 'Saved';
-      if (pane === activePane) setDocumentTitle(saved.title || 'Untitled');
+      if (isActive) setDocumentTitle(saved.title || 'Untitled');
       // Journal pages are headed by their day, whatever their title says.
       if (!saved.journal) {
         const titleText = saved.title || 'Untitled';
@@ -3392,6 +3395,7 @@ function renderStatus() {
   const state = savedMessage === 'Saving…' ? 'saving' : savedMessage === 'Ready' ? 'idle' : 'saved';
   const shown = notice && Date.now() < notice.until ? notice.text : state === 'idle' ? 'Saved to vault' : savedMessage;
   savedEl.className = `save-state is-${state}`;
+  savedEl.title = shown;
   savedEl.innerHTML = `<i aria-hidden="true"></i><span>${escapeHtml(shown)}</span>`;
 }
 

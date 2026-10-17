@@ -18,7 +18,7 @@ Tagdown Editor is a macOS-focused Tauri app for writing structured notes without
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/tagdown-editor-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/images/tagdown-editor-light.png" />
-  <img width="1440" alt="Tagdown Editor in split view: the sidebar with All Notes, the Journal, library folders and a tag tree, a note list grouped by date, and a launch-plan note shown as Tagdown source beside its rendered preview with a callout, task list, table, and math" src="docs/images/tagdown-editor-light.png" />
+  <img width="1440" alt="Tagdown Editor in split view: the sidebar with All Notes, the Journal, library folders and a tag tree, a note list grouped by date, and three notes open as tabs, with the launch plan's properties folded to one line of chips above its Tagdown source and rendered preview with a callout, task list, table, and math" src="docs/images/tagdown-editor-light.png" />
 </picture>
 
 <details>
@@ -58,6 +58,8 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 ### Writing
 
+- **Tabs and side-by-side panes**: ⌘-click any note or link for a new tab, ⌥⌘-click (or drag it to the edge) to see two notes side by side. Tabs and panes are remembered per vault.
+- **Properties that stay out of the way**: frontmatter fields as typed inputs that fold to one line of chips (⌘⇧I), and fields like `id` can be hidden in every note.
 - **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
 - **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
 - **Outliner lists**: ↩ continues bullets, numbers, and tasks; Tab and ⇧Tab nest and un-nest items with their children.
@@ -66,6 +68,11 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
 - **Light and dark themes** (⌘⇧D), or follow the system, with sixteen **accent colours** to tint the app and an optional paper grain.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/panes-dark.png" />
+  <img width="1440" alt="Focus mode with two panes side by side: the Atlas launch plan with its properties folded to a line of chips, and Weekly planning with its linked mentions, each pane with its own tabs" src="docs/images/panes-light.png" />
+</picture>
 
 ### Organizing
 

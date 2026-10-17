@@ -64,7 +64,7 @@ body.is-resizing-panes iframe { pointer-events: none; }
 .tab {
   position: relative;
   flex: 0 1 190px;
-  min-width: 76px;
+  min-width: 96px;
   height: 30px;
   display: flex;
   align-items: center;
@@ -163,9 +163,12 @@ body.is-resizing-panes iframe { pointer-events: none; }
 .export-menu hr, .context-menu hr { margin: 5px 6px; border: 0; border-top: .5px solid var(--line); }
 .export-menu button[hidden] { display: none; }
 .export-menu [data-export="present"], .export-menu [data-export="history"] { display: none; }
-@container (max-width: 700px) {
+/* Tabs come first: with a few open, slides and history move to the ⋯ menu
+   and the save status keeps only its dot (its text is in the tooltip). */
+@container (max-width: 1000px) {
   .topbar-extra { display: none; }
   .export-menu [data-export="present"], .export-menu [data-export="history"] { display: flex; }
+  .editor-topbar .save-state span { display: none; }
 }
 @container (max-width: 480px) {
   .topbar-split { display: none; }

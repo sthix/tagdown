@@ -26,11 +26,21 @@ Drag a tab to reorder it, onto another pane's tabs to move it there, or to the e
 
 Notes open in a tab somewhere have a small dot in the note list. Tagdown remembers your tabs and panes per vault and reopens them on launch (**Settings → General → On launch**).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/panes-dark.png" />
+  <img width="1440" alt="Focus mode with two panes side by side, each with two tabs: the Atlas launch plan with its properties folded to one line, and Weekly planning with its linked mentions" src="images/panes-light.png" />
+</picture>
+
 ## Properties
 
 A note's properties (its frontmatter fields) sit under the title. When a note has more than three, they fold to one line of chips; click **Properties** (or press **⌘⇧I**) to open or fold them, and each note remembers your choice. Click a chip to jump straight to editing that value. **Settings → Editor → Fold properties** sets when they start folded: always, never, or when there are more than three.
 
 Fields you rarely look at, such as an `id` or a sync timestamp, can be hidden in every note: hover the row and click the eye. **Show hidden** under the list brings them back for a moment; unhide them for good from the row, or in **Settings → Editor → Hidden properties**. Hiding only changes the view; the field stays in the file.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/properties-dark.png" />
+  <img width="1440" alt="The Atlas launch plan with its properties open: status, owner as a link, a due date, a budget number, a public checkbox and a list of stakeholders, with Add property and Show 1 hidden underneath" src="images/properties-light.png" />
+</picture>
 
 ## Titles
 
@@ -100,8 +110,8 @@ The **Accent** row picks the highlighter colour the whole app is tinted with, fr
   <img width="1440" alt="Tagdown Settings, General page" src="images/settings-light.png" />
 </picture>
 
-- **General.** What opens on launch (the last note, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
-- **Editor.** Spellcheck, the size of the source text, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
+- **General.** What opens on launch (the tabs and panes you had open, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
+- **Editor.** Spellcheck, the size of the source text, when properties start folded, the properties hidden in every note, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
 - **Appearance.** Theme, accent colour, paper grain, preview text size, and line length.
 - **Shortcuts.** Every keyboard shortcut, also listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 

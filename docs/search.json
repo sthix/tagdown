@@ -1,0 +1,14 @@
+---
+layout: null
+permalink: /search.json
+---
+[
+{% assign guides = site.pages | where_exp: 'item', 'item.nav_order != nil' | sort: 'nav_order' %}
+{% for guide in guides %}
+  {
+    "title": {{ guide.title | jsonify }},
+    "url": {{ guide.url | relative_url | jsonify }},
+    "content": {{ guide.content | markdownify | strip_html | normalize_whitespace | jsonify }}
+  }{% unless forloop.last %},{% endunless %}
+{% endfor %}
+]

@@ -74,6 +74,20 @@ node --test tests/*.mjs
 
 The Tagdown reference has one source: `src/tagdown/documentation.ts`. It feeds the in-app **Settings → Tagdown Reference** and, through `npm run gen:syntax`, the generated `src-tauri/core/src/syntax.md` that the CLI and MCP server hand out. Run `npm run gen:syntax` after changing the reference; a test fails when the generated file is out of date.
 
+## Previewing the documentation
+
+The docs use Jekyll and a local layout in `docs/_layouts/default.html`. Navigation lives in `docs/_data/navigation.yml`; styles and browser interactions live in `docs/assets/`.
+
+With Ruby and Bundler installed, run from the repository root:
+
+```sh
+cd docs
+bundle install
+bundle exec jekyll serve
+```
+
+Open `http://localhost:4000/tagdown/`. To check a production build, run `bundle exec jekyll build`. GitHub Pages builds the same `docs/` directory when changes reach `main`.
+
 ## Releasing
 
 `.github/workflows/release.yml` builds a universal (Apple silicon + Intel) `.dmg` on GitHub Actions.

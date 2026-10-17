@@ -57,6 +57,11 @@ Three views show the matching notes with their properties, and each can add a no
 
 To change several notes at once, tick their rows (shift-click ticks every row between the last one and this one, the header box ticks all). A bar above the table then sets a column's value on all of them, or **Clear** removes it from them.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/table-bulk-dark.png" />
+  <img width="1440" alt="A table query of projects with Atlas launch plan and Beacon ticked, and the bar above it reading 2 selected, Set status to, a field for the new status, Clear and Deselect" src="images/table-bulk-light.png" />
+</picture>
+
 ```tagdown
 <query tag:project show:table columns:status,owner,due sort:due />
 ```

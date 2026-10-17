@@ -94,6 +94,11 @@ Paste an image, drop one on the editor or the preview, or choose **Image** in th
 
 In the preview, point at a figure for a small bar: **S**, **M**, **L** and **Full** set its width to a third, half, three quarters or all of the text width (click the active one again for the image's own size), and **Add caption** puts a caption under it. Click a caption to change it; **↩** saves and **Esc** keeps the old one. The bar writes `size=` and `caption=` into the figure tag, so the note stays plain text.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/figures-dark.png" />
+  <img width="1440" alt="A note called Office photos in the preview, with the size and caption bar over a large figure: S, M, L (active) and Full sizes and Edit caption, its caption The new desks by the window, and a smaller figure captioned The kitchen below" src="images/figures-light.png" />
+</picture>
+
 Images written the Markdown way, `![alt](path)`, or the Obsidian way, `![[photo.png]]`, show up too, inline with the text. A number after `|` sets the width in pixels: `![[photo.png|300]]`. See [Media](syntax.md#media) for every option.
 
 ## The formatting toolbar

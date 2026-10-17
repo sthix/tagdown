@@ -152,3 +152,8 @@ Results show highlighted excerpts. The same syntax works in [queries](queries-an
 Press **⌘⇧G** (or choose **Show graph** in the command palette) to see the open note in the middle of the notes it links to and the notes that link to it. Each note is colored by its [type](#note-types), journal pages in amber and plain notes in grey; the legend at the bottom names them. Arrows point the way a link goes. Dashed lines are links among the neighbours themselves.
 
 Point at a note to bring out its links. Click it to open it, or ⌘-click to open it in a new tab. Links in properties count too, so a Book's `author: "[[Ursula K. Le Guin]]"` shows up. With very many neighbours, the graph keeps the 48 most recently edited.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/local-graph-dark.png" />
+  <img width="1440" alt="The graph dialog for Atlas launch plan: the note in the middle, with arrows to the projects Comet and Beacon, the books Dune and The Shape of Design, Weekly planning, and three journal days, each coloured by type and named in the legend at the bottom" src="images/local-graph-light.png" />
+</picture>

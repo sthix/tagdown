@@ -40,6 +40,11 @@ Below a day's page, **This day** collects the rest of the day from across the va
 
 Click any of them to open it. **Linked mentions** follows below.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/journal-day-dark.png" />
+  <img width="1440" alt="The page for Tuesday, October 13 in the preview, with its This day section: four open tasks for the day from Beacon kickoff and Atlas launch plan, Office photos under Created, Atlas launch plan and Dashboard under Edited, Beacon kickoff under Dated this day, and Linked mentions below" src="images/journal-day-light.png" />
+</picture>
+
 ## A template for new days
 
 Create a note titled **Journal Template**. Each new day's page starts with its body (everything after the title heading). These placeholders are filled in:

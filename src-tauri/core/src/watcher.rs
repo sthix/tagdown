@@ -18,7 +18,7 @@ use std::{
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::{json, Value};
 
-use crate::{frontmatter::split_frontmatter, search_index::SearchIndex, vault::{note_from_meta, Vault}};
+use crate::{search_index::SearchIndex, vault::{is_hidden, note_from_meta, Vault}};
 
 /// Own writes remembered per file. Autosave can write several times before
 /// the first event is handled, so one fingerprint is not enough.
@@ -76,22 +76,32 @@ impl FileTracker {
 pub struct VaultWatcher(#[allow(dead_code)] RecommendedWatcher);
 
 /// Watch `vault`, calling `emit(event, payload)` for each note changed or
-/// removed outside the app.
+/// removed outside the app, and once per burst of folder changes.
 pub fn start(
     vault: Vault,
     search: Option<Arc<SearchIndex>>,
     emit: impl Fn(&'static str, Value) + Send + 'static,
 ) -> Result<VaultWatcher, String> {
     let (tx, rx) = mpsc::channel::<PathBuf>();
+    let root = vault.root.clone();
+    // Events name the real path (`/private/var/…` for `/var/…`); map them back.
+    let real_root = fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
         let Ok(event) = result else { return };
-        for path in event.paths.into_iter().filter(|p| is_note_file(p)) {
-            let _ = tx.send(path);
+        for path in event.paths {
+            let path = match path.strip_prefix(&real_root) {
+                Ok(rel) => root.join(rel),
+                Err(_) => path,
+            };
+            if is_visible(&root, &path) {
+                let _ = tx.send(path);
+            }
         }
     })
     .map_err(|e| e.to_string())?;
     watcher.watch(&vault.root, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
 
+    let mut vault = vault;
     thread::spawn(move || {
         while let Ok(first) = rx.recv() {
             // Editors and git touch files in bursts; collect until it settles.
@@ -99,30 +109,44 @@ pub fn start(
             while let Ok(path) = rx.recv_timeout(SETTLE) {
                 batch.insert(path);
             }
+            // Folders may have changed in the app since the last burst.
+            vault.reload_meta();
+            let mut folders_changed = false;
             for path in batch {
-                handle_change(&emit, &vault, search.as_deref(), &path);
+                if is_note_file(&path) {
+                    folders_changed |= handle_change(&emit, &vault, search.as_deref(), &path);
+                } else if path.is_dir() || (!path.exists() && path.extension().is_none()) {
+                    folders_changed = true;
+                }
+            }
+            if folders_changed {
+                emit("folders-changed-externally", json!({}));
             }
         }
     });
     Ok(VaultWatcher(watcher))
 }
 
+/// Inside the vault, not in a hidden folder such as `.tagdown` or `.git`, and
+/// not in another vault kept inside this one.
+fn is_visible(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).is_ok_and(|rel| !rel.components().any(|c| is_hidden(c.as_os_str())))
+        && !path.ancestors().skip(1).take_while(|dir| *dir != root).any(crate::vaults::is_vault)
+}
+
 fn is_note_file(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()) == Some("md") && !path.components().any(|c| c.as_os_str() == ".tagdown")
+    path.extension().and_then(|e| e.to_str()) == Some("md")
 }
 
-fn note_id(path: &Path) -> Option<String> {
-    path.file_stem()?.to_str()?.strip_prefix("note-").map(str::to_string)
-}
-
-fn handle_change(emit: &impl Fn(&'static str, Value), vault: &Vault, search: Option<&SearchIndex>, path: &Path) {
+/// Report one changed note file. Returns true when it was moved rather than
+/// removed, so the note list needs a refresh.
+fn handle_change(emit: &impl Fn(&'static str, Value), vault: &Vault, search: Option<&SearchIndex>, path: &Path) -> bool {
     match fs::read_to_string(path) {
         Ok(raw) => {
             if !vault.tracker.is_new(path, &raw) {
-                return;
+                return false;
             }
-            // Markdown files that aren't notes (no Tagdown frontmatter) are ignored.
-            let Ok((meta, content)) = split_frontmatter(&raw) else { return };
+            let Ok((meta, content)) = vault.read_note(path) else { return false };
             let note = note_from_meta(meta, &content);
             if let Some(index) = search {
                 let result = if note.folder_id.as_deref() == Some("archive") { index.remove(&note.id) } else { index.upsert(&note, &content) };
@@ -131,16 +155,25 @@ fn handle_change(emit: &impl Fn(&'static str, Value), vault: &Vault, search: Opt
                 }
             }
             emit("note-changed-externally", json!({ "note": note, "content": content }));
+            false
         }
         Err(_) if !path.exists() => {
+            let Some(id) = vault.id_at(path) else { return false };
+            // Gone from here but still in the vault: moved to another folder.
+            if vault.note_file_path(&id).is_ok() {
+                return true;
+            }
             vault.tracker.forget(path);
-            let Some(id) = note_id(path) else { return };
             if let Some(index) = search {
                 let _ = index.remove(&id);
             }
             emit("note-removed-externally", json!({ "id": id }));
+            false
         }
-        Err(e) => eprintln!("watcher: could not read {}: {e}", path.display()),
+        Err(e) => {
+            eprintln!("watcher: could not read {}: {e}", path.display());
+            false
+        }
     }
 }
 
@@ -191,10 +224,33 @@ mod tests {
     }
 
     #[test]
+    fn folder_changes_and_moves_are_not_removals() {
+        let dir = std::env::temp_dir().join(format!("tagdown-watch-{}", uuid::Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let note = vault.create_note(None).unwrap();
+        let path = vault.note_file_path(&note.id).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let _watcher = start(vault.clone(), None, move |event, _| { let _ = tx.send(event); }).unwrap();
+        thread::sleep(Duration::from_millis(500));
+        while rx.try_recv().is_ok() {}
+
+        fs::create_dir(dir.join("Inbox")).unwrap();
+        fs::rename(&path, dir.join("Inbox").join(path.file_name().unwrap())).unwrap();
+        let mut events = Vec::new();
+        while let Ok(event) = rx.recv_timeout(Duration::from_secs(2)) {
+            events.push(event);
+        }
+        assert!(events.contains(&"folders-changed-externally"), "{events:?}");
+        assert!(!events.contains(&"note-removed-externally"), "{events:?}");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn recognises_note_files() {
-        assert!(is_note_file(Path::new("/v/note-1.md")));
-        assert!(!is_note_file(Path::new("/v/.tagdown/search.idx/meta.json")));
-        assert!(!is_note_file(Path::new("/v/.tagdown/x.md")));
-        assert_eq!(note_id(Path::new("/v/note-abc.md")).as_deref(), Some("abc"));
+        let root = Path::new("/home/.me/v");
+        assert!(is_note_file(Path::new("/home/.me/v/Work/notes.md")));
+        assert!(is_visible(root, Path::new("/home/.me/v/Work/notes.md")), "hidden folders above the vault don't count");
+        assert!(!is_visible(root, Path::new("/home/.me/v/.tagdown/x.md")));
+        assert!(!is_visible(root, Path::new("/home/.me/v/.git/HEAD")));
     }
 }

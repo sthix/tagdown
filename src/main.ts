@@ -237,6 +237,20 @@ async function boot() {
   await listen('note-saved', () => { savedMessage = 'Saved'; renderStatus(); });
   await listen<{ note: Note; content: string }>('note-changed-externally', (event) => void onExternalChange(event.payload.note, event.payload.content));
   await listen<{ id: string }>('note-removed-externally', (event) => onExternalRemoval(event.payload.id));
+  // Folders are directories: ones made, renamed or removed in Finder show up here.
+  await listen('folders-changed-externally', scheduleListRefresh);
+}
+
+/** Run a folder change on disk; tell the user when it can't be done (a name taken, say). */
+async function folderAction(run: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await run();
+    return true;
+  } catch (error) {
+    await message(String(error), { title: 'Couldn’t change the folder', kind: 'warning' });
+    await reloadFolders();
+    return false;
+  }
 }
 
 /** Open what Settings → General → "On launch" asks for. */
@@ -559,8 +573,10 @@ function startFolderCreate(parentId: string | null) {
 async function commitFolderCreate(name: string, parentId: string | null) {
   const trimmed = name.trim();
   if (!trimmed) { cancelFolderCreate(); return; }
-  const folder = await invoke<Folder>('create_folder', { name: trimmed, parentId, icon: 'folder' });
+  let folder: Folder | undefined;
+  const created = await folderAction(async () => { folder = await invoke<Folder>('create_folder', { name: trimmed, parentId, icon: 'folder' }); });
   creatingFolderParent = undefined;
+  if (!created || !folder) return;
   if (parentId) expandedFolders[parentId] = true;
   selectedFolder = folder.id;
   await reloadFolders();
@@ -716,7 +732,7 @@ function renderFolders() {
       if (noteCount > 0) parts.push(`${noteCount} ${noteCount === 1 ? 'note' : 'notes'}`);
       if (childCount > 0) parts.push(`${childCount} ${childCount === 1 ? 'subfolder' : 'subfolders'}`);
       const detail = parts.length
-        ? `This folder contains ${parts.join(' and ')}. They will be permanently deleted.`
+        ? `This folder contains ${parts.join(' and ')}. The notes move to the top of your vault; the folder is removed from disk.`
         : 'This folder is empty.';
       const ok = await confirmDialog({
         title: 'Delete folder',
@@ -726,7 +742,7 @@ function renderFolders() {
         danger: true,
       });
       if (!ok) return;
-      await invoke('delete_folder', { id: deletedId });
+      if (!await folderAction(() => invoke('delete_folder', { id: deletedId }))) return;
       if (selectedFolder === deletedId || isDescendantFolder(selectedFolder, deletedId)) selectedFolder = null;
       await reloadFolders();
       await reloadNotes();
@@ -884,7 +900,7 @@ function bindFolderDragHandlers(button: HTMLButtonElement) {
       position = zone === 'below' ? idx + 1 : idx;
     }
 
-    await invoke('move_folder', { id: draggedId, parentId, position });
+    if (!await folderAction(() => invoke('move_folder', { id: draggedId, parentId, position }))) return;
     if (parentId) expandedFolders[parentId] = true;
     await reloadFolders();
     await reloadNotes();

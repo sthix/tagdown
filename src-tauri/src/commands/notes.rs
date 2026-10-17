@@ -6,7 +6,10 @@ use crate::{commands::search::SearchState, models::{Note, NoteContent, SortOrder
 
 #[tauri::command]
 pub async fn list_notes(folder_id: Option<String>, sort: SortOrder, state: State<'_, Mutex<AppState>>) -> Result<Vec<Note>, String> {
-    state.lock().map_err(|e| e.to_string())?.vault.list_notes(folder_id, sort)
+    let mut state = state.lock().map_err(|e| e.to_string())?;
+    // A directory made in Finder must be a folder before its notes are listed.
+    state.vault.sync_folders()?;
+    state.vault.list_notes(folder_id, sort)
 }
 
 #[tauri::command]

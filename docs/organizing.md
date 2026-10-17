@@ -2,7 +2,7 @@
 
 ## Where notes live
 
-Your vault is `~/Documents/Tagdown` unless you choose another folder (see [More than one vault](#more-than-one-vault)). Each note is a Markdown file named `note-<id>.md`, with a small frontmatter block Tagdown maintains for you:
+Your vault is `~/Documents/Tagdown` unless you choose another folder (see [More than one vault](#more-than-one-vault)). Every Markdown file in it is a note, and every folder in it is a folder in Tagdown. Notes Tagdown creates are named `note-<id>.md` and carry a small frontmatter block Tagdown maintains for you:
 
 ```markdown
 ---
@@ -18,7 +18,9 @@ updated: 2026-10-12T09:42:00Z
 …
 ```
 
-Folders and tag colours are recorded in `.tagdown/vault.json`. Because notes are ordinary files, you can back the vault up, sync it, or keep it in git. Changes made outside the app are picked up while it runs.
+Markdown files from elsewhere (an Obsidian vault, say) show up as they are, titled by their first `# ` heading or else their file name. Their own frontmatter is kept; Tagdown adds its fields the first time it saves one, and never touches a file you only read. Hidden folders such as `.git` or `.obsidian` are skipped, and so is a folder that's a vault of its own.
+
+Folder icons, sidebar order and tag colours are recorded in `.tagdown/vault.json`. Because notes are ordinary files, you can back the vault up, sync it, or keep it in git. Changes made outside the app, notes and folders alike, are picked up while it runs.
 
 
 ## More than one vault
@@ -29,9 +31,11 @@ Switching restarts Tagdown in the other vault, after saving whatever you were wr
 
 ## Folders
 
+- Folders are directories in the vault. Creating, renaming, nesting or deleting one in Tagdown does the same on disk, and a folder you make in Finder appears in the sidebar.
 - Create a folder from the sidebar's **Library** section. Folders can be nested.
 - Drag a folder onto another to nest it, or between two folders to reorder.
-- New notes are created in the selected folder.
+- New notes are created in the selected folder, and moving a note to another folder moves its file. Archived notes live in `Archive/`.
+- Deleting a folder moves its notes to the top of the vault. A folder that also holds other files (images, PDFs) isn't deleted; move those out in Finder first.
 - **All Notes** shows every note that isn't archived, [journal](journal.md) pages included.
 
 ## Tags

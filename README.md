@@ -69,7 +69,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 ### Organizing
 
-- **Local-first vault** of plain `.md` files in `~/Documents/Tagdown`, with nested folders and an archive.
+- **Local-first vaults** of plain `.md` files (`~/Documents/Tagdown` by default, or any folder, Obsidian vaults included), whose folders on disk are Tagdown's folders. Keep several and switch between them.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
 - **Wikilinks** with autocomplete. Links follow renames automatically and show up as *Linked mentions* under the target note.
 - **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days.

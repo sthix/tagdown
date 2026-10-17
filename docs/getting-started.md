@@ -39,7 +39,9 @@ On first launch Tagdown creates a vault at `~/Documents/Tagdown` (you can switch
 ```text
 ~/Documents/Tagdown/
 ├── note-<id>.md          # one file per note
-├── Archive/
+├── Projects/             # a folder: notes filed in it live here
+├── Archive/              # archived notes
+├── attachments/          # images added to notes
 └── .tagdown/
     ├── vault.json        # folders, tag colours, vault settings
     ├── search.idx/       # the full-text search index (rebuilt on launch)

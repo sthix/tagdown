@@ -2,11 +2,48 @@ use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::models::NoteFrontmatter;
 
+/// A frontmatter block as written, before Tagdown's own fields are required:
+/// files from other apps have none of them, or only some.
+#[derive(Debug, Default)]
+pub struct LooseFrontmatter {
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub tags: Vec<String>,
+    pub starred: bool,
+    pub folder_id: Option<String>,
+    pub created: Option<DateTime<Utc>>,
+    pub updated: Option<DateTime<Utc>>,
+    pub journal: Option<NaiveDate>,
+    pub extra: Vec<String>,
+}
+
 pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String> {
-    let raw = raw.strip_prefix("---\n").ok_or("missing frontmatter")?;
-    let Some(end) = raw.find("\n---\n") else {
-        return Err("unterminated frontmatter".into());
-    };
+    if !raw.starts_with("---\n") {
+        return Err("missing frontmatter".into());
+    }
+    let (meta, content) = split_loose(raw).ok_or("unterminated frontmatter")?;
+    Ok((NoteFrontmatter {
+        id: meta.id.ok_or("frontmatter missing id")?,
+        title: meta.title.unwrap_or_else(|| "Untitled".into()),
+        tags: meta.tags,
+        starred: meta.starred,
+        folder_id: meta.folder_id,
+        created: meta.created.ok_or("frontmatter missing created")?,
+        updated: meta.updated.ok_or("frontmatter missing updated")?,
+        journal: meta.journal,
+        extra: meta.extra,
+    }, content))
+}
+
+/// Split any Markdown file into its frontmatter and body. A file without a
+/// frontmatter block is all body.
+pub fn split_any(raw: &str) -> (LooseFrontmatter, String) {
+    split_loose(raw).unwrap_or_else(|| (LooseFrontmatter::default(), raw.to_string()))
+}
+
+fn split_loose(raw: &str) -> Option<(LooseFrontmatter, String)> {
+    let raw = raw.strip_prefix("---\n")?;
+    let end = raw.find("\n---\n")?;
     let (meta, content) = raw.split_at(end);
     let content = content
         .trim_start_matches("\n---\n")
@@ -63,8 +100,15 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
             }
             "starred" => starred = value == "true",
             "folder_id" => if value != "null" && !value.is_empty() { folder_id = Some(value.to_string()); },
-            "created" => created = Some(parse_date(value)?),
-            "updated" => updated = Some(parse_date(value)?),
+            // Dates Tagdown can't read stay as they were, like any other entry.
+            "created" | "updated" => match parse_date(value) {
+                Some(date) if key == "created" => created = Some(date),
+                Some(date) => updated = Some(date),
+                None => {
+                    extra.push(line.to_string());
+                    owner = Owner::Extra;
+                }
+            },
             "journal" => journal = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok(),
             _ => {
                 extra.push(line.to_string());
@@ -73,17 +117,7 @@ pub fn split_frontmatter(raw: &str) -> Result<(NoteFrontmatter, String), String>
         }
     }
 
-    Ok((NoteFrontmatter {
-        id: id.ok_or("frontmatter missing id")?,
-        title: title.unwrap_or_else(|| "Untitled".into()),
-        tags,
-        starred,
-        folder_id,
-        created: created.ok_or("frontmatter missing created")?,
-        updated: updated.ok_or("frontmatter missing updated")?,
-        journal,
-        extra,
-    }, content))
+    Some((LooseFrontmatter { id, title, tags, starred, folder_id, created, updated, journal, extra }, content))
 }
 
 pub fn write_frontmatter(meta: &NoteFrontmatter, content: &str) -> String {
@@ -131,10 +165,13 @@ fn parse_tags(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_date(value: &str) -> Result<DateTime<Utc>, String> {
+/// RFC 3339, or a plain `YYYY-MM-DD` day as other apps write it.
+fn parse_date(value: &str) -> Option<DateTime<Utc>> {
+    let value = value.trim_matches(|c| c == '"' || c == '\'');
     DateTime::parse_from_rfc3339(value)
         .map(|d| d.with_timezone(&Utc))
-        .map_err(|err| err.to_string())
+        .ok()
+        .or_else(|| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok().and_then(|d| d.and_hms_opt(0, 0, 0)).map(|d| d.and_utc()))
 }
 
 pub fn derive_title(content: &str) -> String {

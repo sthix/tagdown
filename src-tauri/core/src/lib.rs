@@ -1,5 +1,6 @@
 //! The Tagdown vault, shared by the desktop app and the `tagdown` CLI / MCP server.
 
+pub mod folders;
 pub mod frontmatter;
 pub mod history;
 pub mod journal;

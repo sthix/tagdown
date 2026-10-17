@@ -1,12 +1,12 @@
-use std::{fs, path::{Path, PathBuf}, sync::Arc};
+use std::{collections::HashMap, fs, path::{Path, PathBuf}, sync::{Arc, Mutex}};
 
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::{
     history::History,
-    frontmatter::{derive_preview, derive_tags, derive_title, split_frontmatter, word_count, write_frontmatter},
+    frontmatter::{derive_preview, derive_tags, derive_title, split_any, word_count, write_frontmatter},
     models::{FolderRecord, Note, NoteContent, NoteFrontmatter, SortOrder, VaultMeta},
     properties::{parse_properties, set_property, PropertyValue},
     watcher::FileTracker,
@@ -14,6 +14,12 @@ use crate::{
 
 const NOTE_EXT: &str = "md";
 const LEGACY_NOTE_EXT: &str = "td";
+/// Vaults from version 2 on keep folders as directories on disk.
+const VAULT_VERSION: u32 = 2;
+pub(crate) const ARCHIVE_ID: &str = "archive";
+pub(crate) const ARCHIVE_DIR: &str = "Archive";
+/// Where images added to notes go; not a folder of notes.
+pub(crate) const ATTACHMENTS_DIR: &str = "attachments";
 
 #[derive(Debug, Clone)]
 pub struct Vault {
@@ -22,6 +28,8 @@ pub struct Vault {
     /// Shared by every clone, so the file watcher can tell the app's own writes apart.
     pub tracker: Arc<FileTracker>,
     pub history: History,
+    /// Where each note was last seen, so finding one rarely means reading them all.
+    paths: Arc<Mutex<HashMap<String, PathBuf>>>,
 }
 
 impl Vault {
@@ -53,8 +61,10 @@ impl Vault {
             serde_json::from_str(&fs::read_to_string(&meta_path).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?
         } else {
+            // A folder that already holds notes (from another app, say) gets no starter notes.
+            let seed = !has_markdown(&root);
             let meta = VaultMeta {
-                version: 1,
+                version: VAULT_VERSION,
                 name: "My Notes".into(),
                 created: Utc::now(),
                 folders: vec![FolderRecord {
@@ -67,11 +77,27 @@ impl Vault {
                 tags: Vec::new(),
             };
             fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).map_err(|e| e.to_string())?;
-            Self::seed_notes(&root)?;
+            if seed {
+                Self::seed_notes(&root)?;
+            }
             meta
         };
         let history = History::new(&root);
-        Ok(Self { root, meta, tracker: Arc::default(), history })
+        let mut vault = Self { root, meta, tracker: Arc::default(), history, paths: Arc::default() };
+        if vault.meta.version < VAULT_VERSION {
+            vault.move_folders_to_disk()?;
+        }
+        vault.sync_folders()?;
+        Ok(vault)
+    }
+
+    /// Read `vault.json` again, for a long-lived copy (the file watcher's)
+    /// to see folders made since it was taken.
+    pub fn reload_meta(&mut self) {
+        let path = self.root.join(".tagdown").join("vault.json");
+        if let Some(meta) = fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()) {
+            self.meta = meta;
+        }
     }
 
     pub fn save_meta(&self) -> Result<(), String> {
@@ -82,8 +108,7 @@ impl Vault {
     pub fn list_notes(&self, folder_id: Option<String>, sort: SortOrder) -> Result<Vec<Note>, String> {
         let mut notes = Vec::new();
         for path in self.note_paths() {
-            let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            let Ok((meta, content)) = split_frontmatter(&raw) else { continue; };
+            let Ok((meta, content)) = self.read_note(&path) else { continue; };
             // `starred` and `journal` are views across folders rather than folders.
             let wanted = match folder_id.as_deref() {
                 None => true,
@@ -102,8 +127,7 @@ impl Vault {
     pub fn notes_with_content(&self) -> Result<Vec<(Note, String)>, String> {
         let mut notes = Vec::new();
         for path in self.note_paths() {
-            let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            let Ok((meta, content)) = split_frontmatter(&raw) else { continue; };
+            let Ok((meta, content)) = self.read_note(&path) else { continue; };
             let note = note_from_meta(meta, &content);
             notes.push((note, content));
         }
@@ -111,9 +135,7 @@ impl Vault {
     }
 
     pub fn get_note_content(&self, id: &str) -> Result<NoteContent, String> {
-        let path = self.note_path(id)?;
-        let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let (_, content) = split_frontmatter(&raw)?;
+        let (_, content) = self.read_note(&self.note_path(id)?)?;
         Ok(NoteContent { id: id.into(), content })
     }
 
@@ -135,15 +157,16 @@ impl Vault {
             journal,
             extra: Vec::new(),
         };
-        self.write_note(&self.path_for_new_note(&meta), &write_frontmatter(&meta, content))?;
+        let path = self.folder_dir(meta.folder_id.as_deref())?.join(format!("note-{}.{NOTE_EXT}", meta.id));
+        self.write_note(&path, &write_frontmatter(&meta, content))?;
+        self.remember(&meta.id, &path);
         Ok(note_from_meta(meta, content))
     }
 
     /// Mark a note as the journal page for `day`, or as no journal page.
     pub(crate) fn set_journal(&self, id: &str, journal: Option<NaiveDate>) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, content) = split_frontmatter(&raw)?;
+        let (mut meta, content) = self.read_note(&path)?;
         meta.journal = journal;
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(note_from_meta(meta, &content))
@@ -151,11 +174,10 @@ impl Vault {
 
     pub fn save_note(&self, id: &str, content: String) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, previous) = split_frontmatter(&raw)?;
+        let (mut meta, previous) = self.read_note(&path)?;
         self.keep_version(id, &previous, &content);
-        meta.title = derive_title(&content);
-        meta.tags = derive_tags(&content);
+        meta.title = title_of(&path, &content);
+        meta.tags = next_tags(&meta.tags, &previous, &content);
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
         Ok(note_from_meta(meta, &content))
@@ -165,22 +187,31 @@ impl Vault {
     /// user didn't make in that note (such as links following a rename).
     pub fn rewrite_content(&self, id: &str, content: &str) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, previous) = split_frontmatter(&raw)?;
+        let (mut meta, previous) = self.read_note(&path)?;
         self.keep_version(id, &previous, content);
-        meta.title = derive_title(content);
-        meta.tags = derive_tags(content);
+        meta.title = title_of(&path, content);
+        meta.tags = next_tags(&meta.tags, &previous, content);
         self.write_note(&path, &write_frontmatter(&meta, content))?;
         Ok(note_from_meta(meta, content))
     }
 
+    /// File a note in a folder (or the vault's top level): its file moves into
+    /// that folder's directory.
     pub fn update_note_folder(&self, id: &str, folder_id: Option<String>) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, content) = split_frontmatter(&raw)?;
+        let (mut meta, content) = self.read_note(&path)?;
+        let dir = self.folder_dir(folder_id.as_deref())?;
         meta.folder_id = folder_id;
         meta.updated = Utc::now();
-        self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        let text = write_frontmatter(&meta, &content);
+        self.write_note(&path, &text)?;
+        if path.parent() != Some(dir.as_path()) {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+            let target = free_path(&dir, &name);
+            self.tracker.record(&target, &text);
+            fs::rename(&path, &target).map_err(|e| e.to_string())?;
+            self.remember(&meta.id, &target);
+        }
         Ok(note_from_meta(meta, &content))
     }
 
@@ -188,8 +219,7 @@ impl Vault {
     /// the property `rename_from` to `key`. The body is left as it is.
     pub fn set_property(&self, id: &str, key: &str, value: Option<PropertyValue>, rename_from: Option<&str>) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, content) = split_frontmatter(&raw)?;
+        let (mut meta, content) = self.read_note(&path)?;
         set_property(&mut meta.extra, key, value.as_ref(), rename_from)?;
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
@@ -200,8 +230,7 @@ impl Vault {
     /// without touching its edit time; `None` when nothing linked there.
     pub fn rename_property_links(&self, id: &str, old_title: &str, new_title: &str) -> Result<Option<Note>, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, content) = split_frontmatter(&raw)?;
+        let (mut meta, content) = self.read_note(&path)?;
         let mut changed = false;
         for entry in meta.extra.iter_mut() {
             if let Some(next) = crate::links::rename_links(entry, old_title, new_title) {
@@ -218,8 +247,7 @@ impl Vault {
 
     pub fn star_note(&self, id: &str, starred: bool) -> Result<Note, String> {
         let path = self.note_path(id)?;
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let (mut meta, content) = split_frontmatter(&raw)?;
+        let (mut meta, content) = self.read_note(&path)?;
         meta.starred = starred;
         meta.updated = Utc::now();
         self.write_note(&path, &write_frontmatter(&meta, &content))?;
@@ -232,6 +260,9 @@ impl Vault {
 
     pub fn destroy_note(&self, id: &str) -> Result<(), String> {
         fs::remove_file(self.note_path(id)?).map_err(|e| e.to_string())?;
+        if let Ok(mut paths) = self.paths.lock() {
+            paths.remove(id);
+        }
         self.history.remove_all(id)
     }
 
@@ -283,12 +314,12 @@ impl Vault {
         Ok(())
     }
 
-    /// Every note file in the vault.
+    /// Every note file in the vault: Markdown anywhere but hidden folders
+    /// (Tagdown's own `.tagdown`, and the likes of `.git` or `.obsidian`).
     pub fn note_paths(&self) -> Vec<PathBuf> {
         WalkDir::new(&self.root)
             .into_iter()
-            // Skip app data such as the search index.
-            .filter_entry(|entry| entry.file_name() != ".tagdown")
+            .filter_entry(|entry| entry.depth() == 0 || !is_skipped(entry))
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().is_file())
             .map(|entry| entry.into_path())
@@ -297,15 +328,131 @@ impl Vault {
     }
 
     fn note_path(&self, id: &str) -> Result<PathBuf, String> {
-        self.note_paths()
+        let known = self.paths.lock().ok().and_then(|paths| paths.get(id).cloned());
+        if let Some(path) = known {
+            if self.read_note(&path).is_ok_and(|(meta, _)| meta.id == id) {
+                return Ok(path);
+            }
+        }
+        let paths = self.note_paths();
+        let file_name = format!("note-{id}.{NOTE_EXT}");
+        if let Some(path) = paths.iter().find(|path| path.file_name().and_then(|n| n.to_str()) == Some(file_name.as_str())) {
+            self.remember(id, path);
+            return Ok(path.clone());
+        }
+        paths
             .into_iter()
-            .find(|path| path.file_name().and_then(|n| n.to_str()).is_some_and(|name| name == format!("note-{id}.{NOTE_EXT}")))
+            .find(|path| self.read_note(path).is_ok_and(|(meta, _)| meta.id == id))
             .ok_or_else(|| format!("note not found: {id}"))
     }
 
-    fn path_for_new_note(&self, meta: &NoteFrontmatter) -> PathBuf {
-        self.root.join(format!("note-{}.{NOTE_EXT}", meta.id))
+    /// The id of the note last seen at `path`, if any.
+    pub fn id_at(&self, path: &Path) -> Option<String> {
+        let paths = self.paths.lock().ok()?;
+        paths.iter().find(|(_, seen)| seen.as_path() == path).map(|(id, _)| id.clone())
+            .or_else(|| path.file_stem()?.to_str()?.strip_prefix("note-").map(str::to_string))
     }
+
+    fn remember(&self, id: &str, path: &Path) {
+        if let Ok(mut paths) = self.paths.lock() {
+            paths.insert(id.to_string(), path.to_path_buf());
+        }
+    }
+
+    /// Read the note at `path`. Markdown files Tagdown didn't write are notes
+    /// too: until Tagdown first saves one, its id comes from where it sits,
+    /// and its dates from the file. A note's folder is the directory it's in.
+    pub fn read_note(&self, path: &Path) -> Result<(NoteFrontmatter, String), String> {
+        let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let (loose, content) = split_any(&raw);
+        let file_time = |created: bool| {
+            path.metadata().ok()
+                .and_then(|m| if created { m.created().ok() } else { m.modified().ok() })
+                .map(DateTime::<Utc>::from)
+                .unwrap_or_else(Utc::now)
+        };
+        let managed = loose.id.is_some();
+        let mut tags = loose.tags;
+        if !managed {
+            for tag in derive_tags(&content) {
+                if !tags.contains(&tag) { tags.push(tag); }
+            }
+        }
+        let meta = NoteFrontmatter {
+            id: loose.id.unwrap_or_else(|| self.adopted_id(path)),
+            title: loose.title.filter(|_| managed).unwrap_or_else(|| title_of(path, &content)),
+            tags,
+            starred: loose.starred,
+            folder_id: self.folder_of(path),
+            created: loose.created.unwrap_or_else(|| file_time(true)),
+            updated: loose.updated.unwrap_or_else(|| file_time(false)),
+            journal: loose.journal,
+            extra: loose.extra,
+        };
+        self.remember(&meta.id, path);
+        Ok((meta, content))
+    }
+
+    /// A stable id for a file Tagdown hasn't written to, from its place in the vault.
+    fn adopted_id(&self, path: &Path) -> String {
+        let relative = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy();
+        // FNV-1a: unlike std's hasher, the same on every build.
+        let hash = relative.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        format!("md-{hash:016x}")
+    }
+}
+
+/// The note's title: its first `# ` heading, else (for files Tagdown didn't
+/// name) the file name.
+fn title_of(path: &Path, content: &str) -> String {
+    let title = derive_title(content);
+    if title != "Untitled" {
+        return title;
+    }
+    match path.file_stem().and_then(|s| s.to_str()) {
+        Some(stem) if !stem.starts_with("note-") && !stem.trim().is_empty() => stem.to_string(),
+        _ => title,
+    }
+}
+
+/// Tags after an edit: the body's `#tags`, plus tags the frontmatter lists
+/// that the body never had (other apps keep tags there).
+fn next_tags(tags: &[String], previous: &str, content: &str) -> Vec<String> {
+    let before = derive_tags(previous);
+    let mut next = derive_tags(content);
+    for tag in tags {
+        if !before.contains(tag) && !next.contains(tag) {
+            next.push(tag.clone());
+        }
+    }
+    next
+}
+
+pub(crate) fn is_hidden(name: &std::ffi::OsStr) -> bool {
+    name.to_str().is_some_and(|n| n.starts_with('.'))
+}
+
+/// Entries below the vault that hold no notes of its own: hidden ones (Tagdown's
+/// `.tagdown`, `.git`, `.obsidian`) and other vaults kept inside this one.
+pub(crate) fn is_skipped(entry: &walkdir::DirEntry) -> bool {
+    is_hidden(entry.file_name()) || (entry.file_type().is_dir() && crate::vaults::is_vault(entry.path()))
+}
+
+fn has_markdown(root: &Path) -> bool {
+    WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|entry| entry.depth() == 0 || !is_skipped(entry))
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_type().is_file() && entry.path().extension().and_then(|s| s.to_str()) == Some(NOTE_EXT))
+}
+
+/// `dir/name`, or `dir/name 2.md` and so on when that's taken.
+pub(crate) fn free_path(dir: &Path, name: &str) -> PathBuf {
+    let (stem, ext) = name.rsplit_once('.').map_or((name, String::new()), |(s, e)| (s, format!(".{e}")));
+    (1..)
+        .map(|n| if n == 1 { dir.join(name) } else { dir.join(format!("{stem} {n}{ext}")) })
+        .find(|path| !path.exists())
+        .expect("some name is free")
 }
 
 pub(crate) fn note_from_meta(meta: NoteFrontmatter, content: &str) -> Note {

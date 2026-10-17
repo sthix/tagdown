@@ -79,7 +79,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Local-first vaults** of plain `.md` files (`~/Documents/Tagdown` by default, or any folder, Obsidian vaults included), whose folders on disk are Tagdown's folders. Keep several and switch between them.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
 - **Wikilinks** with autocomplete, by title or, Obsidian-style, by file path. Links follow renames automatically and show up as *Linked mentions* under the target note.
-- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day.
+- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J, or `tagdown today "…"`) adds a line to today's page from anywhere.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Note types** like Book, Person or Project: a `type:` property, a sidebar section, and a template note that new notes of the type start from.
 - **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables, kanban **boards** (drag a card to change its status) or **cards** with cover images. Tick tasks right in the list; ⌘⇧T shows every open task.

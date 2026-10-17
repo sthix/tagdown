@@ -60,6 +60,7 @@ pub fn run() {
             commands::notes::destroy_note,
             commands::notes::open_journal,
             commands::notes::journal_day,
+            commands::notes::append_to_journal,
             commands::notes::list_types,
             commands::notes::create_typed_note,
             commands::notes::apply_type,

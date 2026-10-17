@@ -56,6 +56,13 @@ impl Vault {
         Ok((note, true))
     }
 
+    /// Add text to the end of a day's page, starting the page first if needed.
+    pub fn append_to_journal(&self, day: NaiveDate, text: &str) -> Result<(Note, String), String> {
+        let (note, _) = self.open_journal(day)?;
+        let next = append_block(&self.get_note_content(&note.id)?.content, text);
+        Ok((self.save_note(&note.id, next.clone())?, next))
+    }
+
     /// The body of the "Journal Template" note, without its title heading.
     fn journal_template(&self) -> Result<Option<String>, String> {
         let wanted = normalize_title(TEMPLATE_TITLE);
@@ -65,6 +72,23 @@ impl Vault {
             .find(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE) && normalize_title(&n.title) == wanted);
         Ok(template.map(|(_, content)| strip_title(&content)))
     }
+}
+
+/// A list item (`- `, `* `, `+ `, `1. `), tasks included.
+fn is_list_item(line: &str) -> bool {
+    let line = line.trim_start();
+    line.starts_with(['-', '*', '+']) && line[1..].starts_with(' ')
+        || line.split_once(". ").is_some_and(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `content` with `text` added at the end as its own block. A list item
+/// following a list item joins that list instead of starting a new one, so
+/// captures in a row stay one tight list.
+pub fn append_block(content: &str, text: &str) -> String {
+    let (content, text) = (content.trim_end(), text.trim());
+    let last = content.lines().next_back().unwrap_or_default();
+    let gap = if is_list_item(last) && text.lines().next().is_some_and(is_list_item) { "\n" } else { "\n\n" };
+    format!("{content}{gap}{text}\n")
 }
 
 /// Everything after a note's `# ` title line.
@@ -207,6 +231,26 @@ mod tests {
         assert_ne!(fresh.id, old.id);
         let listed = vault.list_notes(Some("journal".into()), crate::models::SortOrder::UpdatedDesc).unwrap();
         assert_eq!(listed.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), vec![fresh.id.as_str()]);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn appended_list_items_join_the_list() {
+        assert_eq!(append_block("# Day\n\n- [ ] One\n", "- [ ] Two"), "# Day\n\n- [ ] One\n- [ ] Two\n");
+        assert_eq!(append_block("# Day\n\n1. One", "2. Two"), "# Day\n\n1. One\n2. Two\n");
+        assert_eq!(append_block("# Day\n\n- One\n", "A thought"), "# Day\n\n- One\n\nA thought\n");
+        assert_eq!(append_block("# Day\n\nA thought", "- One"), "# Day\n\nA thought\n\n- One\n");
+        assert_eq!(append_block("# Day\n\n---", "-1 degrees"), "# Day\n\n---\n\n-1 degrees\n", "a rule is no list");
+    }
+
+    #[test]
+    fn appending_to_a_day_starts_its_page() {
+        let (vault, root) = vault();
+        vault.append_to_journal(day("2026-10-13"), "- Call Sam").unwrap();
+        let (note, content) = vault.append_to_journal(day("2026-10-13"), "- Book flights").unwrap();
+        assert_eq!(note.journal, Some(day("2026-10-13")));
+        assert_eq!(content, "# 2026-10-13\n\n- Call Sam\n- Book flights\n");
+        assert_eq!(vault.get_note_content(&note.id).unwrap().content, content);
         std::fs::remove_dir_all(root).ok();
     }
 

@@ -7,6 +7,7 @@
 | ⌘K | Command palette: jump to a note, search, or run an action |
 | ⌘N | New note (in the selected folder; with a [type](organizing.md#note-types) selected, a note of that type) |
 | ⌘⇧J | Today's journal page |
+| ⌥⌘J | Quick capture: add a line to today's journal page without leaving your note |
 | ⌘S | Save now |
 | ⌘, | Settings |
 | ⌘\\ | Focus mode (hide the sidebar and note list) |

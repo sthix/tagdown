@@ -106,3 +106,24 @@ function localeWeekStart() {
   }
   return 1;
 }
+
+const LIST_ITEM = /^\s*(?:[-*+]|\d+\.) /;
+
+/**
+ * `content` with `text` added at the end as its own block, as the vault does
+ * it (journal.rs `append_block`): a list item after a list item joins the list.
+ */
+export function appendBlock(content: string, text: string) {
+  const body = content.trimEnd();
+  const added = text.trim();
+  const last = body.split('\n').pop() ?? '';
+  const gap = LIST_ITEM.test(last) && LIST_ITEM.test(added) ? '\n' : '\n\n';
+  return `${body}${gap}${added}\n`;
+}
+
+/** What a quick capture adds: the text, or as a task an open checklist item (unless it already is a list item). */
+export function captureText(text: string, asTask: boolean) {
+  const lines = text.trim().split('\n');
+  if (!asTask || LIST_ITEM.test(lines[0])) return lines.join('\n');
+  return [`- [ ] ${lines[0]}`, ...lines.slice(1).map((line) => `  ${line}`)].join('\n');
+}

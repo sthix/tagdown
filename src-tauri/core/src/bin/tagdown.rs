@@ -28,6 +28,7 @@ Commands:
   append <note> <text | ->    Add text to the end of a note
   journal [day] [text | -]    Print a day's journal page, or add text to it
                               (day: YYYY-MM-DD, today, yesterday, tomorrow)
+  today [text | -]            Today's journal page; with text, a quick capture to it
   tasks [--done | --all] [--tag TAG]
                               Checklist items across notes (open ones by default)
   backlinks <note>            Notes that link to a note
@@ -78,6 +79,15 @@ fn text_arg(parts: &[String]) -> Result<String, String> {
     Ok(parts.join(" "))
 }
 
+/// `today …` is `journal today …`.
+fn expand_alias(command: String, args: &mut Vec<String>) -> String {
+    if command != "today" {
+        return command;
+    }
+    args.insert(0, command);
+    "journal".into()
+}
+
 fn run(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || take_flag(&mut args, "--help") || take_flag(&mut args, "-h") {
         print!("{USAGE}");
@@ -90,7 +100,7 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
     if args.is_empty() {
         return Err("missing command; see tagdown --help".into());
     }
-    let command = args.remove(0);
+    let command = expand_alias(args.remove(0), &mut args);
     if command == "syntax" {
         print!("{SYNTAX}");
         return Ok(());
@@ -214,4 +224,23 @@ fn run(mut args: Vec<String>) -> Result<(), String> {
 /// Grey text on a terminal, plain otherwise.
 fn dim(text: &str) -> String {
     if io::stdout().is_terminal() { format!("\x1b[2m{text}\x1b[0m") } else { text.to_string() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn today_is_journal_today() {
+        let mut args = vec!["Call".to_string(), "Sam".to_string()];
+        assert_eq!(expand_alias("today".into(), &mut args), "journal");
+        assert_eq!(args, ["today", "Call", "Sam"]);
+        // A word that names a day is text here, not another day.
+        let mut args = vec!["tomorrow".to_string()];
+        expand_alias("today".into(), &mut args);
+        assert_eq!(args, ["today", "tomorrow"]);
+        let mut args = vec!["Sam".to_string()];
+        assert_eq!(expand_alias("show".into(), &mut args), "show");
+        assert_eq!(args, ["Sam"]);
+    }
 }

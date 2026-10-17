@@ -28,7 +28,8 @@ import { nextTaskLine } from './taskRepeat';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
-import { calendarHtml, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
+import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
+import { openQuickCapture } from './quickCapture';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -458,6 +459,8 @@ function bindChrome() {
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
+    // ⌥ changes the key's character on macOS, so this one goes by the physical key.
+    if (event.metaKey && event.altKey && !event.shiftKey && event.code === 'KeyJ') { event.preventDefault(); quickCapture(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'j') { event.preventDefault(); await openJournal(todayKey()); return; }
     if (event.metaKey && event.altKey && selectedNote?.journal && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault();
@@ -507,6 +510,7 @@ function paletteActions(): PaletteAction[] {
     )),
     { id: 'new-note-type', label: 'New note type…', hint: 'Like Book or Person, with a template', icon: uiIcon('type', 15), run: () => { creatingType = true; renderTypes(); } },
     { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
+    { id: 'quick-capture', label: 'Quick capture', hint: 'Add a line to today’s journal', shortcut: '⌥⌘J', icon: uiIcon('compose', 15), run: quickCapture },
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
       { id: 'journal-previous', label: 'Previous day', hint: formatDay(shiftDay(selectedNote.journal, -1)), shortcut: '⌥⌘←', icon: uiIcon('chevronLeft', 15), run: () => openJournal(shiftDay(selectedNote!.journal!, -1)) },
@@ -1354,6 +1358,26 @@ async function restoreWorkspace(): Promise<boolean> {
 }
 
 // ---- Journal ----
+
+/** Add text to today's journal page without opening it. */
+function quickCapture() {
+  openQuickCapture({
+    save: async (day, raw, asTask) => {
+      const text = captureText(raw, asTask);
+      if (selectedNote?.journal === day) {
+        // The page is open here: add to the editor, which saves it as usual.
+        showDiskContent(appendBlock(content, text));
+        scheduleSave();
+      } else {
+        const { note, content: next } = await invoke<{ note: Note; content: string }>('append_to_journal', { day, text });
+        // Panes showing the page take the new text; lists and queries catch up.
+        await onExternalChange(note, next);
+        invalidateQueries();
+      }
+      showNotice('Added to today’s journal');
+    },
+  });
+}
 
 /** Open a day's journal page, creating it (from the "Journal Template" note, if any) the first time. */
 async function openJournal(day: string) {

@@ -23,6 +23,12 @@ A day's page is titled with its date in `YYYY-MM-DD` form, so `[[2026-10-13]]` l
 - Clicking a link to a day without a page starts that page.
 - **Linked mentions** at the bottom of a day lists every note that links to it. Writing "Call the bank on [[2026-10-20]]" in any note puts that line under October 20.
 
+## Quick capture
+
+Press **⌥⌘J** (or choose **Quick capture** in the command palette) to jot something down without leaving the note you're in. Type, press **↩**, and it's added to the end of today's page, which is started if needed. **⇧↩** adds a new line; tick **As a task** to add it as an open task.
+
+A capture that's a list item, like `- Call Sam`, joins the list at the end of the page instead of starting a new one. From the terminal, `tagdown today "- Call Sam"` does the same.
+
 ## What happened that day
 
 Below a day's page, **This day** collects the rest of the day from across the vault:

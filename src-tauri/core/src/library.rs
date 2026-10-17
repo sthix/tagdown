@@ -195,8 +195,7 @@ impl Library {
 
     pub fn append(&self, reference: &str, text: &str) -> Result<Note, String> {
         let (note, content) = self.resolve(reference)?;
-        let next = format!("{}\n\n{}\n", content.trim_end(), text.trim());
-        self.vault.save_note(&note.id, next)
+        self.vault.save_note(&note.id, crate::journal::append_block(&content, text))
     }
 
     /// Replace a note's whole body. The previous body is always kept in the
@@ -216,8 +215,7 @@ impl Library {
 
     /// Add text to the end of a day's journal page, creating the page first if needed.
     pub fn append_to_journal(&self, day: NaiveDate, text: &str) -> Result<Note, String> {
-        let (note, _) = self.vault.open_journal(day)?;
-        self.append(&note.id, text)
+        self.vault.append_to_journal(day, text).map(|(note, _)| note)
     }
 
     /// Run a query-block query (see `query.rs`) over the whole vault.
@@ -326,7 +324,7 @@ mod tests {
         lib.append_to_journal(day, "- Lunch").unwrap();
         let (note, content) = lib.journal(day).unwrap().unwrap();
         assert_eq!(note.title, "2026-10-13");
-        assert_eq!(content, "# 2026-10-13\n\n- Met [[Trip plan]] people\n\n- Lunch\n");
+        assert_eq!(content, "# 2026-10-13\n\n- Met [[Trip plan]] people\n- Lunch\n");
         assert!(resolve_day(Some("someday")).is_err());
         std::fs::remove_dir_all(root).ok();
     }

@@ -99,6 +99,25 @@ pub async fn open_journal(day: String, app: tauri::AppHandle, state: State<'_, M
     Ok(note)
 }
 
+#[derive(serde::Serialize)]
+pub struct Appended {
+    note: Note,
+    content: String,
+}
+
+/// Quick capture: add `text` to the end of `day`'s journal page, starting the page if needed.
+#[tauri::command]
+pub async fn append_to_journal(day: String, text: String, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Appended, String> {
+    let day = crate::journal::parse_day(&day).ok_or_else(|| format!("not a day: {day}"))?;
+    if text.trim().is_empty() {
+        return Err("nothing to add".into());
+    }
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let (note, content) = state.vault.append_to_journal(day, &text)?;
+    search.index(&note, &content);
+    Ok(Appended { note, content })
+}
+
 /// The notes and open tasks of `day` (YYYY-MM-DD), shown under its journal page `id`.
 #[tauri::command]
 pub async fn journal_day(day: String, id: String, state: State<'_, Mutex<AppState>>) -> Result<crate::journal::DaySummary, String> {

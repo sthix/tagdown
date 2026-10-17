@@ -72,6 +72,7 @@ pub fn run() {
             commands::folders::delete_folder,
             commands::search::search,
             commands::links::backlinks,
+            commands::links::local_graph,
             commands::links::block_ref,
             commands::query::run_query,
             commands::site::site_notes,

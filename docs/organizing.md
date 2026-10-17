@@ -136,3 +136,9 @@ Results show highlighted excerpts. The same syntax works in [queries](queries-an
 - A link can also name a note by its file, the way Obsidian writes them: `[[blog/my-post]]` for `blog/my-post.md`, or just `[[my-post]]` when no other note has that file name. A note whose title matches wins over a file match.
 - When you rename a note, links to it by title are updated automatically. Links that name it by its file still find it, so they're left as they are.
 - Below each note, **Linked mentions** lists the notes that link to it, with the lines that mention it.
+
+### Graph
+
+Press **⌘⇧G** (or choose **Show graph** in the command palette) to see the open note in the middle of the notes it links to and the notes that link to it. Each note is colored by its [type](#note-types), journal pages in amber and plain notes in grey; the legend at the bottom names them. Arrows point the way a link goes. Dashed lines are links among the neighbours themselves.
+
+Point at a note to bring out its links. Click it to open it, or ⌘-click to open it in a new tab. Links in properties count too, so a Book's `author: "[[Ursula K. Le Guin]]"` shows up. With very many neighbours, the graph keeps the 48 most recently edited.

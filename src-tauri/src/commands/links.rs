@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::{
     commands::search::SearchState,
-    links::{self, normalize_title, Backlink, Block, LinkTargets},
+    links::{self, normalize_title, Backlink, Block, LinkTargets, LocalGraph},
     models::Note,
     AppState,
 };
@@ -29,6 +29,13 @@ fn is_live(note: &Note) -> bool {
 pub async fn backlinks(id: String, state: State<'_, Mutex<AppState>>) -> Result<Vec<Backlink>, String> {
     let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
     Ok(links::backlinks(notes, &id))
+}
+
+/// The note `id`, the notes it links to and the notes linking to it.
+#[tauri::command]
+pub async fn local_graph(id: String, state: State<'_, Mutex<AppState>>) -> Result<LocalGraph, String> {
+    let notes = state.lock().map_err(|e| e.to_string())?.vault.notes_with_content()?;
+    links::local_graph(notes, &id).ok_or_else(|| "that note no longer exists".into())
 }
 
 #[derive(Serialize)]

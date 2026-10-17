@@ -10,12 +10,14 @@
 // Obsidian writes them: `Some paragraph ^ab12cd`, `- [ ] a task ^ab12cd`. The
 // marker travels with the text, so the id survives edits and moves.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
 
 use crate::models::Note;
 
+/// Neighbours a local graph shows at most, the most recently edited.
+const GRAPH_NEIGHBOURS: usize = 48;
 /// Context lines kept per linking note.
 const MENTIONS_PER_NOTE: usize = 3;
 /// Lines nested under a linking line kept with its mention.
@@ -517,6 +519,56 @@ pub(crate) fn strip_line_marker(line: &str) -> &str {
     rest.trim()
 }
 
+/// A note, the notes it links to and the notes linking to it, with the links
+/// among them all.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalGraph {
+    /// The note itself first, then its neighbours.
+    pub notes: Vec<Note>,
+    /// Links as `[from, to]` note ids, each pair once.
+    pub links: Vec<[String; 2]>,
+    /// Neighbours left out to keep the graph readable.
+    pub hidden: usize,
+}
+
+/// The ids of the notes `note` links to, in its text or its properties.
+fn links_from(note: &Note, content: &str, targets: &LinkTargets) -> BTreeSet<String> {
+    let in_properties = note.properties.iter().flat_map(|p| p.value.texts()).flat_map(parse_wikilinks);
+    parse_wikilinks(content)
+        .into_iter()
+        .chain(in_properties)
+        .flat_map(|link| targets.resolve(&link.target).into_iter().map(str::to_string).collect::<Vec<_>>())
+        .filter(|target| target != &note.id)
+        .collect()
+}
+
+/// The local graph around the note `id`. Archived notes are left out.
+pub fn local_graph(notes: Vec<(Note, String)>, id: &str) -> Option<LocalGraph> {
+    let live: Vec<(Note, String)> = notes.into_iter().filter(|(note, _)| is_live(note) || note.id == id).collect();
+    let targets = LinkTargets::new(live.iter().map(|(note, _)| note));
+    let outgoing: HashMap<&str, BTreeSet<String>> = live.iter().map(|(note, content)| (note.id.as_str(), links_from(note, content, &targets))).collect();
+    let (center, _) = live.iter().find(|(note, _)| note.id == id)?;
+    let mut neighbours: Vec<&Note> = live
+        .iter()
+        .map(|(note, _)| note)
+        .filter(|note| note.id != id && (outgoing[id].contains(&note.id) || outgoing[note.id.as_str()].contains(id)))
+        .collect();
+    neighbours.sort_by_key(|note| std::cmp::Reverse(note.updated_at));
+    let hidden = neighbours.len().saturating_sub(GRAPH_NEIGHBOURS);
+    neighbours.truncate(GRAPH_NEIGHBOURS);
+    let mut shown: Vec<Note> = vec![center.clone()];
+    shown.extend(neighbours.into_iter().cloned());
+    let ids: BTreeSet<&str> = shown.iter().map(|note| note.id.as_str()).collect();
+    let mut links = Vec::new();
+    for from in &shown {
+        for to in outgoing[from.id.as_str()].iter().filter(|to| ids.contains(to.as_str())) {
+            links.push([from.id.clone(), to.clone()]);
+        }
+    }
+    Some(LocalGraph { notes: shown, links, hidden })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -713,5 +765,27 @@ mod tests {
         // Without the file to fall back on, the title link follows.
         let none = |_: &str| false;
         assert_eq!(rename_links(content, "notes", "Meeting notes", &none).unwrap(), "[[Meeting notes]] [[Meeting notes#Part]] [[notes.md]]");
+    }
+
+    #[test]
+    fn a_local_graph_holds_links_both_ways_and_among_neighbours() {
+        let mut person = note("sam", "Sam", "Sam.md");
+        person.properties = crate::properties::parse_properties(&["met_at: \"[[Plan]]\"".into()]);
+        let mut old = note("old", "Old", "Old.md");
+        old.folder_id = Some("archive".into());
+        let notes = vec![
+            (note("plan", "Plan", "Plan.md"), "Owner [[Sam]], see [[Budget]] and [[Plan]] and [[Nowhere]]".to_string()),
+            (note("budget", "Budget", "Budget.md"), "Asks [[sam]]".to_string()),
+            (person, String::new()),
+            (note("far", "Far", "Far.md"), "[[Budget]] only".to_string()),
+            (old, "[[Plan]]".to_string()),
+        ];
+        let graph = local_graph(notes.clone(), "plan").unwrap();
+        assert_eq!(graph.notes.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), vec!["plan", "budget", "sam"]);
+        let mut links: Vec<String> = graph.links.iter().map(|[a, b]| format!("{a}>{b}")).collect();
+        links.sort();
+        assert_eq!(links, vec!["budget>sam", "plan>budget", "plan>sam", "sam>plan"], "no self link, archived and two-step notes left out");
+        assert_eq!(graph.hidden, 0);
+        assert!(local_graph(notes, "missing").is_none());
     }
 }

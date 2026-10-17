@@ -30,6 +30,7 @@ import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, se
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
 import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import { openQuickCapture } from './quickCapture';
+import { openLocalGraph } from './localGraph';
 import './styles/tokens.css';
 import './styles/layout.css';
 import './styles/sidebar.css';
@@ -458,6 +459,7 @@ function bindChrome() {
     if (event.metaKey && event.altKey && event.code === 'KeyP') { event.preventDefault(); await presentNote(); return; }
     if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'g') { event.preventDefault(); await showGraph(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
     // ⌥ changes the key's character on macOS, so this one goes by the physical key.
     if (event.metaKey && event.altKey && !event.shiftKey && event.code === 'KeyJ') { event.preventDefault(); quickCapture(); return; }
@@ -510,6 +512,7 @@ function paletteActions(): PaletteAction[] {
     )),
     { id: 'new-note-type', label: 'New note type…', hint: 'Like Book or Person, with a template', icon: uiIcon('type', 15), run: () => { creatingType = true; renderTypes(); } },
     { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
+    ...(selectedNote ? [{ id: 'graph', label: 'Show graph', hint: 'This note’s links, both ways', shortcut: '⌘⇧G', icon: uiIcon('graph', 15), run: showGraph }] : []),
     { id: 'quick-capture', label: 'Quick capture', hint: 'Add a line to today’s journal', shortcut: '⌥⌘J', icon: uiIcon('compose', 15), run: quickCapture },
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
@@ -1358,6 +1361,23 @@ async function restoreWorkspace(): Promise<boolean> {
 }
 
 // ---- Journal ----
+
+/** The open note with the notes it links to and the notes linking to it. */
+async function showGraph() {
+  if (!selectedNote) return;
+  // Links just typed count.
+  await flushSave();
+  const graph = await invoke<{ notes: Note[]; links: Array<[string, string]>; hidden: number }>('local_graph', { id: selectedNote.id });
+  const kindOf = (note: Note) => note.journal ? 'Journal' : findType(typeOfNote(note))?.name ?? typeOfNote(note) ?? '';
+  openLocalGraph({
+    notes: graph.notes.map((note) => ({ id: note.id, title: tabTitleOf(note), kind: kindOf(note) })),
+    links: graph.links,
+    hidden: graph.hidden,
+    kinds: noteTypes.map((type) => type.name),
+    iconOf: (kind) => kind === 'Journal' ? iconSvg('calendar', 12) : typeIconHtml(findType(kind) ?? { name: kind, icon: null }, 12),
+    open: (id, event) => void revealNote(id, openTarget(event)),
+  });
+}
 
 /** Add text to today's journal page without opening it. */
 function quickCapture() {

@@ -30,6 +30,7 @@ export const UI_ICONS: Record<string, string> = {
   play: '<path d="M5 3.4v9.2c0 .5.5.8.9.5l7-4.6c.4-.3.4-.8 0-1.1l-7-4.6c-.4-.2-.9 0-.9.6z" />',
   clock: '<circle cx="8" cy="8" r="5.6" /><path d="M8 4.8V8l2.2 1.4" />',
   printer: '<path d="M4.5 6V2.8h7V6" /><rect x="2.5" y="6" width="11" height="5" rx="1.1" /><path d="M4.5 9.5h7v3.7h-7z" />',
+  graph: '<circle cx="8" cy="8" r="1.9" /><circle cx="3.4" cy="4" r="1.3" /><circle cx="12.8" cy="4.6" r="1.3" /><circle cx="4.6" cy="12.6" r="1.3" /><path d="M4.4 4.9l2.1 1.8M11.6 5.3L9.7 7M5.4 11.5l1.4-2" />',
   calendar: '<rect x="3" y="3.8" width="10" height="9" rx="1.1" /><path d="M5.5 2.5v2.2M10.5 2.5v2.2M3.3 6.4h9.4" />',
   chevronLeft: '<path d="M10 3.5L5.5 8l4.5 4.5" />',
   chevronRight: '<path d="M6 3.5L10.5 8 6 12.5" />',

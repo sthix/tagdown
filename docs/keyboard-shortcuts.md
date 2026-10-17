@@ -40,6 +40,7 @@
 | Shortcut | Action |
 | --- | --- |
 | ⌘⇧T | Show every open task |
+| ⌘⇧G | Graph of the open note's links, both ways |
 | ⌘⇧H | Version history of the open note |
 | ⌘⇧E | Export as HTML |
 | ⌘P | Print or save as PDF |

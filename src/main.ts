@@ -1372,7 +1372,8 @@ async function restoreWorkspace(): Promise<boolean> {
 async function saveWebLink(url: string, pasted?: HTMLTextAreaElement) {
   const folderId = isUserFolder(selectedFolder) ? selectedFolder : null;
   const saved = await invoke<{ note: Note; existed: boolean; fetchError: string | null }>('save_web_link', { url, folderId });
-  await Promise.all([reloadNotes(), reloadTypes()]);
+  await reloadFolders();
+  await reloadNotes();
   invalidateQueries();
   const title = saved.note.title || 'Untitled';
   if (pasted) replacePastedLink(pasted, url, `[[${title}]]`);

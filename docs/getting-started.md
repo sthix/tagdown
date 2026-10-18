@@ -50,6 +50,14 @@ On first launch Tagdown creates a vault at `~/Documents/Tagdown` (you can switch
 
 Three starter notes are created: **Welcome to Tagdown**, **Tagdown Cheat Sheet**, and **Your First Note**. Open one, switch to **Split** view (⌘2), and start typing. Notes save automatically.
 
+<figure class="doc-visual">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
+    <img src="images/tagdown-editor-light.png" width="1440" height="900" loading="lazy" decoding="async" alt="Tagdown in Split view: the library and tags on the left, the note list in the middle, and Atlas launch plan with editable source beside its rendered preview on the right." />
+  </picture>
+  <figcaption>An example workspace with a few notes added. In Split view, the text you write on the left becomes the preview on the right.</figcaption>
+</figure>
+
 ## Next steps
 
 - [Writing notes](writing-notes.md): find your way around the workspace.

@@ -10,6 +10,14 @@ The window has three areas:
 
 Press **⌘\\** for focus mode, which hides the sidebar and note list so only the note is left.
 
+<figure class="doc-visual">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/tagdown-editor-dark.png" />
+    <img src="images/tagdown-editor-light.png" width="1440" height="900" loading="lazy" decoding="async" alt="The full workspace: a sidebar with folders, types and tags; a date-grouped note list with filter pills; and an editor with note tabs, properties, source and preview." />
+  </picture>
+  <figcaption>From left to right: choose a place in the sidebar, choose a note in the list, then write in the editor. The Source, Split and Preview buttons are above the note.</figcaption>
+</figure>
+
 ## Tabs and panes
 
 Clicking a note opens it in the current tab. To keep the note you're on open as well:

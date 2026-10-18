@@ -14,6 +14,13 @@ Tagdown Editor is a [Tauri v2](https://v2.tauri.app) app:
 
 The UI never touches the filesystem directly; it calls Tauri commands, which go through `tagdown-core`. The CLI and MCP server use the same crate, so the app, the command line, and AI assistants all read and write notes the same way, with the same version history.
 
+<figure class="doc-visual">
+  <a href="images/guides/shared-vault.svg">
+    <img src="images/guides/shared-vault.svg" width="960" height="540" loading="lazy" decoding="async" alt="Architecture diagram: desktop UI via Tauri commands, terminal commands and an assistant via the MCP server converge on tagdown-core, which accesses the Markdown vault and history." />
+  </a>
+  <figcaption>The three entry points share the Rust core. Changes to vault, query or history behavior belong there so every entry point gets the same behavior.</figcaption>
+</figure>
+
 The one thing that reaches the network is saving a web link (`weblink.rs`): it fetches the page with the system's `curl`, http and https only, so the app carries no HTTP or TLS stack of its own.
 
 ## Project layout
@@ -87,6 +94,8 @@ bundle exec jekyll serve
 ```
 
 Open `http://localhost:4000/tagdown/`. To check a production build, run `bundle exec jekyll build`. GitHub Pages builds the same `docs/` directory when changes reach `main`.
+
+The explanatory diagrams in `docs/images/guides/` are SVGs generated from `scripts/gen-doc-visuals.mjs`. Edit that source and run `node scripts/gen-doc-visuals.mjs` to regenerate them. Keep screenshots for app controls and diagrams for relationships or before-and-after examples; add descriptive alt text and a caption wherever a visual needs explanation.
 
 ## Releasing
 

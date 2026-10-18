@@ -95,6 +95,13 @@ A template property whose value is a link to a type says that the property holds
 
 Giving an existing note a type (by setting its `type` property) adds the template's properties it doesn't have yet. Its text is left alone.
 
+<figure class="doc-visual">
+  <a href="images/guides/note-types.svg">
+    <img src="images/guides/note-types.svg" width="960" height="530" loading="lazy" decoding="async" alt="A Book Template declares author as a link to Person. A new Dune note fills in its date and links author to Frank Herbert. The Frank Herbert note then lists Dune in its linked mentions." />
+  </a>
+  <figcaption>The template supplies the fields; each new note supplies its values. Choosing an author creates a normal wikilink, which also connects the notes through backlinks.</figcaption>
+</figure>
+
 ### Types in queries
 
 `type:Book` in a [query](queries-and-tasks.md) lists notes of that type, the same as `type=Book`. A [table, board or cards](queries-and-tasks.md#tables-boards-and-cards) for a type adds new notes from its template:

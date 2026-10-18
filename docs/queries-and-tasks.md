@@ -32,6 +32,13 @@ The query uses the [search syntax](organizing.md#search) (words, `"phrases"`, `t
 
 A note never lists itself. When a query shows tasks, ticking one in the list ticks it in the note it lives in.
 
+<figure class="doc-visual">
+  <a href="images/guides/live-query.svg">
+    <img src="images/guides/live-query.svg" width="960" height="540" loading="lazy" decoding="async" alt="A dashboard query gathers open tasks from Atlas tagged project/atlas and Beacon tagged project/beacon. Shopping has no project tag and is excluded. Ticking a result changes the task in its source note." />
+  </a>
+  <figcaption>A query gathers matching items into one view. It does not copy them into the dashboard: checking a task changes its original note.</figcaption>
+</figure>
+
 ## Filtering by property
 
 Queries filter on a note's [properties](writing-notes.md#properties):
@@ -72,6 +79,13 @@ To change several notes at once, tick their rows (shift-click ticks every row be
 <query type:Project show:board lanes:planned,active,done columns:owner,due />
 ```
 
+<figure class="doc-visual">
+  <a href="images/guides/board-update.svg">
+    <img src="images/guides/board-update.svg" width="960" height="488" loading="lazy" decoding="async" alt="Board illustration with planned, active and done lanes. Moving the Atlas card from planned to active changes the Atlas note's property to status: active." />
+  </a>
+  <figcaption>Each card is a note, and each lane is a property value. Moving a card writes the new value into that note's frontmatter.</figcaption>
+</figure>
+
 **`show:cards`** shows a grid of cards with each note's cover image, opening lines, and the properties `columns:` names. The cover is the note's `cover:` property (a path in the vault or a URL), or else the first image in the note.
 
 ```tagdown
@@ -104,6 +118,13 @@ A task can carry a few words that Tagdown reads, all plain text:
 - **Its day** is the first date link in it. The date link also puts the task on that day's [journal page](journal.md), under *This day* while it's open and under *Linked mentions*. The preview shows it as *Today*, *Tomorrow* or *Tue, Oct 20*, highlighted when it's today or overdue. Type `/date` to insert today's date and change it.
 - **Its priority** is `!high`, `!medium` or `!low`, shown as a flag.
 - **`every:day`**, `every:weekday`, `every:week`, `every:month` or `every:year` makes it **repeat**. Ticking it adds the next one above it, with its day moved on (a task without a day repeats from today). The ticked one stays as a record.
+
+<figure class="doc-visual">
+  <a href="images/guides/task-repeat.svg">
+    <img src="images/guides/task-repeat.svg" width="960" height="428" loading="lazy" decoding="async" alt="Before and after completing a weekly task: Water plants dated October 18 is checked, and a new unchecked Water plants task dated October 25 appears above it. Both keep every:week." />
+  </a>
+  <figcaption>Completing a repeating task keeps the finished occurrence and creates the next one above it. This weekly example advances the date by seven days.</figcaption>
+</figure>
 
 Queries list tasks by day with `date:` and `sort:date`:
 

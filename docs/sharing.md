@@ -39,6 +39,13 @@ Where we are
 <query tag:roadmap show:tasks />
 ```
 
+<figure class="doc-visual">
+  <a href="images/guides/slide-breaks.svg">
+    <img src="images/guides/slide-breaks.svg" width="960" height="560" loading="lazy" decoding="async" alt="The Quarterly review source becomes three slides: a title slide, Highlights with two bullets, and Next with query results. Each standalone --- line starts the next slide." />
+  </a>
+  <figcaption>Two breaks make three slides. The query on the last slide is filled with its results when you present the note. The slide layouts here are illustrations.</figcaption>
+</figure>
+
 | Key | Action |
 | --- | --- |
 | → ↓ Space ↩ Page Down | Next slide |
@@ -53,6 +60,13 @@ Where we are
 1. Choose what to publish: **all notes**, a **folder**, or a **tag**.
 2. Give the site a title.
 3. Click **Choose folder and publish…** and pick an output folder. When it's done you can open the site in your browser or show it in Finder.
+
+<figure class="doc-visual">
+  <a href="images/guides/publishing.svg">
+    <img src="images/guides/publishing.svg" width="960" height="540" loading="lazy" decoding="async" alt="Publishing flow: select notes, write an output folder with an index, note pages and assets, then upload it to a host. Links between included notes stay links; a link to an excluded note becomes plain text." />
+  </a>
+  <figcaption>Publishing creates files on your Mac. Upload the output folder to put the site online. Only notes in your selection become pages or query results.</figcaption>
+</figure>
 
 The output looks like this:
 

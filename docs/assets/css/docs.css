@@ -93,6 +93,10 @@ main:focus { outline: none; }
 .home > blockquote { margin: 0 0 28px; font-size: 19px; line-height: 1.5; }
 .article img { display: block; max-width: 100%; height: auto; margin: 28px 0; border: 1px solid var(--line); border-radius: 8px; }
 .article picture { display: block; }
+.article .doc-visual { margin: 28px 0 32px; }
+.article .doc-visual img { width: 100%; margin: 0; }
+.article .doc-visual > a { display: block; border-radius: 8px; cursor: zoom-in; }
+.article .doc-visual figcaption { margin-top: 12px; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .article hr { margin: 36px 0; border: 0; border-top: 1px solid var(--line); }
 .article pre, .article code, kbd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: .85em; }
 .article :not(pre) > code { padding: .15em .3em; border-radius: 4px; background: var(--soft); }

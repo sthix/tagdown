@@ -4,6 +4,13 @@ The `tagdown` command works on the same vault as the app. It can search, read, a
 
 Changes it makes show up in the running app right away, and anything it replaces is kept in the note's [version history](version-history.md).
 
+<figure class="doc-visual">
+  <a href="images/guides/shared-vault.svg">
+    <img src="images/guides/shared-vault.svg" width="960" height="540" loading="lazy" decoding="async" alt="The desktop app through Tauri commands, a terminal through the tagdown CLI, and an AI assistant through tagdown mcp all use tagdown-core to read and write the same local Markdown vault and version history." />
+  </a>
+  <figcaption>Point the app, CLI and assistant at the same vault to work on the same files. MCP is the assistant's connection to the local command, and changes appear in the app.</figcaption>
+</figure>
+
 ## Install
 
 From the repository root (Rust 1.86 or newer):

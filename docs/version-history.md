@@ -8,6 +8,13 @@ Press **⌘⇧H**, click the clock button in the editor's top bar, or choose **S
 
 Restoring is itself undoable: the version you are replacing is saved to history first.
 
+<figure class="doc-visual">
+  <a href="images/guides/version-restore.svg">
+    <img src="images/guides/version-restore.svg" width="960" height="478" loading="lazy" decoding="async" alt="Before restore, the current note holds the latest edits and history holds an earlier draft. After restore, the earlier draft is current and the replaced latest edits are saved as a history snapshot." />
+  </a>
+  <figcaption>Restoring makes the selected snapshot current. To reverse the restore, open history again and restore the snapshot containing the edits you replaced.</figcaption>
+</figure>
+
 ## What gets kept
 
 When a note saves, Tagdown keeps the version being replaced if the last snapshot is a few minutes old, or whenever the save removes most of the note. Over time, older snapshots are thinned out:

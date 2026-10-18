@@ -64,6 +64,13 @@ This changes the rendered output.
 </note>
 ```
 
+<figure class="doc-visual">
+  <a href="images/guides/syntax-callout.svg">
+    <img src="images/guides/syntax-callout.svg" width="960" height="372" loading="lazy" decoding="async" alt="Callout source beside a preview illustration: ::: tip Pro tip opens a titled tip, its Markdown body goes inside, and ::: closes it." />
+  </a>
+  <figcaption>The first line sets the callout's type and title. The closing marker keeps the following text outside the callout. Select any diagram on this page to open it at full size.</figcaption>
+</figure>
+
 ## Layout and structure
 
 ```tagdown
@@ -94,6 +101,13 @@ A side note that floats beside the text on wide screens.
 ```
 
 `</>` closes the most recent open tag, so you don't have to repeat its name.
+
+<figure class="doc-visual">
+  <a href="images/guides/syntax-layout.svg">
+    <img src="images/guides/syntax-layout.svg" width="960" height="560" loading="lazy" decoding="async" alt="Source and layout sketches: a grid 2 block uses ||| to separate left and right columns; a tabs block contains named Source and Preview tabs, with only the selected tab's body visible." />
+  </a>
+  <figcaption>Columns show their contents together. Tabs let the reader choose which content to show. These are structural illustrations of the components.</figcaption>
+</figure>
 
 ## Code, math, and diagrams
 

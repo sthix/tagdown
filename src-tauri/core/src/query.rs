@@ -379,6 +379,9 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
         Some(index.matching_ids(&spec.filter, notes.len().max(1))?)
     };
 
+    let types = if spec.properties.iter().any(|f| f.key.eq_ignore_ascii_case(TYPE_KEY)) {
+        crate::types::list_types(&notes.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>())
+    } else { Vec::new() };
     let mut selected: Vec<(Note, String)> = notes
         .into_iter()
         .filter(|(n, _)| Some(n.id.as_str()) != exclude_id)
@@ -387,7 +390,19 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
             None => n.folder_id.as_deref() != Some("archive"),
         })
         .filter(|(n, _)| matching.as_ref().is_none_or(|ids| ids.contains(&n.id)))
-        .filter(|(n, _)| spec.properties.iter().all(|f| f.matches(property(n, &f.key), today)))
+        .filter(|(n, _)| spec.properties.iter().all(|f| {
+            if f.key.eq_ignore_ascii_case(TYPE_KEY) && crate::types::template_type(&n.title).is_none() {
+                if let Match::Equals(wanted) = &f.matcher {
+                    let name = n.journal.map(|_| "Journal".to_string()).or_else(|| crate::types::type_of(n));
+                    let hit = name.is_some_and(|name| {
+                        link_text(&name) == link_text(wanted) || types.iter().find(|t| normalize_title(&t.name) == normalize_title(&name))
+                            .is_some_and(|t| t.ancestors.iter().any(|a| link_text(a) == link_text(wanted)))
+                    });
+                    return hit != f.negate;
+                }
+            }
+            f.matches(property(n, &f.key), today)
+        }))
         .collect();
     match &spec.sort {
         Sort::Updated => selected.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at)),

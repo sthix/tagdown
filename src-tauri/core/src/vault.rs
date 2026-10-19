@@ -228,6 +228,16 @@ impl Vault {
         Ok(self.note_at(&path, meta, &content))
     }
 
+    /// Change related properties together, without an intermediate state on disk.
+    pub(crate) fn set_properties(&self, id: &str, changes: &[(String, Option<PropertyValue>)]) -> Result<Note, String> {
+        let path = self.note_path(id)?;
+        let (mut meta, content) = self.read_note(&path)?;
+        for (key, value) in changes { set_property(&mut meta.extra, key, value.as_ref(), None)?; }
+        meta.updated = Utc::now();
+        self.write_note(&path, &write_frontmatter(&meta, &content))?;
+        Ok(self.note_at(&path, meta, &content))
+    }
+
     /// Add `properties` the note doesn't have yet (by name, ignoring case), in
     /// one write. Says which were added; with none, the file is left alone.
     pub fn add_properties(&self, id: &str, properties: &[Property]) -> Result<(Note, Vec<String>), String> {

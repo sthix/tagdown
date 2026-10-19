@@ -29,6 +29,7 @@ These guides will help you find your way around, build a habit of taking notes, 
 
 ## Go a little further
 
+- [🗂️ Templates and child types](organizing.md#child-types): Start with built-in templates, create children with the row's **+**, and choose which properties they inherit.
 - [🧩 Tagdown syntax](syntax.md): Markdown, callouts, tabs, columns, math, and diagrams.
 - [✅ Queries and tasks](queries-and-tasks.md): Find notes, build live views, and keep track of what needs doing.
 - [📜 Version history](version-history.md): Look back at earlier versions and restore a snapshot.

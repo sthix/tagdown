@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 mod commands;
 
 // The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
-pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, types, vault, vaults, watcher, weblink};
+pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, templates, types, vault, vaults, watcher, weblink};
 
 use commands::search::SearchState;
 use search_index::SearchIndex;
@@ -19,6 +19,7 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let vault = Vault::open_or_create_active().expect("failed to open or create the vault");
+    vault.ensure_builtin_templates().expect("failed to initialize built-in templates");
     let search = open_search_index(&vault);
     let (watch_vault, watch_search) = (vault.clone(), search.0.clone());
     let vault_root = vault.root.clone();
@@ -63,6 +64,12 @@ pub fn run() {
             commands::notes::append_to_journal,
             commands::notes::save_web_link,
             commands::notes::list_types,
+            commands::notes::get_template_inheritance,
+            commands::notes::set_template_inheritance,
+            commands::notes::create_type_template,
+            commands::notes::list_builtin_templates,
+            commands::notes::set_builtin_template_enabled,
+            commands::notes::reset_builtin_template,
             commands::notes::create_typed_note,
             commands::notes::apply_type,
             commands::folders::list_folders,

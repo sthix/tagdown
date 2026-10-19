@@ -161,6 +161,56 @@ pub async fn list_types(state: State<'_, Mutex<AppState>>) -> Result<Vec<NoteTyp
     state.lock().map_err(|e| e.to_string())?.vault.note_types()
 }
 
+#[tauri::command]
+pub async fn get_template_inheritance(id: String, state: State<'_, Mutex<AppState>>) -> Result<crate::types::TemplateInheritance, String> {
+    state.lock().map_err(|e| e.to_string())?.vault.template_inheritance(&id)
+}
+
+#[tauri::command]
+pub async fn set_template_inheritance(id: String, parent: Option<String>, excluded: Vec<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.set_template_inheritance(&id, parent.as_deref(), excluded)?;
+    search.index(&note, &state.vault.get_note_content(&id)?.content);
+    let _ = app.emit("note-saved", &note);
+    Ok(note)
+}
+
+#[tauri::command]
+pub async fn create_type_template(name: String, parent: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.create_type_template(&name, parent.as_deref())?;
+    search.index(&note, &state.vault.get_note_content(&note.id)?.content);
+    let _ = app.emit("note-saved", &note);
+    Ok(note)
+}
+
+#[tauri::command]
+pub async fn list_builtin_templates(state: State<'_, Mutex<AppState>>) -> Result<Vec<crate::templates::BuiltinTemplate>, String> {
+    state.lock().map_err(|e| e.to_string())?.vault.builtin_templates()
+}
+
+#[tauri::command]
+pub async fn set_builtin_template_enabled(name: String, enabled: bool, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<(), String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.vault.set_builtin_template_enabled(&name, enabled)?;
+    if let Some(template) = state.vault.builtin_templates()?.into_iter().find(|t| t.name == name) {
+        if let Some(id) = template.template_id {
+            if let Some((note, content)) = state.vault.notes_with_content()?.into_iter().find(|(n, _)| n.id == id) {
+                search.index(&note, &content);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_builtin_template(name: String, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.reset_builtin_template(&name)?;
+    search.index(&note, &state.vault.get_note_content(&note.id)?.content);
+    Ok(note)
+}
+
 /// A new note of a type, started from its template.
 #[tauri::command]
 pub async fn create_typed_note(type_name: String, title: String, folder_id: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {

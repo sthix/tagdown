@@ -21,6 +21,8 @@ import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from
 import { applyEdit, attachListEditing } from './listEditing';
 import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './blockRefs';
 import { propertiesFolded, renderPropertiesPanel, setPropertiesFolded } from './propertiesPanel';
+import { isInheritanceKey, renderTemplateInheritance, type TemplateInheritance } from './templateInheritance';
+import { typeMatches, typeTree } from './typeHierarchy';
 import { showContextMenu, type MenuItem } from './contextMenu';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { asLinks, linkHint, type LinkField } from './linkFields';
@@ -87,7 +89,7 @@ type Backlink = { note: Note; mentions: string[] };
 type DaySummary = { created: Note[]; edited: Note[]; dated: Array<{ note: Note; keys: string[] }>; tasks: QueryTask[] };
 
 /** A note type: the `type:` notes give themselves, and its "<Type> Template" note. */
-type NoteType = { name: string; icon: string | null; templateId: string | null; count: number; links: LinkField[] };
+type NoteType = { name: string; icon: string | null; templateId: string | null; count: number; links: LinkField[]; parent: string | null; ancestors: string[] };
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -127,6 +129,7 @@ let selectedTag: string | null = null;
 let selectedType: string | null = null;
 let noteTypes: NoteType[] = [];
 let creatingType = false;
+let creatingTypeParent: string | null = null;
 let activeFilter: QuickFilter = 'all';
 let expandedTags: Record<string, boolean> = {};
 let content = '';
@@ -260,7 +263,20 @@ const scopeIconEl = document.querySelector<HTMLSpanElement>('.scope-icon')!;
 const tagCountEl = document.querySelector<HTMLSpanElement>('#tag-count')!;
 
 async function boot() {
-  initSettings();
+  initSettings({
+    edit: revealNote,
+    prepare: settlePendingWork,
+    changed: async (id) => {
+      await reloadFolders();
+      await reloadNotes();
+      const note = id ? knownNotes.get(id) : undefined;
+      if (note) {
+        const saved = await invoke<{ content: string }>('get_note_content', { id });
+        await onExternalChange(note, saved.content);
+      }
+    },
+    confirmReset: (name) => confirmDialog({ title: `Reset ${name} template?`, message: 'Restore the original text and properties for this template?', detail: 'Notes already created from it stay unchanged.', confirmLabel: 'Reset template' }),
+  });
   activePane = createPane();
   panes = [activePane];
   load(activePane);
@@ -2146,6 +2162,7 @@ const TEMPLATE_SUFFIX = ' template';
 
 /** The type a note says it is: its `type:` text, a [[link]] by its title. */
 function typeOfNote(note: Note): string | null {
+  if (note.journal) return 'Journal';
   const property = note.properties?.find((p) => p.key.toLowerCase() === 'type');
   if (property?.type !== 'text') return null;
   const text = property.value.trim();
@@ -2153,16 +2170,16 @@ function typeOfNote(note: Note): string | null {
   return (link ? link[1] : text).trim() || null;
 }
 
-/** The type a template note defines ("Book Template" → "Book"); the Journal Template defines none. */
+/** The type a template note defines ("Book Template" → "Book"). */
 function templateTypeOf(title: string): string | null {
   const t = title.trim();
-  if (normalizeTitle(t) === 'journal template' || !t.toLowerCase().endsWith(TEMPLATE_SUFFIX)) return null;
+  if (!t.toLowerCase().endsWith(TEMPLATE_SUFFIX)) return null;
   return t.slice(0, -TEMPLATE_SUFFIX.length).trim() || null;
 }
 
 function isOfType(note: Note, name: string) {
   const type = typeOfNote(note);
-  return !!type && normalizeTitle(type) === normalizeTitle(name) && !templateTypeOf(note.title);
+  return !!type && typeMatches(findType(type), type, name) && !templateTypeOf(note.title);
 }
 
 function findType(name: string | null): NoteType | undefined {
@@ -2178,23 +2195,32 @@ function typeIconHtml(type: { name: string; icon: string | null }, size = 13) {
 async function reloadTypes() {
   noteTypes = await invoke<NoteType[]>('list_types').catch(() => [] as NoteType[]);
   renderTypes();
+  forEachPane(() => {
+    if (selectedNote && templateTypeOf(selectedNote.title)) {
+      void paintTemplateInheritance(editorRoot.querySelector<HTMLElement>('[data-template-inheritance]'), selectedNote);
+    }
+  });
 }
 
 function renderTypes() {
-  const rows = noteTypes.map((t) => {
+  const rows = typeTree(noteTypes).map(({ type: t, depth }) => {
     const selected = !!selectedType && normalizeTitle(t.name) === normalizeTitle(selectedType);
     return `
-      <button class="folder type-row ${selected ? 'selected' : ''}" data-type-name="${escapeHtml(t.name)}" style="padding-left: 12px" type="button" title="${escapeHtml(t.templateId ? `${t.name} notes start from “${t.name} Template”` : `Notes with type: ${t.name}`)}">
+      <div class="type-tree-item">
+      <button class="folder type-row ${selected ? 'selected' : ''}" data-type-name="${escapeHtml(t.name)}" style="padding-left: ${12 + Math.min(depth, 8) * 14}px" type="button" title="${escapeHtml(`${t.parent ? `Child of ${t.parent}. ` : ''}${t.templateId ? `${t.name} notes start from “${t.name} Template”` : `Notes with type: ${t.name}`}`)}">
         <span class="folder-disclosure is-empty" aria-hidden="true"></span>
         <span class="folder-icon" aria-hidden="true">${typeIconHtml(t)}</span>
         <span class="folder-name"><span class="${markerClass(selected)}">${escapeHtml(t.name)}</span></span>
         <span class="folder-count">${t.count}</span>
-      </button>`;
+      </button>
+      ${t.templateId ? `<button class="folder-child-add type-child-add" data-new-child-type="${escapeHtml(t.name)}" type="button" title="Create child type" aria-label="Create child type of ${escapeHtml(t.name)}">${uiIcon('plus', 12)}</button>` : ''}
+      </div>`;
   }).join('');
   const create = creatingType ? `
+    ${creatingTypeParent ? `<div class="type-create-parent">Child of ${escapeHtml(creatingTypeParent)}</div>` : ''}
     <div class="folder-create-row" style="padding-left: 31px">
       <span class="folder-icon" aria-hidden="true">${typeIconHtml({ name: '', icon: null })}</span>
-      <input id="type-create-input" placeholder="Type name, like Book" autocomplete="off" spellcheck="false" aria-label="Type name" />
+      <input id="type-create-input" placeholder="${creatingTypeParent ? 'Child type name, like Author' : 'Type name, like Book'}" autocomplete="off" spellcheck="false" aria-label="Type name" />
     </div>` : '';
   const empty = !creatingType && !noteTypes.length
     ? '<div class="tag-empty">Give a note a <kbd>type</kbd> property, or press <kbd>+</kbd>.</div>'
@@ -2211,8 +2237,12 @@ function renderTypes() {
         type.templateId
           ? { label: 'Edit template', icon: uiIcon('source', 14), run: () => revealNote(type.templateId!) }
           : { label: 'Make a template', icon: uiIcon('plus', 14), run: () => createTypeTemplate(type.name) },
+        ...(type.templateId ? [{ label: 'Create child type…', icon: uiIcon('plus', 14), run: () => startChildTypeCreate(type.name) }] : []),
       ]);
     });
+  });
+  typeEl.querySelectorAll<HTMLButtonElement>('[data-new-child-type]').forEach((button) => {
+    button.addEventListener('click', () => startChildTypeCreate(button.dataset.newChildType!));
   });
   const input = typeEl.querySelector<HTMLInputElement>('#type-create-input');
   if (!input) return;
@@ -2223,7 +2253,9 @@ function renderTypes() {
     committed = true;
     creatingType = false;
     const name = input.value.trim();
-    if (keep && name) await createTypeTemplate(name);
+    const parent = creatingTypeParent;
+    creatingTypeParent = null;
+    if (keep && name) await createTypeTemplate(name, parent);
     else renderTypes();
   };
   input.addEventListener('keydown', (event) => {
@@ -2231,6 +2263,12 @@ function renderTypes() {
     else if (event.key === 'Escape') { event.preventDefault(); void commit(false); }
   });
   input.addEventListener('blur', () => void commit(true));
+}
+
+function startChildTypeCreate(parent: string) {
+  creatingTypeParent = parent;
+  creatingType = true;
+  renderTypes();
 }
 
 /** List the notes of a type. */
@@ -2246,6 +2284,7 @@ async function selectType(name: string) {
 
 /** A new note of the type `name`, from its template, in the folder being viewed. */
 async function createTypedNote(name: string) {
+  if (normalizeTitle(name) === 'journal') { await openJournal(todayKey()); return; }
   await settlePendingWork();
   const folderId = isUserFolder(selectedFolder) ? selectedFolder : null;
   const note = await invoke<Note>('create_typed_note', { typeName: name, title: 'Untitled', folderId });
@@ -2261,14 +2300,18 @@ async function createTypedNote(name: string) {
 }
 
 /** Start a type: its "<Name> Template" note, with an icon property to fill in. */
-async function createTypeTemplate(name: string) {
+async function createTypeTemplate(name: string, parent: string | null = null) {
   await settlePendingWork();
   const existing = findType(name);
-  if (existing?.templateId) { await revealNote(existing.templateId); return; }
+  if (existing?.templateId && !parent) { await revealNote(existing.templateId); return; }
   const typeName = existing?.name ?? name;
-  const created = await invoke<Note>('create_note', { folderId: null });
-  await invoke<Note>('save_note', { id: created.id, content: `# ${typeName} Template\n\n` });
-  const note = await invoke<Note>('set_property', { id: created.id, key: 'icon', value: { type: 'text', value: '' }, renameFrom: null });
+  let note: Note;
+  try { note = await invoke<Note>('create_type_template', { name: typeName, parent }); }
+  catch (error) {
+    await message(String(error), { title: 'Could not create the type', kind: 'warning' });
+    renderTypes();
+    return;
+  }
   selectedType = typeName;
   selectedTag = null;
   selectedFolder = null;
@@ -2392,8 +2435,9 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
   const host = editorRoot.querySelector<HTMLElement>('[data-properties]');
   if (!host || !selectedNote) return;
   const id = selectedNote.id;
+  void paintTemplateInheritance(editorRoot.querySelector<HTMLElement>('[data-template-inheritance]'), selectedNote);
   renderPropertiesPanel(host, {
-    properties: selectedNote.properties ?? [],
+    properties: (selectedNote.properties ?? []).filter((p) => !templateTypeOf(selectedNote!.title) || !isInheritanceKey(p.key)),
     keySuggestions: () => vaultPropertyKeys(),
     valueSuggestions: (key) => propertyValueSuggestions(key, selectedNote),
     valueHint: (key) => { const field = linkFieldFor(key, selectedNote); return field ? linkHint(field) : null; },
@@ -2409,10 +2453,44 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
   });
 }
 
+let inheritanceRequest = 0;
+
+async function paintTemplateInheritance(host: HTMLElement | null, note: Note) {
+  if (!host) return;
+  const isTemplate = !!templateTypeOf(note.title);
+  host.hidden = !isTemplate;
+  host.dataset.noteId = note.id;
+  const request = String(++inheritanceRequest);
+  host.dataset.request = request;
+  if (!isTemplate) { host.replaceChildren(); return; }
+  const save = async (parent: string | null, excluded: string[]): Promise<TemplateInheritance | null> => {
+    try {
+      await settlePendingWork();
+      host.dataset.request = String(++inheritanceRequest);
+      const saved = await invoke<Note>('set_template_inheritance', { id: note.id, parent, excluded });
+      knownNotes.set(saved.id, saved);
+      libraryNotes = libraryNotes.map((n) => n.id === saved.id ? saved : n);
+      forEachPane(() => { if (selectedNote?.id === saved.id) selectedNote = saved; });
+      await reloadTypes();
+      await reloadNotes();
+      return await invoke<TemplateInheritance>('get_template_inheritance', { id: note.id });
+    } catch (error) {
+      await message(String(error), { title: 'Could not change template inheritance', kind: 'warning' });
+      return null;
+    }
+  };
+  try {
+    const state = await invoke<TemplateInheritance>('get_template_inheritance', { id: note.id });
+    if (host.isConnected && host.dataset.request === request) renderTemplateInheritance(host, state, save);
+  } catch (error) {
+    if (host.isConnected && host.dataset.request === request) host.textContent = `Couldn’t load template inheritance: ${String(error)}`;
+  }
+}
+
 function propertiesAreFolded() {
   if (!selectedNote) return false;
   const hidden = new Set(getPreference('hiddenProperties').map((key) => key.toLowerCase()));
-  const shown = (selectedNote.properties ?? []).filter((p) => !hidden.has(p.key.toLowerCase())).length;
+  const shown = (selectedNote.properties ?? []).filter((p) => !hidden.has(p.key.toLowerCase()) && (!templateTypeOf(selectedNote!.title) || !isInheritanceKey(p.key))).length;
   return propertiesFolded(selectedNote.id, shown, getPreference('propertiesFold'));
 }
 
@@ -2590,7 +2668,7 @@ function vaultPropertyKeys(): string[] {
 async function saveProperty(key: string, given: PropertyValue | null, renameFrom?: string): Promise<boolean> {
   if (!selectedNote) return false;
   const id = selectedNote.id;
-  const value = await linkFieldValue(key, given, selectedNote);
+  const value = templateTypeOf(selectedNote.title) ? given : await linkFieldValue(key, given, selectedNote);
   const isNew = value !== null && !renameFrom && !(selectedNote.properties ?? []).some((p) => p.key === key);
   // Body edits go first, so the two writes don't race.
   if (saveTimer !== undefined || savedMessage === 'Saving…') await flushSave();
@@ -2602,6 +2680,7 @@ async function saveProperty(key: string, given: PropertyValue | null, renameFrom
     for (const pane of panes) if (pane !== activePane) withPane(pane, () => { if (selectedNote?.id === id) { selectedNote = note; paintProperties(); } });
     if (selectedNote?.id !== id) return true;
     selectedNote = note;
+    if (templateTypeOf(note.title)) await reloadTypes();
     invalidateQueries();
     if (key.toLowerCase() === 'type' && value?.type === 'text' && value.value.trim()) await applyType(id);
     paintProperties(isNew ? { key, part: 'value' } : undefined);
@@ -3154,6 +3233,7 @@ function renderEditor() {
         <span id="counts"></span>
         ${selectedNote.tags.length ? `<span class="doc-tags">${selectedNote.tags.map((tag) => `<button type="button" class="doc-tag" data-doc-tag="${escapeHtml(tag)}" style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag)}</button>`).join('')}</span>` : ''}
       </div>
+      <div class="template-inheritance" data-template-inheritance hidden></div>
       <div class="doc-properties" data-properties></div>
     </div>
     <div class="editor-body">${viewMode === 'source' ? textarea : viewMode === 'preview' ? preview : `<div class="split">${textarea}${preview}</div>`}</div>

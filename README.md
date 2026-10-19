@@ -82,11 +82,19 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Wikilinks** with autocomplete, by title or, Obsidian-style, by file path. Links follow renames automatically and show up as *Linked mentions* under the target note. A local graph (⌘⇧G) shows a note's links both ways, colored by note type.
 - **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J, or `tagdown today "…"`) adds a line to today's page from anywhere.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
-- **Note types** like Book, Person or Project: a `type:` property, a sidebar section, and a template note that new notes of the type start from. A template property such as `author: "[[Person]]"` makes a link field that suggests (and creates) notes of that type.
+- **Editable starter templates** for Journal, Book, Person, Project, Meeting, and Recipe, ready when you open a vault. **Settings → Templates** lets you edit, turn off, or reset each one without changing existing notes.
+- **Note types and child types**: use the **+** on a type row to create a child, such as Author under Person. Children inherit properties and icons; switch inherited fields off, override their defaults, or add your own. Parent views and link fields include children. A template property such as `author: "[[Person]]"` suggests and creates notes of that type.
 - **Saved web links**: paste a link on an empty line (or use *Save web link…*) to keep the page as a Link note with its title, description and opening text.
 - **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables (tick rows to set a property on all of them at once), kanban **boards** (drag a card to change its status) or **cards** with cover images.
 - **Tasks** with a day (`[[2026-10-20]]`), a priority (`!high`) and repeats (`every:week`), ticked right in any list. ⌘⇧T shows them as **Today**, **Upcoming** and **Inbox**.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/child-types-dark.jpg" />
+  <img width="1280" height="720" alt="Author Template nested under Person in Types, with Person selected as its parent, email inherited, company switched off, and genre added as an Author-specific property" src="docs/images/child-types-light.jpg" />
+</picture>
+
+See [templates and child types](docs/organizing.md#child-types) for the **+** workflow, inheritance, and per-vault template settings.
 
 ### Safety
 

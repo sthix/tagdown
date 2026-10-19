@@ -44,11 +44,14 @@ On first launch Tagdown creates a vault at `~/Documents/Tagdown` (you can switch
 ├── attachments/          # images added to notes
 └── .tagdown/
     ├── vault.json        # folders, tag colours, vault settings
+    ├── templates.json    # built-in template availability for this vault
     ├── search.idx/       # the full-text search index (rebuilt on launch)
     └── history/          # version history snapshots
 ```
 
 Three starter notes are created: **Welcome to Tagdown**, **Tagdown Cheat Sheet**, and **Your First Note**. Open one, switch to **Split** view (⌘2), and start typing. Notes save automatically.
+
+The **Types** sidebar also starts with editable **Journal**, **Book**, **Person**, **Project**, **Meeting**, and **Recipe** templates. Use **Settings → Templates** to edit, turn off, or reset them for this vault. To make a more specific kind, such as Author under Person, click the **+** on the parent's type row. See [templates and child types](organizing.md#child-types).
 
 <figure class="doc-visual">
   <picture>

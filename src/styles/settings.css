@@ -192,6 +192,16 @@
 }
 .settings-row-control { flex-shrink: 0; display: flex; align-items: center; }
 
+.template-help { color: var(--ink-3); font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
+.template-actions { gap: 8px; }
+.template-actions .td-switch { margin-left: 4px; flex-shrink: 0; }
+.template-status { color: var(--ink-3); font-size: 12px; min-height: 1.5em; }
+.template-actions :disabled { opacity: .45; cursor: default; }
+@media (max-width: 700px) {
+  .template-row { flex-wrap: wrap; gap: 10px; }
+  .template-actions { margin-left: auto; }
+}
+
 /* ---- Controls ---- */
 
 .td-switch {

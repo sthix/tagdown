@@ -32,7 +32,7 @@ TAGDOWN_VAULT=~/Notes/Work tagdown list
 
 ## Commands
 
-Notes are addressed by title (case-insensitive), by their file in the vault as a wikilink would name it (`blog/my-post`), or by id.
+Notes are addressed by title (case-insensitive), by their file in the vault as a wikilink would name it (`blog/my-post`), by a unique [frontmatter alias](organizing.md#aliases), or by id. Titles and file paths take precedence over aliases; use a file path or id to disambiguate shared names.
 
 | Command | What it does |
 | --- | --- |

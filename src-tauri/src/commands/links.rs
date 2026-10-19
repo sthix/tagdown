@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::{
     commands::search::SearchState,
@@ -59,6 +59,7 @@ pub async fn rename_links(
     id: String,
     old_title: String,
     new_title: String,
+    app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
     search: State<'_, SearchState>,
 ) -> Result<RenameOutcome, String> {
@@ -83,23 +84,29 @@ pub async fn rename_links(
     }
     // Links naming the note by its file still find it: leave them as they are.
     let targets = LinkTargets::new(others().map(|(note, _)| note).chain(notes.iter().map(|(note, _)| note).filter(|note| note.id == id)));
-    let keep = |target: &str| targets.by_file(target) == Some(id.as_str());
+    let keep = |target: &str| targets.by_file(target) == Some(id.as_str()) || targets.by_alias(target) == Some(id.as_str());
     let mut updated = 0;
     // The renamed note itself is skipped: its editor owns its content.
     for (note, content) in notes.iter().filter(|(note, _)| note.id != id) {
         let mut changed = false;
         let mut body = content.clone();
+        let mut saved_note = note.clone();
         if let Some(next) = links::rename_links(content, &old_title, &new_title, &keep) {
             let saved = state.vault.rewrite_content(&note.id, &next)?;
             search.index(&saved, &next);
+            saved_note = saved;
             body = next;
             changed = true;
         }
         if !links::property_mentions(note, &|target| normalize_title(target) == old && !keep(target)).is_empty() {
             if let Some(saved) = state.vault.rename_property_links(&note.id, &old_title, &new_title, &keep)? {
                 search.index(&saved, &body);
+                saved_note = saved;
                 changed = true;
             }
+        }
+        if changed {
+            let _ = app.emit("note-changed-externally", serde_json::json!({ "note": saved_note, "content": body }));
         }
         updated += u32::from(changed);
     }

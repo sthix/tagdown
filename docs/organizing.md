@@ -78,6 +78,8 @@ These controls leave notes already created from the template unchanged. An unuse
 
 ### Templates
 
+To create a note from a template while writing another note, use **`/template` → New note from template**. Choose a template and the new note opens in a new tab with its title selected. The original note gets a link that follows the new title when you name it. See the [step-by-step workflow](writing-notes.md#create-a-linked-note-from-a-template).
+
 A note titled after the type plus "Template" (**Book Template**, **Person Template**) says how new notes of that type start:
 
 - its **properties**, with their values, so every Book gets `author`, `rating` and `started` (a property can also [link to another type](#links-to-other-types));
@@ -215,6 +217,20 @@ Results show highlighted excerpts. The same syntax works in [queries](queries-an
 - A link can also name a note by its file, the way Obsidian writes them: `[[blog/my-post]]` for `blog/my-post.md`, or just `[[my-post]]` when no other note has that file name. A note whose title matches wins over a file match.
 - When you rename a note, links to it by title are updated automatically. Links that name it by its file still find it, so they're left as they are.
 - Below each note, **Linked mentions** lists the notes that link to it, with the lines that mention it.
+
+### Aliases
+
+Give a note alternate names with an `aliases` property. For example, a note titled **Atlas launch plan** can have this frontmatter:
+
+```yaml
+aliases: [Atlas, Launch plan]
+```
+
+`[[Atlas]]` and `[[Launch plan]]` then open that note, and their references count in linked mentions and the local graph. A single text value works too, as does the singular property name `alias`. Alias matching ignores case.
+
+Type `[[` and part of a title, file path, or alias to find a note. Suggestions prioritize how well the name matches, then recent edits and backlink counts. Selecting a suggestion inserts the note's title, using a file path with a title label when needed to distinguish notes with the same title.
+
+Titles and file paths take precedence over aliases. An alias shared by several notes does not identify a unique target; use the title or full vault-relative file path instead. An alias link keeps working after a title change as long as that alias stays on the note.
 
 ### Graph
 

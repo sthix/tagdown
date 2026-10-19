@@ -30,8 +30,9 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 ├── src/
 │   ├── main.ts             # app shell: sidebar, note list, editor, shortcuts
 │   ├── commandPalette.ts   # ⌘K palette
-│   ├── wikilinks.ts        # [[link]] resolution and autocomplete
+│   ├── wikilinks.ts        # title/path/alias resolution and ranked autocomplete
 │   ├── slashCommands.ts    # the / command menu
+│   ├── templatePicker.ts   # /template picker and linked-note insertion helpers
 │   ├── listEditing.ts      # ↩, Tab and ⇧Tab in lists (continue, nest, renumber)
 │   ├── blockDrag.ts        # drag-and-drop reordering of preview blocks
 │   ├── queries.ts          # <query /> blocks (lists, tables, boards, cards) and the open-tasks view
@@ -79,6 +80,21 @@ cargo test --manifest-path src-tauri/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml --workspace
 node --test tests/*.mjs
 ```
+
+## Preserved integrations
+
+The experimental integrations were removed from the active app and preserved on [`codex/reflect-integrations`](https://github.com/sthix/tagdown/tree/codex/reflect-integrations), at commit `868ed08221de9a7d2f4a30620d023c57b501239f`. The checkpoint contains the Integrations settings, AI editing and semantic retrieval, voice transcription, browser capture and its extension, a global capture shortcut, and calendar/meeting features, with their supporting dependencies.
+
+The branch is a snapshot of the source at that point, including other work that was in progress. It predates the revised `/template` workflow. Review its changes before bringing features back individually.
+
+To resume work in a separate checkout while keeping the current working directory intact:
+
+```sh
+git fetch origin
+git worktree add -b codex/resume-integrations ../tagdown-integrations origin/codex/reflect-integrations
+```
+
+The active app retains in-app journal capture, saved web links, and the CLI/MCP server. Their current behavior is documented in the [Journal](journal.md), [Organizing](organizing.md#saved-web-links), and [CLI and MCP](cli-and-mcp.md) guides.
 
 ## The syntax reference
 

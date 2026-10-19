@@ -1,6 +1,6 @@
 # Tagdown Editor
 
-**A fast, local-first desktop editor for Tagdown notes — Markdown plus rich semantic blocks, tags, links, live queries, math, and diagrams.**
+**A fast, local-first desktop editor for Tagdown notes: Markdown plus rich semantic blocks, tags, links, live queries, math, and diagrams.**
 
 Tagdown Editor is a macOS-focused Tauri app for writing structured notes without giving up plain-text ownership. Notes are ordinary Markdown files on disk. They render instantly in a polished preview, link to each other, and can be exported, presented as slides, published as a website, or handed to an AI assistant.
 
@@ -62,6 +62,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Properties that stay out of the way**: frontmatter fields as typed inputs that fold to one line of chips (⌘⇧I), and fields like `id` can be hidden in every note.
 - **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
 - **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
+- **Linked notes from templates**: `/template` creates a note in a new tab with its title selected. Name it, and the link left in the original note updates with the title. Works in source, split, and preview modes, including an empty final block.
 - **Outliner lists**: ↩ continues bullets, numbers, and tasks; Tab and ⇧Tab nest and un-nest items with their children.
 - **Drag to reorder** blocks in the preview by their grip, or move the block you're editing with ⌘⇧↑ / ⌘⇧↓. Headings bring their whole section along (a setting you can turn off).
 - **Images**: paste or drop them into a note and they're copied into the vault. Point at one in the preview to make it small, medium, large or full width, or to add a caption. Markdown `![alt](path)` and Obsidian `![[photo.png|300]]` images work too.
@@ -79,8 +80,8 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 - **Local-first vaults** of plain `.md` files (`~/Documents/Tagdown` by default, or any folder, Obsidian vaults included), whose folders on disk are Tagdown's folders. Keep several and switch between them.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
-- **Wikilinks** with autocomplete, by title or, Obsidian-style, by file path. Links follow renames automatically and show up as *Linked mentions* under the target note. A local graph (⌘⇧G) shows a note's links both ways, colored by note type.
-- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J, or `tagdown today "…"`) adds a line to today's page from anywhere.
+- **Wikilinks** with autocomplete by title, file path, or a unique frontmatter alias. Suggestions prioritize matching names, then recently edited and frequently linked notes. Links follow title renames automatically and show up as *Linked mentions* under the target note. A local graph (⌘⇧G) shows a note's links both ways, colored by note type.
+- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J while Tagdown is active, or `tagdown today "…"` in a terminal) adds a line to today's page.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Editable starter templates** for Journal, Book, Person, Project, Meeting, and Recipe, ready when you open a vault. **Settings → Templates** lets you edit, turn off, or reset each one without changing existing notes.
 - **Note types and child types**: use the **+** on a type row to create a child, such as Author under Person. Children inherit properties and icons; switch inherited fields off, override their defaults, or add your own. Parent views and link fields include children. A template property such as `author: "[[Person]]"` suggests and creates notes of that type.
@@ -94,7 +95,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
   <img width="1280" height="720" alt="Author Template nested under Person in Types, with Person selected as its parent, email inherited, company switched off, and genre added as an Author-specific property" src="docs/images/child-types-light.jpg" />
 </picture>
 
-See [templates and child types](docs/organizing.md#child-types) for the **+** workflow, inheritance, and per-vault template settings.
+See [creating a linked note from a template](docs/writing-notes.md#create-a-linked-note-from-a-template) for the slash-menu workflow, and [templates and child types](docs/organizing.md#child-types) for the **+** workflow, inheritance, and per-vault template settings.
 
 ### Safety
 
@@ -106,7 +107,7 @@ See [templates and child types](docs/organizing.md#child-types) for the **+** wo
 - **Present as slides** (⌥⌘P): each `---` starts a new slide, scaled to fit any screen.
 - **Publish as a website**: all notes, a folder, or a tag become static pages with working links, backlinks, tag filters, and search. Links to unpublished notes become plain text.
 
-### AI-ready
+### CLI and MCP
 
 - The **`tagdown` CLI** searches, reads, creates (typed notes too), and appends to notes from the terminal; `tagdown today "…"` is a quick capture to today's journal page.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
@@ -244,6 +245,8 @@ node --test tests/*.mjs
 Tagdown Editor is an active early-stage desktop app (v0.1.0). The writing workspace (with slash commands, outliner lists, and drag-to-reorder blocks), multiple vaults with folders on disk, full-text search, wikilinks and backlinks with a local graph, the daily journal with quick capture, note types, live queries with tables, boards and cards, tasks with days and repeats, saved web links, version history, file watching, HTML/PDF export, slides, website publishing, and the CLI/MCP server are in place. Still to come: drag-and-drop Markdown import, more settings, and a full native menu bar.
 
 See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the roadmap.
+
+Experimental integrations are preserved separately on [`codex/reflect-integrations`](https://github.com/sthix/tagdown/tree/codex/reflect-integrations). See [Development](docs/development.md#preserved-integrations) for the checkpoint and how to resume that work.
 
 ## Why this exists
 

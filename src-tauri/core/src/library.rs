@@ -51,8 +51,8 @@ impl Library {
         Ok(self.vault.notes_with_content()?.into_iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE)).collect())
     }
 
-    /// Find a note by id, by title (ignoring case), or by its file as a wikilink
-    /// names it. Archived notes only match by id.
+    /// Find a note by id, title, file path, or a unique frontmatter alias.
+    /// Archived notes only match by id.
     pub fn resolve(&self, reference: &str) -> Result<(Note, String), String> {
         let reference = reference.trim();
         let notes = self.vault.notes_with_content()?;
@@ -64,9 +64,13 @@ impl Library {
         let (exact, rest): (Vec<_>, Vec<_>) = live.partition(|(n, _)| normalize_title(&n.title) == wanted);
         if exact.is_empty() {
             // A file in the vault, the way a wikilink can name a note: `blog/post`.
-            let by_file = links::LinkTargets::new(rest.iter().map(|(n, _)| n)).by_file(reference).map(str::to_string);
-            if let Some(found) = by_file.and_then(|id| rest.iter().find(|(n, _)| n.id == id)) {
+            let targets = links::LinkTargets::new(rest.iter().map(|(n, _)| n));
+            let resolved = targets.resolve(reference);
+            if let Some(found) = resolved.first().and_then(|id| rest.iter().find(|(n, _)| n.id == *id)) {
                 return Ok(found.clone());
+            }
+            if targets.alias_matches(reference).len() > 1 {
+                return Err(format!("several notes share the alias \"{reference}\"; use the note id or title instead"));
             }
         }
         match exact.len() {
@@ -303,6 +307,27 @@ mod tests {
         let (lib, root) = library();
         let err = lib.read("Tagdown").unwrap_err();
         assert!(err.contains("\"Welcome to Tagdown\""), "{err}");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn aliases_resolve_in_tools_survive_saves_and_reject_ambiguity() {
+        use crate::properties::parse_scalar;
+        let (lib, root) = library();
+        let sam = lib.create("Samuel Rivera", "Contact", None, &[]).unwrap();
+        lib.vault.set_property(&sam.id, "aliases", Some(parse_scalar("[Sam, Sammy]")), None).unwrap();
+        assert_eq!(lib.read("sam").unwrap().note.id, sam.id);
+        lib.append("Sammy", "Met today").unwrap();
+        lib.replace("Sam", "# Samuel R.\n\nRenamed contact").unwrap();
+        assert_eq!(lib.read("Sammy").unwrap().note.title, "Samuel R.");
+        let other = lib.create("Another person", "", None, &[]).unwrap();
+        lib.vault.set_property(&other.id, "alias", Some(parse_scalar("Sam")), None).unwrap();
+        assert!(lib.read("Sam").unwrap_err().contains("several notes share the alias"));
+        let explicit = lib.create("Sam", "Exact title wins", None, &[]).unwrap();
+        assert_eq!(lib.read("Sam").unwrap().note.id, explicit.id);
+        lib.vault.delete_note(&sam.id).unwrap();
+        assert!(lib.read("Sammy").is_err());
+        assert_eq!(lib.read(&sam.id).unwrap().note.id, sam.id);
         std::fs::remove_dir_all(root).ok();
     }
 

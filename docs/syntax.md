@@ -17,6 +17,7 @@ Weekly check-ins live in [[Weekly planning]], or [[Weekly planning|the weekly no
 - The first `# ` heading is the note's title.
 - `#tags` anywhere in the text tag the note. Use `/` to nest them: `#project/atlas` sits under `project` in the sidebar.
 - `[[Title]]` links to another note; `[[Title|label]]` shows a different label; `[[Title#heading]]` jumps to a heading. A link can also name a note by its file, `[[folder/file]]` or `[[file]]`, as Obsidian writes them.
+- An `aliases: [Atlas, Launch plan]` frontmatter property lets links use either alternate name. Titles and file paths take precedence, and an alias must identify one note. See [aliases](organizing.md#aliases) for examples and autocomplete behavior.
 
 ## Inline formatting
 
@@ -152,6 +153,8 @@ A plain Markdown image `![alt](path)` sits inline with the text. A number after 
 YouTube and Vimeo embeds show a thumbnail that opens the video in your browser.
 
 ## Templates and inheritance
+
+In the editor, `/template` opens **New note from template**. Choosing a template creates a note with its text and properties in a new tab, selects its title for editing, and leaves a link in the original note. Naming the new note updates that link. See [creating a linked note](writing-notes.md#create-a-linked-note-from-a-template).
 
 Templates are ordinary notes titled **Book Template**, **Person Template**, and so on. A child template can inherit another template's properties and icon while keeping its own body text:
 

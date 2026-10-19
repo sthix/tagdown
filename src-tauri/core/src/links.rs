@@ -15,6 +15,7 @@ use std::collections::{BTreeSet, HashMap};
 use serde::Serialize;
 
 use crate::models::Note;
+use crate::properties::PropertyValue;
 
 /// Neighbours a local graph shows at most, the most recently edited.
 const GRAPH_NEIGHBOURS: usize = 48;
@@ -64,6 +65,21 @@ pub fn normalize_title(title: &str) -> String {
     title.trim().to_lowercase()
 }
 
+/// Alternate names stored as ordinary custom YAML text or list properties.
+pub fn note_aliases(note: &Note) -> Vec<&str> {
+    let mut seen = BTreeSet::new();
+    note.properties.iter()
+        .filter(|p| matches!(normalize_title(&p.key).as_str(), "alias" | "aliases"))
+        .flat_map(|p| match &p.value {
+            PropertyValue::Text(value) => vec![value.as_str()],
+            PropertyValue::List(values) => values.iter().map(String::as_str).collect(),
+            _ => Vec::new(),
+        })
+        .map(str::trim)
+        .filter(|alias| !alias.is_empty() && seen.insert(normalize_title(alias)))
+        .collect()
+}
+
 /// A note path or a link target naming one, as compared: lowercase,
 /// `/`-separated, without `.md` or a leading `./` or `/`.
 pub fn normalize_path(path: &str) -> String {
@@ -75,13 +91,15 @@ pub fn normalize_path(path: &str) -> String {
 /// Which notes a link target names. A target names the notes with that title
 /// first; failing that, the note whose path in the vault it is (`[[blog/post]]`
 /// for `blog/post.md`); failing that, the one note whose path ends in it
-/// (`[[post]]`, `[[sub/post]]`). A file name two notes share names neither.
+/// (`[[post]]`, `[[sub/post]]`); finally a unique frontmatter alias. A shared
+/// alias names neither note.
 #[derive(Debug, Default)]
 pub struct LinkTargets {
     by_title: HashMap<String, Vec<String>>,
     by_path: HashMap<String, String>,
     /// Paths and ids by the last segment of the path.
     by_name: HashMap<String, Vec<(String, String)>>,
+    by_alias: HashMap<String, Vec<String>>,
 }
 
 impl LinkTargets {
@@ -89,6 +107,9 @@ impl LinkTargets {
         let mut targets = Self::default();
         for note in notes {
             targets.by_title.entry(normalize_title(&note.title)).or_default().push(note.id.clone());
+            for alias in note_aliases(note) {
+                targets.by_alias.entry(normalize_title(alias)).or_default().push(note.id.clone());
+            }
             let path = normalize_path(&note.path);
             if path.is_empty() {
                 continue;
@@ -104,8 +125,18 @@ impl LinkTargets {
     pub fn resolve(&self, target: &str) -> Vec<&str> {
         match self.by_title.get(&normalize_title(target)) {
             Some(ids) => ids.iter().map(String::as_str).collect(),
-            None => self.by_file(target).into_iter().collect(),
+            None => self.by_file(target).or_else(|| self.by_alias(target)).into_iter().collect(),
         }
+    }
+
+    /// Unique alias only. Shared aliases never create arbitrary links.
+    pub fn by_alias(&self, target: &str) -> Option<&str> {
+        let ids = self.alias_matches(target);
+        (ids.len() == 1).then(|| ids[0].as_str())
+    }
+
+    pub fn alias_matches(&self, target: &str) -> &[String] {
+        self.by_alias.get(&normalize_title(target)).map(Vec::as_slice).unwrap_or(&[])
     }
 
     pub fn links_to(&self, target: &str, id: &str) -> bool {
@@ -728,6 +759,43 @@ mod tests {
         assert_eq!(targets.resolve("log/index"), Vec::<&str>::new());
         assert_eq!(targets.resolve("missing"), Vec::<&str>::new());
         assert_eq!(targets.by_file("msci-acwi-imi-fm"), Some("acwi"));
+    }
+
+    #[test]
+    fn aliases_follow_titles_and_paths_and_never_resolve_shared_names() {
+        let mut sam = note("sam", "Samuel Rivera", "people/sam.md");
+        sam.properties = crate::properties::parse_properties(&[
+            "aliases: [\" Sam \", \"SAM\", \"Alex\", \"work/plan\", \"Shared\"]".into(),
+            "alias: S. Rivera".into(),
+        ]);
+        let mut alex = note("alex", "Alex", "work/plan.md");
+        alex.properties = crate::properties::parse_properties(&["aliases: Shared".into()]);
+        let targets = LinkTargets::new([&sam, &alex]);
+        assert_eq!(note_aliases(&sam), vec!["Sam", "Alex", "work/plan", "Shared", "S. Rivera"]);
+        assert_eq!(targets.resolve("s. RIVERA"), vec!["sam"]);
+        assert_eq!(targets.resolve("Alex"), vec!["alex"]);
+        assert_eq!(targets.resolve("work/plan"), vec!["alex"]);
+        assert!(targets.resolve("shared").is_empty());
+        assert_eq!(targets.alias_matches("shared").len(), 2);
+    }
+
+    #[test]
+    fn aliases_connect_backlinks_graphs_and_block_embeds_after_renaming() {
+        let mut target = note("sam", "Samuel Rivera", "person.md");
+        target.properties = crate::properties::parse_properties(&["aliases: [Sam, Samuel]".into()]);
+        let mut source = note("meeting", "Planning", "planning.md");
+        source.properties = crate::properties::parse_properties(&["owner: \"[[Samuel]]\"".into()]);
+        let notes = vec![(source, "With [[Sam#^agenda|Sam]].".into()), (target, "An agenda ^agenda".into())];
+        let found = backlinks(notes.clone(), "sam");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].mentions, vec!["owner: [[Samuel]]", "With [[Sam#^agenda|Sam]]."]);
+        let graph = local_graph(notes.clone(), "sam").unwrap();
+        assert_eq!(graph.links, vec![["meeting".to_string(), "sam".to_string()]]);
+        let (_, block) = resolve_block(notes.clone(), "Samuel", "agenda").unwrap();
+        assert_eq!(block.text, "An agenda");
+        let targets = LinkTargets::new(notes.iter().map(|(note, _)| note));
+        let keep = |target: &str| targets.by_file(target) == Some("sam") || targets.by_alias(target) == Some("sam");
+        assert_eq!(rename_links("[[Samuel]] [[Sam]]", "Samuel", "Samuel Rivera", &keep), None);
     }
 
     #[test]

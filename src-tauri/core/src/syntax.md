@@ -88,10 +88,23 @@ Water is H~2~O and Einstein wrote E = mc^2^.
 
 ### Wikilinks
 
-Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. A title match comes first.
+Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. Titles and file paths take precedence over aliases. Typing [[ suggests notes by title, file path, or alias.
 
 ```tagdown
 See [[Welcome]] or [[Welcome|the intro]].
+```
+
+### Note aliases
+
+An aliases frontmatter property gives a note alternate names. A list or a single text value works; alias is accepted too. Matching ignores case. A unique alias resolves to the note and counts in backlinks and the local graph. If several notes share an alias, use a title or full vault-relative file path instead. Alias links survive title renames while the alias stays on the note.
+
+```tagdown
+---
+aliases: [Atlas, Launch plan]
+---
+# Atlas launch plan
+
+Other notes can link here with [[Atlas]] or [[Launch plan]].
 ```
 
 ### Block references
@@ -451,6 +464,14 @@ A note’s type is its type: property (type: Book). A note titled “Book Templa
 ## People to follow up with
 
 <query type:Person follow-up=true show:table columns:team,email />
+```
+
+### Linked notes from templates
+
+Type /template and choose New note from template. Pick an enabled note-type template to create a note with its text and properties in a new tab, with the title selected. A link stays at the original caret, including in an empty final preview block. Naming the new note updates that link when it saves. Daily pages use the Journal workflow instead.
+
+```tagdown
+Meeting notes: [[Release planning]]
 ```
 
 ### Child templates

@@ -85,6 +85,18 @@ Type **/** at the start of a line, or after a space, to open the command menu. K
 - **Basic blocks** turn the current line into a heading, bullet, numbered item, or task, and keep what you already wrote on it. Toggles, quotes, dividers, and tables are inserted too.
 - **Components** (callouts, columns, tabs, images, code, math, diagrams, queries) replace an empty line, or go below the current one. The placeholder text is selected, so you can type straight over it.
 - **Links and dates** insert a `[[` link (with the note autocomplete), a link to today's, tomorrow's, or yesterday's journal page, the current time, or a tag.
+- **New note from template** (`/template`) creates a linked note in a new tab, with its title ready to edit.
+
+### Create a linked note from a template
+
+1. Put the caret where the link should go. In preview mode, click a block to edit it, or use the empty block at the end of the note.
+2. Type `/template` and choose **New note from template**.
+3. Search for a template, such as **Meeting**, and click it or press **↩**. The new note opens in a new tab with its template text and properties, and its title selected for editing.
+4. Type a title, such as **Release planning**. When it saves, the original note's link changes from `[[New Meeting]]` to `[[Release planning]]`.
+
+Switch back to the original tab to continue writing. The link stays at the insertion point, including when you started from an empty final block. The workflow is available in source, split, and preview modes.
+
+The picker lists enabled note-type templates. Manage the built-in ones in **Settings → Templates**, or [create your own type](organizing.md#templates). Daily pages use the [Journal workflow](journal.md) and are not listed in this picker.
 
 ## Lists and outlines
 

@@ -29,6 +29,8 @@ These guides will help you find your way around, build a habit of taking notes, 
 
 ## Go a little further
 
+- [📝 Linked notes from templates](writing-notes.md#create-a-linked-note-from-a-template): Use `/template`, name the new note in its own tab, and keep a link in the original page.
+- [🔗 Aliases](organizing.md#aliases): Find and link to a note by an alternate name.
 - [🗂️ Templates and child types](organizing.md#child-types): Start with built-in templates, create children with the row's **+**, and choose which properties they inherit.
 - [🧩 Tagdown syntax](syntax.md): Markdown, callouts, tabs, columns, math, and diagrams.
 - [✅ Queries and tasks](queries-and-tasks.md): Find notes, build live views, and keep track of what needs doing.

@@ -170,3 +170,15 @@
   font-weight: 600;
   color: var(--ink-2);
 }
+.template-picker-search {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 12px);
+  margin: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--bg-field);
+  color: var(--text-primary);
+  font: inherit;
+}

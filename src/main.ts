@@ -16,7 +16,7 @@ import { openVersionHistory } from './history';
 import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
 import { fillQueries, invalidateQueries, openTaskList, taskItemHtml, toggleQueryTask, type QueryTask, type TableActions } from './queries';
-import { attachWikilinkAutocomplete, normalizeTitle, resolveTarget, splitTarget } from './wikilinks';
+import { attachWikilinkAutocomplete, normalizeTitle, noteAliases, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
 import { blockIdOfTarget, blockIds, blockReference, ensureBlockId } from './blockRefs';
@@ -32,6 +32,7 @@ import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, se
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
 import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import { openQuickCapture } from './quickCapture';
+import { openTemplatePicker, templateNoteTitle, templateReferenceEdit, type InsertableTemplate, type TemplateTarget } from './templatePicker';
 import { openLocalGraph } from './localGraph';
 import { offerLinkNote, onEmptyLine, openSaveLinkDialog, webUrl } from './webLinks';
 import { decorateFigures, setFigure } from './figures';
@@ -287,7 +288,10 @@ async function boot() {
   await reloadNotes();
   renderFilterPills();
   await openStartupNote();
-  await listen('note-saved', () => { savedMessage = 'Saved'; renderStatus(); });
+  await listen<{ id: string }>('note-saved', event => {
+    scheduleListRefresh();
+    if (event.payload?.id === selectedNote?.id && saveTimer === undefined) { savedMessage = 'Saved'; renderStatus(); }
+  });
   await listen<{ note: Note; content: string }>('note-changed-externally', (event) => void onExternalChange(event.payload.note, event.payload.content));
   await listen<{ id: string }>('note-removed-externally', (event) => onExternalRemoval(event.payload.id));
   // Folders are directories: ones made, renamed or removed in Finder show up here.
@@ -2283,6 +2287,47 @@ async function selectType(name: string) {
 }
 
 /** A new note of the type `name`, from its template, in the folder being viewed. */
+async function createLinkedTemplateNote(template: InsertableTemplate, target: TemplateTarget) {
+  if (!selectedNote || !target.isCurrent()) throw new Error('The original note changed. Choose the template again.');
+  const originalId = selectedNote.id;
+  const originalPane = activePane;
+  const folderId = isUserFolder(selectedNote.folderId) ? selectedNote.folderId : null;
+  const title = templateNoteTitle(template.name, libraryNotes.flatMap(note => [note.title, ...noteAliases(note)]));
+  const note = await invoke<Note>('create_typed_note', { typeName: template.name, title, folderId });
+  let linked = false;
+  try {
+    if (!target.isCurrent() || selectedNote?.id !== originalId || activePane !== originalPane) throw new Error('The original note changed before the new note was ready.');
+    applyEdit(target.textarea, templateReferenceEdit(target.original, target.from, target.to, note.title));
+    linked = true;
+    if (blockEdit?.el === target.textarea) commitBlockEdit();
+    await settlePendingWork();
+    linkTitles.set(note.id, note.title);
+    await reloadFolders();
+    await reloadNotes();
+    if (selectedNote?.id !== originalId || activePane !== originalPane) return;
+    await openNote(note, 'tab');
+    selectNewNoteTitle();
+  } catch (error) {
+    // A canceled navigation must not leave an unlinked draft behind.
+    if (!linked) await invoke('destroy_note', { id: note.id });
+    throw error;
+  }
+}
+
+function selectNewNoteTitle() {
+  if (viewMode === 'preview') {
+    const heading = editorRoot.querySelector<HTMLElement>('.preview .td-block.is-doc-title');
+    if (heading) startBlockEdit(heading);
+  }
+  const editor = blockEdit?.el ?? editorRoot.querySelector<HTMLTextAreaElement>('#source');
+  if (!editor) return;
+  const heading = /^#([ \t]+)(.*)$/m.exec(editor.value);
+  if (!heading || heading.index === undefined) return;
+  const from = heading.index + 1 + heading[1].length;
+  editor.focus();
+  editor.setSelectionRange(from, from + heading[2].length);
+}
+
 async function createTypedNote(name: string) {
   if (normalizeTitle(name) === 'journal') { await openJournal(todayKey()); return; }
   await settlePendingWork();
@@ -2292,11 +2337,7 @@ async function createTypedNote(name: string) {
   await reloadFolders();
   await reloadNotes();
   await openNote(note);
-  // Ready to type the title over "Untitled".
-  if (viewMode !== 'preview') {
-    const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
-    if (source) { source.focus(); source.setSelectionRange(2, 2 + 'Untitled'.length); }
-  }
+  selectNewNoteTitle();
 }
 
 /** Start a type: its "<Name> Template" note, with an icon property to fill in. */
@@ -3138,7 +3179,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
       if (blockEdit?.el !== textarea) return;
       // Formatting from the dock or the components menu keeps the block open.
       const active = document.activeElement;
-      if (active === textarea || active?.closest('.format-dock, .toolbar-menu')) return;
+      if (active === textarea || active?.closest('.format-dock, .toolbar-menu, .template-picker')) return;
       // Choosing images in the file dialog keeps the block open for them.
       if (pickingImages) return;
       commitBlockEdit();
@@ -3536,7 +3577,11 @@ const wikilinkOptions = {
 // ↩ and Tab before list editing (and the block editor's own keys) see them.
 function attachEditingAids(textarea: HTMLTextAreaElement) {
   attachWikilinkAutocomplete(textarea, wikilinkOptions);
-  attachSlashCommands(textarea);
+  attachSlashCommands(textarea, { onTemplate: (editor) => openTemplatePicker(editor, {
+    templates: () => noteTypes.filter(type => normalizeTitle(type.name) !== 'journal'),
+    currentId: () => selectedNote?.id ?? null,
+    create: createLinkedTemplateNote,
+  }) });
   attachListEditing(textarea);
   attachImageInput(textarea);
   textarea.addEventListener('paste', (event) => {
@@ -3545,7 +3590,7 @@ function attachEditingAids(textarea: HTMLTextAreaElement) {
       offerLinkNote(url, () => saveWebLink(url, textarea).catch(async (error) => { await message(String(error), { title: 'Could not save the link', kind: 'warning' }); }));
     }
   });
-  for (const type of ['keyup', 'mouseup', 'input', 'focus']) textarea.addEventListener(type, () => rememberCaret(textarea));
+  for (const type of ['keyup', 'mouseup', 'input', 'focus', 'select']) textarea.addEventListener(type, () => queueMicrotask(() => rememberCaret(textarea)));
   textarea.addEventListener('tagdown:pick', (event) => {
     const pick = (event as CustomEvent<string>).detail;
     if (pick === 'block-link' || pick === 'block-embed') void copyBlockReference(pick === 'block-embed');

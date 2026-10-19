@@ -30,7 +30,7 @@ export type SlashCommand = {
   keywords?: string[];
   /** The Markdown you could type instead, shown on the right. */
   shortcut?: string;
-} & ({ line: string } | { block: string } | { inline: string | (() => string) } | { pick: 'image' | 'block-link' | 'block-embed' });
+} & ({ line: string } | { block: string; literal?: boolean } | { inline: string | (() => string) } | { pick: 'image' | 'block-link' | 'block-embed' | 'template' });
 
 const day = (offset: number) => () => `[[${shiftDay(todayKey(), offset)}]]`;
 
@@ -47,6 +47,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'quote', label: 'Quote', description: 'Quotation with a citation', group: 'Basic blocks', icon: '❝', keywords: ['blockquote', 'citation', 'cite'], block: '<quote "Author">\n{{Quotation}}\n</quote>' },
   { id: 'divider', label: 'Divider', description: 'Separate sections with a line', group: 'Basic blocks', icon: '—', keywords: ['hr', 'rule', 'line', 'separator'], shortcut: '---', block: '---\n{{}}' },
   { id: 'table', label: 'Table', description: 'Rows and columns', group: 'Basic blocks', icon: '⊞', keywords: ['grid', 'pipe', 'spreadsheet'], block: '| {{Header}} | Header |\n| ------ | ------ |\n| Cell | Cell |' },
+  { id: 'template', label: 'New note from template', description: 'Create a linked note in a new tab and name it', group: 'Basic blocks', icon: '▤', keywords: ['template', 'new', 'reusable'], pick: 'template' },
 
   { id: 'info', label: 'Info callout', description: 'Note box for context', group: 'Callouts', icon: 'i', keywords: ['callout', 'note', 'admonition'], shortcut: ':::', block: '::: info\n{{Your message}}\n:::' },
   { id: 'tip', label: 'Tip callout', description: 'Helpful hint', group: 'Callouts', icon: '✦', keywords: ['callout', 'hint', 'important'], block: '::: tip\n{{Your tip}}\n:::' },
@@ -177,7 +178,7 @@ export function applyCommand(text: string, at: number, caret: number, command: S
   }
 
   // Blocks sit on their own lines, with the blank lines Markdown needs around them.
-  const { text: block, sel } = expand(command.block);
+  const { text: block, sel } = command.literal ? { text: command.block, sel: [command.block.length, command.block.length] } : expand(command.block);
   const prevBlank = lineStart === 0 || rest.slice(rest.lastIndexOf('\n', lineStart - 2) + 1, lineStart - 1).trim() === '';
   const nextLineEnd = rest.indexOf('\n', lineEnd + 1);
   const nextLine = lineEnd >= rest.length ? '' : rest.slice(lineEnd + 1, nextLineEnd < 0 ? rest.length : nextLineEnd);
@@ -204,7 +205,7 @@ export function applyCommand(text: string, at: number, caret: number, command: S
 
 let menu: HTMLDivElement | null = null;
 
-export function attachSlashCommands(textarea: HTMLTextAreaElement) {
+export function attachSlashCommands(textarea: HTMLTextAreaElement, options: { onTemplate?: (textarea: HTMLTextAreaElement) => void } = {}) {
   let matches: SlashCommand[] = [];
   let active = 0;
   let open: { at: number; query: string } | null = null;
@@ -224,7 +225,10 @@ export function attachSlashCommands(textarea: HTMLTextAreaElement) {
     applyEdit(textarea, edit);
     // Let the `[[` autocomplete pick up the new link right away.
     if (command.id === 'link') textarea.dispatchEvent(new Event('input'));
-    if ('pick' in command) textarea.dispatchEvent(new CustomEvent('tagdown:pick', { detail: command.pick }));
+    if ('pick' in command) {
+      if (command.pick === 'template' && options.onTemplate) options.onTemplate(textarea);
+      else textarea.dispatchEvent(new CustomEvent('tagdown:pick', { detail: command.pick }));
+    }
   };
 
   const render = () => {

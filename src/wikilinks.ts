@@ -1,6 +1,6 @@
 // Wikilinks in the editor: resolving `[[Title#Heading|label]]` targets to notes
 // and the `[[` autocomplete for note titles. Like the backend (`links.rs`), a
-// target names a note by title first, then by its file, as Obsidian writes them.
+// target names a note by title first, then by its file, then by a unique alias.
 
 import { formatDay, shiftDay, todayKey } from './journal';
 
@@ -11,11 +11,31 @@ export type LinkableNote = {
   journal?: string | null;
   /** The note's file relative to the vault, `/`-separated. */
   path?: string;
+  properties?: { key: string; type: string; value: unknown }[];
+  updatedAt?: string;
+  backlinkCount?: number;
 };
-type Suggestion = LinkableNote & { hint?: string };
+type Suggestion = LinkableNote & { hint?: string; linkTarget?: string };
 
 export function normalizeTitle(title: string) {
   return title.trim().toLowerCase();
+}
+
+/** Ordinary YAML `aliases: [Name, Other name]` (or one text value). */
+export function noteAliases(note: LinkableNote): string[] {
+  const values = (note.properties ?? []).flatMap((property) => {
+    if (!['alias', 'aliases'].includes(normalizeTitle(property.key))) return [];
+    if (property.type === 'text' && typeof property.value === 'string') return [property.value];
+    if (property.type === 'list' && Array.isArray(property.value)) return property.value.filter((v): v is string => typeof v === 'string');
+    return [];
+  });
+  const seen = new Set<string>();
+  return values.map((v) => v.trim()).filter((v) => {
+    const key = normalizeTitle(v);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Split a link target into its note title and optional heading anchor. */
@@ -34,7 +54,8 @@ export function normalizePath(path: string) {
 /**
  * The note a link target names: the note with that title; else the note whose
  * path in the vault it is (`[[blog/post]]` for `blog/post.md`); else the one
- * note whose path ends in it (`[[post]]`). A file name two notes share names neither.
+ * note whose path ends in it (`[[post]]`); finally its unique frontmatter alias.
+ * A shared alias names neither note.
  */
 export function resolveTarget<T extends LinkableNote>(target: string, notes: T[]): T | null {
   const name = splitTarget(target).title;
@@ -47,7 +68,9 @@ export function resolveTarget<T extends LinkableNote>(target: string, notes: T[]
   const exact = withPaths.find((entry) => entry.path === path);
   if (exact) return exact.note;
   const ending = withPaths.filter((entry) => entry.path.endsWith(`/${path}`));
-  return ending.length === 1 ? ending[0].note : null;
+  if (ending.length === 1) return ending[0].note;
+  const aliases = notes.filter((note) => noteAliases(note).some((alias) => normalizeTitle(alias) === wanted));
+  return aliases.length === 1 ? aliases[0] : null;
 }
 
 // ---- Autocomplete ----
@@ -57,7 +80,7 @@ const OPEN_LINK = /\[\[([^\[\]|#\n]*)$/;
 const MAX_SUGGESTIONS = 8;
 
 type AutocompleteOptions = {
-  /** Notes to suggest, most recently edited first. */
+  /** Notes to suggest. Caller order is retained when ranking signals tie. */
   notes: () => LinkableNote[];
   /** The note being edited, which is never suggested. */
   currentId: () => string | null;
@@ -86,7 +109,7 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
     const caret = textarea.selectionStart;
     const after = textarea.value.slice(caret);
     const end = after.startsWith(']]') ? caret + 2 : caret;
-    const link = `[[${note.title}]]`;
+    const link = note.linkTarget ? `[[${note.linkTarget}|${note.title}]]` : `[[${note.title}]]`;
     textarea.setRangeText(link, openAt, end, 'end');
     close();
     textarea.dispatchEvent(new Event('input'));
@@ -124,7 +147,7 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
     const match = textarea.value.slice(0, caret).match(OPEN_LINK);
     if (!match) return close();
     openAt = caret - match[0].length;
-    matches = suggest(match[1], options.notes(), options.currentId());
+    matches = suggestWikilinks(match[1], options.notes(), options.currentId());
     active = 0;
     if (!matches.length) {
       popup?.remove();
@@ -153,10 +176,15 @@ export function attachWikilinkAutocomplete(textarea: HTMLTextAreaElement, option
   });
 }
 
-function suggest(query: string, notes: LinkableNote[], currentId: string | null): Suggestion[] {
+export function suggestWikilinks(query: string, notes: LinkableNote[], currentId: string | null): Suggestion[] {
   const q = normalizeTitle(query);
   const candidates = notes.filter((note) => note.id !== currentId && note.folderId !== 'archive');
-  if (!q) return candidates.slice(0, MAX_SUGGESTIONS);
+  const liveNotes = notes.filter((note) => note.folderId !== 'archive');
+  const titleCounts = new Map<string, number>();
+  for (const note of liveNotes) {
+    const key = normalizeTitle(note.title);
+    titleCounts.set(key, (titleCounts.get(key) ?? 0) + 1);
+  }
   // `[[tod` offers today's journal page by its date, whether or not it exists yet.
   const days: Suggestion[] = q.length < 2 ? [] : ([['today', 0], ['yesterday', -1], ['tomorrow', 1]] as const)
     .filter(([word]) => word.startsWith(q))
@@ -164,20 +192,54 @@ function suggest(query: string, notes: LinkableNote[], currentId: string | null)
       const day = shiftDay(todayKey(), offset);
       return { id: `journal:${day}`, title: day, folderId: null, journal: day, hint: `${word[0].toUpperCase()}${word.slice(1)} · ${formatDay(day, 'short')}` };
     });
-  const rank = (title: string) => {
+  const rank = (title: string, wanted = q) => {
     const t = normalizeTitle(title);
-    if (t.startsWith(q)) return 3;
-    if (t.split(/[\s/–-]+/).some((word) => word.startsWith(q))) return 2;
-    return t.includes(q) ? 1 : 0;
+    if (!wanted) return 1;
+    if (t === wanted) return 4;
+    if (t.startsWith(wanted)) return 3;
+    if (t.split(/[\s/–-]+/).some((word) => word.startsWith(wanted))) return 2;
+    return t.includes(wanted) ? 1 : 0;
+  };
+  const pathQuery = normalizePath(query);
+  const rankPath = (path: string | undefined) => {
+    if (!q || !pathQuery || !path) return 0;
+    const normalized = normalizePath(path);
+    // Match the same full path and suffix spellings accepted by resolveTarget.
+    if (normalized === pathQuery || normalized.endsWith(`/${pathQuery}`)) return 5;
+    return rank(normalized, pathQuery);
   };
   const ranked = candidates
-    .map((note, order) => ({ note, order, score: rank(note.title) }))
+    .map((note, order) => {
+      const alias = noteAliases(note).map((value) => ({ value, score: rank(value) })).sort((a, b) => b.score - a.score)[0];
+      const titleScore = q && normalizeTitle(note.title) === q ? 6 : rank(note.title);
+      const pathScore = rankPath(note.path);
+      const aliasWins = q && alias && alias.score > Math.max(titleScore, pathScore);
+      const pathWins = pathScore > titleScore && pathScore >= (alias?.score ?? 0);
+      const sharedTitle = (titleCounts.get(normalizeTitle(note.title)) ?? 0) > 1;
+      const linkTarget = (sharedTitle || pathWins) && note.path ? note.path.replaceAll('\\', '/').replace(/\.md$/i, '') : undefined;
+      const hint = aliasWins ? `Alias: ${alias.value}` : sharedTitle || pathWins ? note.path : note.journal ? formatDay(note.journal, 'short') : undefined;
+      return { note: { ...note, hint, linkTarget }, order, score: Math.max(titleScore, pathScore, alias?.score ?? 0) };
+    })
     .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .sort((a, b) => b.score - a.score || editedAt(b.note) - editedAt(a.note) || (b.note.backlinkCount ?? 0) - (a.note.backlinkCount ?? 0) || a.order - b.order)
     .filter((entry) => !days.some((day) => day.title === entry.note.title))
     .slice(0, MAX_SUGGESTIONS - days.length)
-    .map((entry): Suggestion => entry.note.journal ? { ...entry.note, hint: formatDay(entry.note.journal, 'short') } : entry.note);
+    .flatMap((entry): Suggestion[] => {
+      const note = entry.note;
+      if (!note.linkTarget) return [note];
+      // A different note's title can shadow a path without `.md`. Keep a
+      // resolvable spelling rather than accepting a suggestion into that note.
+      const linkTarget = [note.linkTarget, note.path, note.path ? `./${note.path}` : undefined]
+        .find((target) => target && resolveTarget(target, liveNotes)?.id === note.id);
+      if (linkTarget) return [{ ...note, linkTarget }];
+      return (titleCounts.get(normalizeTitle(note.title)) ?? 0) === 1 ? [{ ...note, linkTarget: undefined }] : [];
+    });
   return [...days, ...ranked];
+}
+
+function editedAt(note: LinkableNote) {
+  const value = Date.parse(note.updatedAt ?? '');
+  return Number.isFinite(value) ? value : 0;
 }
 
 /** Viewport position of the character at `index` in a textarea. */

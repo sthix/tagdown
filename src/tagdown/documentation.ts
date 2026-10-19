@@ -61,8 +61,13 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Wikilinks',
-        description: 'Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. A title match comes first.',
+        description: 'Reference another note with [[Title]] or [[Title|display label]]. A link can also name a note by its file in the vault, the way Obsidian writes them: [[folder/file]] or just [[file]] when no other note has that file name. Titles and file paths take precedence over aliases. Typing [[ suggests notes by title, file path, or alias.',
         syntax: 'See [[Welcome]] or [[Welcome|the intro]].'
+      },
+      {
+        title: 'Note aliases',
+        description: 'An aliases frontmatter property gives a note alternate names. A list or a single text value works; alias is accepted too. Matching ignores case. A unique alias resolves to the note and counts in backlinks and the local graph. If several notes share an alias, use a title or full vault-relative file path instead. Alias links survive title renames while the alias stays on the note.',
+        syntax: '---\naliases: [Atlas, Launch plan]\n---\n# Atlas launch plan\n\nOther notes can link here with [[Atlas]] or [[Launch plan]].'
       },
       {
         title: 'Block references',
@@ -262,6 +267,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         title: 'Note types',
         description: 'A note’s type is its type: property (type: Book). A note titled “Book Template” says how new Book notes start: with its properties and their values, and with its text, where {{title}}, {{date}}, {{weekday}}, {{yesterday}} and {{tomorrow}} are filled in. Its icon: property (an emoji) is the type’s icon and isn’t copied. A template value that links to a type, like author: "[[Person]]", makes a link field: new notes start with it empty, it suggests that type’s notes, and a new name creates one. Types are listed in the sidebar; type:Book in a query matches them, and + New note in a table, board or cards for a type starts from its template.',
         syntax: '## People to follow up with\n\n<query type:Person follow-up=true show:table columns:team,email />'
+      },
+      {
+        title: 'Linked notes from templates',
+        description: 'Type /template and choose New note from template. Pick an enabled note-type template to create a note with its text and properties in a new tab, with the title selected. A link stays at the original caret, including in an empty final preview block. Naming the new note updates that link when it saves. Daily pages use the Journal workflow instead.',
+        syntax: 'Meeting notes: [[Release planning]]'
       },
       {
         title: 'Child templates',

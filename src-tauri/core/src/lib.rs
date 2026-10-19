@@ -11,6 +11,7 @@ pub mod search_index;
 pub mod site;
 pub mod tasks;
 pub mod types;
+pub mod templates;
 pub mod vault;
 pub mod vaults;
 pub mod watcher;

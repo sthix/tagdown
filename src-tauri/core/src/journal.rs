@@ -50,9 +50,10 @@ impl Vault {
         if let Some(note) = self.find_journal(day)? {
             return Ok((note, false));
         }
-        let body = self.journal_template()?.map(|t| fill_template(&t, day)).unwrap_or_default();
+        let template = self.type_template("Journal")?;
+        let (properties, body) = crate::types::from_template("Journal", &journal_title(day), template.as_ref().map(|(n, c)| (n, c.as_str())), &self.type_names()?, day);
         let content = format!("# {}\n\n{}", journal_title(day), body.trim());
-        let note = self.create_note_with(None, &format!("{}\n", content.trim_end()), Some(day), &[])?;
+        let note = self.create_note_with(None, &format!("{}\n", content.trim_end()), Some(day), &properties[1..])?;
         Ok((note, true))
     }
 
@@ -63,15 +64,6 @@ impl Vault {
         Ok((self.save_note(&note.id, next.clone())?, next))
     }
 
-    /// The body of the "Journal Template" note, without its title heading.
-    fn journal_template(&self) -> Result<Option<String>, String> {
-        let wanted = normalize_title(TEMPLATE_TITLE);
-        let template = self
-            .notes_with_content()?
-            .into_iter()
-            .find(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE) && normalize_title(&n.title) == wanted);
-        Ok(template.map(|(_, content)| strip_title(&content)))
-    }
 }
 
 /// A list item (`- `, `* `, `+ `, `1. `), tasks included.

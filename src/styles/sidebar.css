@@ -292,6 +292,14 @@
 .folder-create-row input::placeholder { color: var(--ink-3); }
 
 #types { padding-bottom: 4px; }
+.type-tree-item { position: relative; }
+.type-child-add { right: 14px; }
+.type-tree-item:hover .type-child-add,
+.type-tree-item:focus-within .type-child-add { opacity: 1; pointer-events: auto; }
+.type-tree-item:hover .type-row { background: var(--hover-overlay); }
+.type-tree-item:has(.type-child-add):hover .folder-count,
+.type-tree-item:has(.type-child-add):focus-within .folder-count { visibility: hidden; }
+.type-child-add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .type-emoji { display: block; width: 16px; line-height: 16px; text-align: center; }
 
 #tags { display: block; padding-bottom: 8px; }

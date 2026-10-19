@@ -22,7 +22,7 @@ The query uses the [search syntax](organizing.md#search) (words, `"phrases"`, `t
 | `status:` | `open`, `done`, `all` (for tasks) | `open` |
 | `sort:` | `updated`, `created`, `title`, or a property (`sort:due`, `sort:-priority` for descending); for tasks, `date` or `priority` | `updated` |
 | `folder:` | A folder name; quote names with spaces | All folders |
-| `type:` | A [note type](organizing.md#note-types), like `type:Book` | All types |
+| `type:` | A [note type](organizing.md#note-types), like `type:Book`; a parent type includes its descendants | All types |
 | `columns:` | Properties to show in a table, on board cards or on cards | The ones the query uses |
 | `group:` | The property a board's lanes are values of | `status` |
 | `lanes:` | A board's lanes, in order, like `lanes:todo,doing,done` | The values notes use |

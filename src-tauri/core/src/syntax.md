@@ -453,6 +453,21 @@ A note’s type is its type: property (type: Book). A note titled “Book Templa
 <query type:Person follow-up=true show:table columns:team,email />
 ```
 
+### Child templates
+
+Click the + on a type’s sidebar row to create a child, or choose Parent type while editing a template. The + beside the Types heading creates a top-level type. Author can inherit Person’s properties and icon. Switch off inherited properties you don’t need; add properties below to extend the child or override a matching name. Parent changes flow into future child notes, while existing notes keep their values. Parent type views, link suggestions, and type:Person queries also include Author notes. In a template file, extends: Person chooses the parent and exclude: [company] turns off an inherited property. These settings aren’t copied into notes. A child uses its own body text.
+
+```tagdown
+---
+extends: Person
+exclude: [company]
+genre: Fiction
+---
+# Author Template
+
+## Bibliography
+```
+
 ### Math (KaTeX)
 
 Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.

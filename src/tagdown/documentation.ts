@@ -264,6 +264,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: '## People to follow up with\n\n<query type:Person follow-up=true show:table columns:team,email />'
       },
       {
+        title: 'Child templates',
+        description: 'Click the + on a type’s sidebar row to create a child, or choose Parent type while editing a template. The + beside the Types heading creates a top-level type. Author can inherit Person’s properties and icon. Switch off inherited properties you don’t need; add properties below to extend the child or override a matching name. Parent changes flow into future child notes, while existing notes keep their values. Parent type views, link suggestions, and type:Person queries also include Author notes. In a template file, extends: Person chooses the parent and exclude: [company] turns off an inherited property. These settings aren’t copied into notes. A child uses its own body text.',
+        syntax: '---\nextends: Person\nexclude: [company]\ngenre: Fiction\n---\n# Author Template\n\n## Bibliography'
+      },
+      {
         title: 'Math (KaTeX)',
         description: 'Inline $a^2 + b^2$ or block $$E = mc^2$$. Rendered with KaTeX.',
         syntax: 'Inline math like $E = mc^2$ or:\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$'

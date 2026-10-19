@@ -151,6 +151,23 @@ A plain Markdown image `![alt](path)` sits inline with the text. A number after 
 
 YouTube and Vimeo embeds show a thumbnail that opens the video in your browser.
 
+## Templates and inheritance
+
+Templates are ordinary notes titled **Book Template**, **Person Template**, and so on. A child template can inherit another template's properties and icon while keeping its own body text:
+
+```tagdown
+---
+extends: Person
+exclude: [company]
+genre: Fiction
+---
+# Author Template
+
+## Bibliography
+```
+
+Here, Author inherits Person's properties except `company` and adds `genre`. A property defined on Author overrides an inherited property with the same name. `extends` and `exclude` configure the template and are not copied into new notes. The editor offers the same controls under **Parent type** and **Inherited properties**. See [templates and child types](organizing.md#child-types) for the sidebar's **+** workflow and template settings.
+
 ## Queries and slides
 
 ```tagdown

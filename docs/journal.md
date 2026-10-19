@@ -47,7 +47,7 @@ Click any of them to open it. **Linked mentions** follows below.
 
 ## A template for new days
 
-Create a note titled **Journal Template**. Each new day's page starts with its body (everything after the title heading). These placeholders are filled in:
+The built-in **Journal Template** is ready when you open a vault. Open it from **Settings → Templates → Journal → Edit**, or right-click **Journal** under **Types** and choose **Edit template**. Each new day's page starts with its properties and body (everything after the title heading); the template's icon stays with the type. These placeholders are filled in:
 
 <!-- {% raw %} -->
 
@@ -70,7 +70,7 @@ Create a note titled **Journal Template**. Each new day's page starts with its b
 
 <!-- {% endraw %} -->
 
-Changing the template only affects pages created afterwards.
+Changing the template only affects pages created afterwards. In **Settings → Templates**, turn Journal off to start future days with an empty page, or use **Reset** to restore the starter template. Existing journal pages are kept. Your previous Journal Template, if you already had one, is preserved when built-in templates are introduced. See [template settings](organizing.md#built-in-templates).
 
 ## On disk
 

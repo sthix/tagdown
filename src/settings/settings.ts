@@ -171,6 +171,13 @@ const PAGES: Page[] = [
     ],
   },
   {
+    id: 'templates',
+    title: 'Templates',
+    icon: 'type',
+    intro: 'Starter templates for this vault. Edit their notes to change the text, properties, and type icons.',
+    body: () => `<section class="settings-group"><h3>Built-in templates</h3><p class="template-help">Turn a template off to stop using it for new notes. Your edits and existing notes are kept. Reset restores the original text and properties.</p><div class="settings-card" data-template-list></div><p class="template-status" data-template-status role="status" aria-live="polite"></p></section>`,
+  },
+  {
     id: 'shortcuts',
     title: 'Shortcuts',
     icon: 'keyboard',
@@ -184,7 +191,17 @@ const REFERENCE = { id: 'tagdown-reference', title: 'Tagdown Reference', icon: '
 let dialog: HTMLDialogElement | null = null;
 let closeTimer: number | undefined;
 
-export function initSettings() {
+type TemplateActions = {
+  edit: (id: string) => Promise<void>;
+  prepare: () => Promise<void>;
+  changed: (id?: string) => Promise<void>;
+  confirmReset: (name: string) => Promise<boolean>;
+};
+type BuiltinTemplate = { name: string; icon: string; description: string; templateId: string | null; enabled: boolean };
+let templateActions: TemplateActions;
+
+export function initSettings(actions?: TemplateActions) {
+  if (actions) templateActions = actions;
   if (dialog) return;
 
   document.body.insertAdjacentHTML('beforeend', renderSettingsDialog());
@@ -210,6 +227,7 @@ export function initSettings() {
   });
   bindVaultList();
   bindHiddenProperties();
+  bindTemplates();
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     tab.addEventListener('click', () => activateTab(tab));
@@ -315,6 +333,7 @@ export function openSettings(panelId = 'general') {
   const tab = dialog?.querySelector<HTMLButtonElement>(`[role="tab"][data-panel="${panelId}"]`);
   if (tab) activateTab(tab);
   void loadVaults();
+  void loadTemplates();
   window.clearTimeout(closeTimer);
   dialog?.classList.remove('is-closing');
   if (!dialog?.open) dialog?.showModal();
@@ -482,6 +501,81 @@ function renderControl(control: Control) {
 
 function rangeFill(min: number, max: number, value: number) {
   return `${((value - min) / (max - min)) * 100}%`;
+}
+
+async function loadTemplates() {
+  const holder = dialog?.querySelector<HTMLElement>('[data-template-list]');
+  if (!holder) return;
+  try {
+    const templates = await invoke<BuiltinTemplate[]>('list_builtin_templates');
+    holder.innerHTML = templates.map((template) => `
+      <div class="settings-row template-row" data-template-name="${escapeHtml(template.name)}">
+        <div class="settings-row-text">
+          <label class="settings-row-label" for="template-${escapeHtml(template.name)}"><span aria-hidden="true">${escapeHtml(template.icon)}</span> ${escapeHtml(template.name)}</label>
+          <p>${escapeHtml(template.description)}</p>
+        </div>
+        <div class="settings-row-control template-actions">
+          <button type="button" class="td-button" data-edit-template="${escapeHtml(template.templateId ?? '')}" ${template.templateId ? '' : 'disabled'} aria-label="Edit ${escapeHtml(template.name)} template">Edit</button>
+          <button type="button" class="td-button" data-reset-template aria-label="Reset ${escapeHtml(template.name)} template">Reset</button>
+          <input id="template-${escapeHtml(template.name)}" class="td-switch" type="checkbox" role="switch" data-enable-template aria-label="Use ${escapeHtml(template.name)} template" ${template.enabled ? 'checked' : ''} />
+        </div>
+      </div>`).join('');
+  } catch (error) { templateStatus(`Couldn’t load templates: ${String(error)}`); }
+}
+
+function templateStatus(text: string) {
+  const status = dialog?.querySelector<HTMLElement>('[data-template-status]');
+  if (status) status.textContent = text;
+}
+
+function bindTemplates() {
+  const holder = dialog?.querySelector<HTMLElement>('[data-template-list]');
+  let busy = false;
+  const run = async (control: HTMLElement) => {
+    if (busy) return;
+    const row = control.closest<HTMLElement>('[data-template-name]');
+    const name = row?.dataset.templateName;
+    if (!name) return;
+    const action = control.hasAttribute('data-edit-template') ? 'data-edit-template' : control.hasAttribute('data-reset-template') ? 'data-reset-template' : 'data-enable-template';
+    busy = true;
+    holder?.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input').forEach((el) => { el.disabled = true; });
+    try {
+      if (control.hasAttribute('data-edit-template')) {
+        const id = control.dataset.editTemplate;
+        if (id) {
+          await templateActions.prepare();
+          closeSettings();
+          await templateActions.edit(id);
+        }
+      } else if (control.hasAttribute('data-reset-template')) {
+        if (!await templateActions.confirmReset(name)) return;
+        await templateActions.prepare();
+        const note = await invoke<{ id: string }>('reset_builtin_template', { name });
+        await templateActions.changed(note.id);
+        templateStatus(`${name} template reset. Existing notes are unchanged.`);
+      } else {
+        await templateActions.prepare();
+        await invoke('set_builtin_template_enabled', { name, enabled: (control as HTMLInputElement).checked });
+        await templateActions.changed();
+        templateStatus(`${name} template ${(control as HTMLInputElement).checked ? 'on' : 'off'}.`);
+      }
+    } catch (error) { templateStatus(`Couldn’t update template: ${String(error)}`); }
+    finally {
+      await loadTemplates();
+      busy = false;
+      if (dialog?.open && !dialog.classList.contains('is-closing')) {
+        holder?.querySelector<HTMLElement>(`[data-template-name="${CSS.escape(name)}"] [${action}]`)?.focus();
+      }
+    }
+  };
+  holder?.addEventListener('click', (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('button');
+    if (button) void run(button);
+  });
+  holder?.addEventListener('change', (event) => {
+    const input = event.target as HTMLInputElement;
+    if (input.hasAttribute('data-enable-template')) void run(input);
+  });
 }
 
 function renderVaultControl() {

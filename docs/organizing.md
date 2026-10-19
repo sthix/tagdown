@@ -52,7 +52,29 @@ A note can say what kind of thing it is: a book, a person, a project, a meeting.
 type: Book
 ```
 
-The sidebar's **Types** section lists every type in the vault with how many notes have it. Click one to list its notes; **New note** (⌘N) there creates a note of that type. The command palette has a **New Book** action for each type, too.
+The sidebar's **Types** section lists every type in the vault with how many notes have it. Child types are nested under their parent, whose count and note list include its children. Click a type to list its notes; **New note** (⌘N) there creates a note of that type. The command palette has a **New Book** action for each type, too. **Journal** appears here as well: its template starts new daily pages, and **New Journal** opens today's page.
+
+### Built-in templates
+
+Tagdown supplies **Journal**, **Book**, **Person**, **Project**, **Meeting**, and **Recipe** templates when the desktop app opens a vault. They are regular notes you can edit. Existing templates with the same names are kept, including their text and properties.
+
+Open **Settings → Templates** to manage them for the current vault:
+
+| Control | What it does |
+| --- | --- |
+| **Edit** | Opens the template note to change its text, properties, and icon. |
+| **On/off switch** | Stops using the template for new notes, while keeping its note and your edits. Turn it back on to use your version again. |
+| **Reset** | After confirmation, restores the template's original text and properties. Its on/off state is kept. |
+
+These controls leave notes already created from the template unchanged. An unused type disappears from Types when its template is off; a type with existing notes stays available. Switching a parent template off does not remove the properties its children inherit. Archived or deleted templates stay removed until you explicitly restore them.
+
+<figure class="doc-visual">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/templates-dark.jpg" />
+    <img src="images/templates-light.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Settings, Templates: Journal, Book, Person, Project, Meeting, and Recipe each have Edit, Reset, and an on/off switch." />
+  </picture>
+  <figcaption>Template settings belong to the open vault. Turning a template off preserves your version; Reset restores the starter content.</figcaption>
+</figure>
 
 ### Templates
 
@@ -84,6 +106,42 @@ started: "{{date}}"
 <!-- {% endraw %} -->
 
 Press **+** next to **Types** to start a type: it creates the template note with an empty `icon` for you. Right-click a type to edit its template or make one.
+
+### Child types
+
+An **Author** can be a child of **Person**, sharing its contact fields while adding author-specific information.
+
+1. Hover **Person** in **Types** and click the **+** on its row. The button also appears when the row has keyboard focus. The **+** beside the Types heading creates a separate top-level type.
+2. Enter **Author** and press **↩**. The new Author Template opens, with **Parent type: Person** already chosen. You can also right-click Person and choose **Create child type…**.
+3. Keep the inherited fields you need and switch others off. For example, keep `email` and turn `company` off.
+4. Use **Add property** below to add `genre`. Adding a property with the same name as an inherited one overrides its default for Author; remove that own property to use the inherited version again.
+
+<figure class="doc-visual">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/child-types-dark.jpg" />
+    <img src="images/child-types-light.jpg" width="1280" height="720" loading="lazy" decoding="async" alt="Author Template below Person in the Types sidebar. Its inherited email field is on, company is off, and its own genre property is Fiction." />
+  </picture>
+  <figcaption>A child keeps its own type and body text. Its parent supplies property defaults and, unless overridden, its icon.</figcaption>
+</figure>
+
+You can choose another **Parent type**, or **None**, in any template. Several levels work: Novelist can inherit from Author, which inherits from Person. A type cannot be its own ancestor. If a parent is archived or removed, the child shows an error until you restore the parent or choose another one.
+
+Parent edits flow into future child notes. Existing notes keep their values, including properties you later switch off in the template. Giving an existing note a child type adds only the enabled properties it lacks. Selecting Person, querying `type:Person`, or choosing a Person in a link field also includes Author and other descendants.
+
+Inheritance stays in plain YAML on the template note:
+
+```tagdown
+---
+extends: Person
+exclude: [company]
+genre: Fiction
+---
+# Author Template
+
+## Bibliography
+```
+
+`extends` names the parent (`"[[Person]]"` works too); `exclude` lists inherited properties to leave out. Neither setting is copied into new notes.
 
 ### Links to other types
 

@@ -39,6 +39,8 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 │   ├── tableSelection.ts   # rows ticked in a table, for setting a property on all of them
 │   ├── queryText.ts        # rewriting a query's text (sorting, columns)
 │   ├── propertiesPanel.ts  # the properties panel and its value fields
+│   ├── templateInheritance.ts # parent selection and inherited property switches
+│   ├── typeHierarchy.ts    # nested type rows and descendant matching
 │   ├── linkFields.ts       # properties that link to notes of another type
 │   ├── taskRepeat.ts       # the next task of a repeating one
 │   ├── journal.ts          # day keys, the journal calendar, appending to a page
@@ -58,7 +60,8 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 │   ├── src/commands/       # Tauri commands called from the UI
 │   └── core/src/           # vault, vaults, folders, frontmatter, properties,
 │                           # search_index, links (backlinks, local graph), history,
-│                           # tasks, query, types, journal (day pages, "This day"),
+│                           # tasks, query, types (inheritance), templates (built-ins),
+│                           # journal (day pages, "This day"),
 │                           # weblink (fetching pages for Link notes), watcher,
 │                           # site, library, mcp
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data

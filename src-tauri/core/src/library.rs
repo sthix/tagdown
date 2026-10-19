@@ -30,6 +30,8 @@ pub struct Library {
     search: SearchIndex,
     /// What the search index was built from; rebuilt when the files change.
     indexed: Option<Vec<(PathBuf, SystemTime)>>,
+    /// AI-facing tools use filtered snapshots, including indexes and errors.
+    ai_access: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -44,18 +46,26 @@ pub struct NoteView {
 
 impl Library {
     pub fn open(root: PathBuf) -> Result<Self, String> {
-        Ok(Self { vault: Vault::open_existing(root)?, search: SearchIndex::in_memory()?, indexed: None })
+        Ok(Self { vault: Vault::open_existing(root)?, search: SearchIndex::in_memory()?, indexed: None, ai_access: false })
+    }
+
+    /// MCP observes the opt-out policy while the ordinary CLI keeps local access.
+    pub fn for_ai(mut self) -> Self { self.ai_access = true; self.indexed = None; self }
+
+    fn access_notes(&self) -> Result<Vec<(Note, String)>, String> {
+        let notes = self.vault.notes_with_content()?;
+        Ok(if self.ai_access { crate::ai_privacy::visible_notes(notes) } else { notes })
     }
 
     fn live_notes(&self) -> Result<Vec<(Note, String)>, String> {
-        Ok(self.vault.notes_with_content()?.into_iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE)).collect())
+        Ok(self.access_notes()?.into_iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE)).collect())
     }
 
-    /// Find a note by id, by title (ignoring case), or by its file as a wikilink
-    /// names it. Archived notes only match by id.
+    /// Find a note by id, title, file path, or a unique frontmatter alias.
+    /// Archived notes only match by id.
     pub fn resolve(&self, reference: &str) -> Result<(Note, String), String> {
         let reference = reference.trim();
-        let notes = self.vault.notes_with_content()?;
+        let notes = self.access_notes()?;
         if let Some(found) = notes.iter().find(|(n, _)| n.id == reference) {
             return Ok(found.clone());
         }
@@ -64,9 +74,13 @@ impl Library {
         let (exact, rest): (Vec<_>, Vec<_>) = live.partition(|(n, _)| normalize_title(&n.title) == wanted);
         if exact.is_empty() {
             // A file in the vault, the way a wikilink can name a note: `blog/post`.
-            let by_file = links::LinkTargets::new(rest.iter().map(|(n, _)| n)).by_file(reference).map(str::to_string);
-            if let Some(found) = by_file.and_then(|id| rest.iter().find(|(n, _)| n.id == id)) {
+            let targets = links::LinkTargets::new(rest.iter().map(|(n, _)| n));
+            let resolved = targets.resolve(reference);
+            if let Some(found) = resolved.first().and_then(|id| rest.iter().find(|(n, _)| n.id == *id)) {
                 return Ok(found.clone());
+            }
+            if targets.alias_matches(reference).len() > 1 {
+                return Err(format!("several notes share the alias \"{reference}\"; use the note id or title instead"));
             }
         }
         match exact.len() {
@@ -130,8 +144,9 @@ impl Library {
             })
             .collect();
         stamp.sort();
-        if self.indexed.as_ref() != Some(&stamp) {
-            self.search.rebuild(self.vault.notes_with_content()?)?;
+        if self.ai_access || self.indexed.as_ref() != Some(&stamp) {
+            // Privacy changes apply even when a filesystem preserves modification time.
+            self.search.rebuild(self.access_notes()?)?;
             self.indexed = Some(stamp);
         }
         Ok(())
@@ -139,7 +154,7 @@ impl Library {
 
     pub fn read(&self, reference: &str) -> Result<NoteView, String> {
         let (note, content) = self.resolve(reference)?;
-        let linked_from = links::backlinks(self.vault.notes_with_content()?, &note.id).into_iter().map(|b| b.note.title).collect();
+        let linked_from = links::backlinks(self.access_notes()?, &note.id).into_iter().map(|b| b.note.title).collect();
         Ok(NoteView { folder: self.folder_name(note.folder_id.as_deref()), note, content, linked_from })
     }
 
@@ -148,8 +163,10 @@ impl Library {
         let folder_id = folder.map(|name| self.folder_id(name)).transpose()?;
         let tag = tag.map(|t| t.trim_start_matches('#').to_lowercase());
         let notes = self.vault.list_notes(folder_id.clone(), SortOrder::UpdatedDesc)?;
+        let visible_ids = if self.ai_access { Some(self.access_notes()?.into_iter().map(|(n, _)| n.id).collect::<std::collections::HashSet<_>>()) } else { None };
         Ok(notes
             .into_iter()
+            .filter(|n| visible_ids.as_ref().is_none_or(|ids| ids.contains(&n.id)))
             .filter(|n| folder_id.is_some() || n.folder_id.as_deref() != Some(ARCHIVE))
             .filter(|n| tag.as_ref().is_none_or(|t| n.tags.iter().any(|nt| nt == t || nt.starts_with(&format!("{t}/")))))
             .take(limit)
@@ -166,6 +183,14 @@ impl Library {
     /// type's properties, and with its template's body unless `body` is given.
     pub fn create_typed(&self, title: &str, body: &str, folder: Option<&str>, tags: &[String], note_type: Option<&str>) -> Result<Note, String> {
         let folder_id = folder.map(|name| self.folder_id(name)).transpose()?;
+        if self.ai_access {
+            if let Some(name) = note_type.filter(|t| !t.trim().is_empty()) {
+                if normalize_title(name) == "journal" {
+                    let day = parse_day(title).unwrap_or_else(|| Local::now().date_naive());
+                    if !self.check_journal_access(day)? { self.check_template_access("Journal")?; }
+                } else { self.check_template_access(name)?; }
+            }
+        }
         let body = body.trim();
         let typed = note_type.filter(|t| !t.trim().is_empty()).map(|t| self.vault.create_typed_note(t, title, folder_id.clone())).transpose()?;
         let mut content = match &typed {
@@ -190,7 +215,41 @@ impl Library {
     }
 
     pub fn types(&self) -> Result<Vec<crate::types::NoteType>, String> {
-        self.vault.note_types()
+        if !self.ai_access { return self.vault.note_types(); }
+        let notes = self.access_notes()?.into_iter().map(|(n, _)| n).collect::<Vec<_>>();
+        Ok(crate::types::list_types_with_disabled(&notes, &self.vault.disabled_template_ids()?))
+    }
+
+    /// Guard every inherited source before a typed write can copy private fields.
+    fn check_template_access(&self, name: &str) -> Result<(), String> {
+        if !self.ai_access { return Ok(()); }
+        let notes = self.vault.notes_with_content()?;
+        let mut next = Some(name.to_string());
+        let mut visited = std::collections::HashSet::new();
+        while let Some(name) = next {
+            let wanted = normalize_title(&name);
+            if !visited.insert(wanted.clone()) || visited.len() > 128 { return Err("Template inheritance is invalid".into()); }
+            let Some((note, _)) = notes.iter().find(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE) && crate::types::template_type(&n.title).is_some_and(|t| normalize_title(&t) == wanted)) else { break; };
+            if notes.iter().filter(|(other, _)| other.id == note.id).count() != 1 { return Err("The requested template has a duplicate note ID. Give each copy a unique ID first.".into()); }
+            if !crate::ai_privacy::note_allows_ai(note) { return Err("The requested template is unavailable to AI tools".into()); }
+            next = note.properties.iter().find(|p| p.key.eq_ignore_ascii_case(crate::types::PARENT_KEY)).and_then(|p| {
+                let crate::properties::PropertyValue::Text(text) = &p.value else { return None; };
+                let text = text.trim();
+                let text = text.strip_prefix("[[").and_then(|v| v.strip_suffix("]]")).map_or(text, |v| v.split('|').next().unwrap_or(v)).trim();
+                (!text.is_empty()).then(|| crate::types::template_type(text).unwrap_or_else(|| text.to_string()))
+            });
+        }
+        Ok(())
+    }
+
+    /// Returns whether a page exists, without adopting or modifying a private note.
+    fn check_journal_access(&self, day: NaiveDate) -> Result<bool, String> {
+        let notes = self.vault.notes_with_content()?;
+        let title = journal_title(day);
+        let matching = notes.iter().filter(|(n, _)| n.folder_id.as_deref() != Some(ARCHIVE) && (n.journal == Some(day) || (n.journal.is_none() && n.title == title))).collect::<Vec<_>>();
+        if self.ai_access && matching.iter().any(|(n, _)| !crate::ai_privacy::note_allows_ai(n)) { return Err("The requested journal page is unavailable to AI tools".into()); }
+        if self.ai_access && matching.iter().any(|(n, _)| notes.iter().filter(|(other, _)| other.id == n.id).count() != 1) { return Err("The requested journal page has a duplicate note ID. Give each copy a unique ID first.".into()); }
+        Ok(!matching.is_empty())
     }
 
     pub fn append(&self, reference: &str, text: &str) -> Result<Note, String> {
@@ -208,6 +267,7 @@ impl Library {
 
     /// A day's journal page and its body, if it has one.
     pub fn journal(&self, day: NaiveDate) -> Result<Option<(Note, String)>, String> {
+        if self.ai_access { self.check_journal_access(day)?; }
         let Some(note) = self.vault.find_journal(day)? else { return Ok(None) };
         let content = self.vault.get_note_content(&note.id)?.content;
         Ok(Some((note, content)))
@@ -215,18 +275,19 @@ impl Library {
 
     /// Add text to the end of a day's journal page, creating the page first if needed.
     pub fn append_to_journal(&self, day: NaiveDate, text: &str) -> Result<Note, String> {
+        if self.ai_access && !self.check_journal_access(day)? { self.check_template_access("Journal")?; }
         self.vault.append_to_journal(day, text).map(|(note, _)| note)
     }
 
     /// Run a query-block query (see `query.rs`) over the whole vault.
     pub fn query(&mut self, raw: &str) -> Result<crate::query::QueryOutput, String> {
         self.refresh_index()?;
-        crate::query::run(raw, self.vault.notes_with_content()?, Some(&self.search), &self.vault.meta.folders, None)
+        crate::query::run(raw, self.access_notes()?, Some(&self.search), &self.vault.meta.folders, None)
     }
 
     pub fn backlinks(&self, reference: &str) -> Result<Vec<Backlink>, String> {
         let (note, _) = self.resolve(reference)?;
-        Ok(links::backlinks(self.vault.notes_with_content()?, &note.id))
+        Ok(links::backlinks(self.access_notes()?, &note.id))
     }
 
     /// Checklist items (`- [ ]` / `- [x]`) across notes, outside code blocks.
@@ -280,6 +341,81 @@ mod tests {
     }
 
     #[test]
+    fn ai_access_filters_before_resolution_indexes_queries_limits_and_backlinks() {
+        use crate::properties::PropertyValue;
+        let (lib, root) = library();
+        let visible = lib.create("Visible", "Shared marker [[Your First Note]]", None, &[]).unwrap();
+        let hidden = lib.create("Private dossier", "Shared marker [[Visible]]\n\n- [ ] Secret task", None, &[]).unwrap();
+        lib.vault.set_property(&hidden.id, "aliases", Some(PropertyValue::List(vec!["Hidden alias".into()])), None).unwrap();
+        lib.vault.set_property(&hidden.id, "type", Some(PropertyValue::Text("Secret category".into())), None).unwrap();
+        lib.vault.set_property(&hidden.id, "ai_exclude", Some(PropertyValue::Checkbox(true)), None).unwrap();
+        let mut ai = lib.for_ai();
+        for reference in [&hidden.id, "Private dossier", "Hidden alias", &hidden.path] { assert!(ai.read(reference).is_err(), "private reference resolved"); }
+        assert!(!ai.read("Private").unwrap_err().contains("Private dossier"));
+        assert!(ai.read(&visible.id).unwrap().linked_from.is_empty());
+        assert!(ai.backlinks(&visible.id).unwrap().is_empty());
+        assert!(ai.tasks(TaskFilter::All, None).unwrap().is_empty());
+        assert_eq!(ai.search("Shared marker", 1).unwrap()[0].note.id, visible.id);
+        assert_eq!(ai.query("Shared marker").unwrap().total, 1);
+        assert!(!ai.types().unwrap().iter().any(|t| t.name == "Secret category"));
+        assert!(!ai.list(None,None,100).unwrap().iter().any(|n| n.id == hidden.id));
+        // Reusing an index cannot bypass a newly enabled opt-out.
+        ai.vault.set_property(&visible.id, "ai_exclude", Some(PropertyValue::Checkbox(true)), None).unwrap();
+        assert!(ai.search("Shared marker", 1).unwrap().is_empty());
+        assert_eq!(ai.query("Shared marker").unwrap().total, 0);
+        let cli = Library::open(root.clone()).unwrap();
+        assert!(cli.read(&hidden.id).unwrap().content.contains("Secret task"));
+        assert!(ai.append(&hidden.id,"Should not write").is_err());
+        assert!(ai.replace(&hidden.id,"Should not write").is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ai_writes_cannot_copy_excluded_journals_or_template_ancestors() {
+        use crate::properties::PropertyValue;
+        let (lib, root) = library();
+        let day = parse_day("2026-10-19").unwrap();
+        let (daily, _) = lib.vault.open_journal(day).unwrap();
+        lib.vault.set_property(&daily.id,"ai_exclude",Some(PropertyValue::Checkbox(true)),None).unwrap();
+        let parent = lib.create("Sensitive Template","Private defaults",None,&[]).unwrap();
+        lib.vault.set_property(&parent.id,"ai_exclude",Some(PropertyValue::Checkbox(true)),None).unwrap();
+        let child = lib.create("Child Template","Public child",None,&[]).unwrap();
+        lib.vault.set_property(&child.id,"extends",Some(PropertyValue::Text("Sensitive".into())),None).unwrap();
+        let ai = lib.for_ai();
+        let count = ai.vault.notes_with_content().unwrap().len();
+        assert!(ai.journal(day).is_err());
+        assert!(ai.append_to_journal(day,"Should not write").is_err());
+        assert!(ai.create_typed("Another","",None,&[],Some("Child")).is_err());
+        assert!(ai.create_typed("2026-10-19","",None,&[],Some("Journal")).is_err());
+        assert_eq!(ai.vault.notes_with_content().unwrap().len(),count);
+        assert!(!ai.vault.get_note_content(&daily.id).unwrap().content.contains("Should not write"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ai_access_rejects_duplicate_ids_even_when_only_one_copy_is_excluded() {
+        use crate::properties::PropertyValue;
+        let (lib, root) = library();
+        let day = parse_day("2026-10-21").unwrap();
+        let (public, _) = lib.vault.open_journal(day).unwrap();
+        let private = lib.create("Private duplicate", "Private duplicate content", None, &[]).unwrap();
+        lib.vault.set_property(&private.id,"ai_exclude",Some(PropertyValue::Checkbox(true)),None).unwrap();
+        let private_path = lib.vault.note_file_path(&private.id).unwrap();
+        let raw = std::fs::read_to_string(&private_path).unwrap();
+        std::fs::write(&private_path,raw.replace(&private.id,&public.id)).unwrap();
+        let mut ai = lib.for_ai();
+        assert!(ai.read(&public.id).is_err());
+        assert!(ai.read(&public.title).is_err());
+        assert!(ai.append(&public.id,"Must not overwrite private copy").is_err());
+        assert!(ai.journal(day).is_err());
+        assert!(ai.append_to_journal(day,"Must not overwrite private copy").is_err());
+        assert!(!ai.list(None,None,100).unwrap().iter().any(|n| n.id == public.id));
+        assert!(ai.search("Private duplicate content",10).unwrap().is_empty());
+        assert!(std::fs::read_to_string(private_path).unwrap().contains("Private duplicate content"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn creates_reads_appends_and_replaces_by_title() {
         let (lib, root) = library();
         let note = lib.create("Trip plan", "Pack [[Your First Note|light]].", None, &["travel".into()]).unwrap();
@@ -303,6 +439,27 @@ mod tests {
         let (lib, root) = library();
         let err = lib.read("Tagdown").unwrap_err();
         assert!(err.contains("\"Welcome to Tagdown\""), "{err}");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn aliases_resolve_in_tools_survive_saves_and_reject_ambiguity() {
+        use crate::properties::parse_scalar;
+        let (lib, root) = library();
+        let sam = lib.create("Samuel Rivera", "Contact", None, &[]).unwrap();
+        lib.vault.set_property(&sam.id, "aliases", Some(parse_scalar("[Sam, Sammy]")), None).unwrap();
+        assert_eq!(lib.read("sam").unwrap().note.id, sam.id);
+        lib.append("Sammy", "Met today").unwrap();
+        lib.replace("Sam", "# Samuel R.\n\nRenamed contact").unwrap();
+        assert_eq!(lib.read("Sammy").unwrap().note.title, "Samuel R.");
+        let other = lib.create("Another person", "", None, &[]).unwrap();
+        lib.vault.set_property(&other.id, "alias", Some(parse_scalar("Sam")), None).unwrap();
+        assert!(lib.read("Sam").unwrap_err().contains("several notes share the alias"));
+        let explicit = lib.create("Sam", "Exact title wins", None, &[]).unwrap();
+        assert_eq!(lib.read("Sam").unwrap().note.id, explicit.id);
+        lib.vault.delete_note(&sam.id).unwrap();
+        assert!(lib.read("Sammy").is_err());
+        assert_eq!(lib.read(&sam.id).unwrap().note.id, sam.id);
         std::fs::remove_dir_all(root).ok();
     }
 

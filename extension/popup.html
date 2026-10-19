@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tagdown Clipper</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <h1>Clip to Tagdown</h1>
+  <p>Save to the active vault on this computer.</p>
+  <button data-mode="selection">Save selected text</button>
+  <button data-mode="page">Save page text</button>
+  <button data-mode="link">Save link only</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <button id="retry">Deliver queued captures</button>
+  <details id="pairing"><summary>Pair with Tagdown</summary>
+    <p>In Tagdown, open Browser clipper setup from the command palette. Paste its pairing token below.</p>
+    <form id="pair"><label for="token">Pairing token</label><input id="token" type="password" autocomplete="off" spellcheck="false" required><button>Save pairing</button></form>
+  </details>
+  <script type="module" src="popup.js"></script>
+</body></html>

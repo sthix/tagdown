@@ -108,6 +108,8 @@ See [templates and child types](docs/organizing.md#child-types) for the **+** wo
 
 ### AI-ready
 
+- **Optional integrated AI** with your own provider: selected-text actions and saved prompts, editable result previews, semantic related notes, and vault questions with source citations. A per-note `ai_exclude` policy applies to integrated AI and MCP. Voice capture saves local audio and can transcribe it with the configured provider.
+- **Capture and meeting workflows**: a system-wide quick-capture shortcut, a paired Chrome/Chromium clipper with an offline queue, alias-aware links, `/template` insertion, and linked Meeting notes from manual entry or local `.ics` calendar imports. Setup and current limits are in [Capture, meetings, and AI](docs/capture-and-ai.md).
 - The **`tagdown` CLI** searches, reads, creates (typed notes too), and appends to notes from the terminal; `tagdown today "…"` is a quick capture to today's journal page.
 - **`tagdown mcp`** is an MCP server, so assistants like Claude can search, read, and write rich Tagdown notes in your vault.
 
@@ -124,7 +126,7 @@ Tagdown sits between Obsidian and Notion: plain Markdown files you own, with ric
 | Nested tags | ✅ | ✅ | ✅ | ⚠️ properties |
 | Daily journal | ✅ | ✅ | ✅ | ⚠️ templates |
 | Graph of linked notes | ⚠️ local graph per note | ✅ global and local | ✅ global and per page | ❌ |
-| Save web pages as notes | ⚠️ paste a link in the app | ✅ Web Clipper extension | ⚠️ via plugins | ✅ Web Clipper |
+| Save web pages as notes | ✅ paste a link or use the included browser clipper | ✅ Web Clipper extension | ⚠️ via plugins | ✅ Web Clipper |
 | Tabs and side-by-side notes | ✅ | ✅ | ⚠️ right sidebar only | ⚠️ side peek |
 | Callouts, tabs, grids, cards | ✅ built in | ⚠️ callouts; rest via plugins | ⚠️ admonitions | ✅ blocks |
 | Math and Mermaid diagrams | ✅ | ✅ | ⚠️ Mermaid via plugin | ✅ |
@@ -215,6 +217,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | [Version history](docs/version-history.md) | Snapshots and restoring |
 | [Sharing your notes](docs/sharing.md) | HTML, PDF, slides, and website publishing |
 | [Command line and AI assistants](docs/cli-and-mcp.md) | The `tagdown` CLI and MCP server |
+| [Capture, meetings, and AI](docs/capture-and-ai.md) | Browser clipping, aliases, template insertion, calendar imports, voice notes, and optional AI |
 | [Keyboard shortcuts](docs/keyboard-shortcuts.md) | Every shortcut on one page |
 | [Development](docs/development.md) | Architecture, layout, tests, releasing |
 

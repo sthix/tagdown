@@ -83,7 +83,7 @@ pub async fn rename_links(
     }
     // Links naming the note by its file still find it: leave them as they are.
     let targets = LinkTargets::new(others().map(|(note, _)| note).chain(notes.iter().map(|(note, _)| note).filter(|note| note.id == id)));
-    let keep = |target: &str| targets.by_file(target) == Some(id.as_str());
+    let keep = |target: &str| targets.by_file(target) == Some(id.as_str()) || targets.by_alias(target) == Some(id.as_str());
     let mut updated = 0;
     // The renamed note itself is skipped: its editor owns its content.
     for (note, content) in notes.iter().filter(|(note, _)| note.id != id) {

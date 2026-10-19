@@ -196,7 +196,7 @@ pub fn list_types(notes: &[Note]) -> Vec<NoteType> {
     list_types_with_disabled(notes, &[])
 }
 
-fn list_types_with_disabled(notes: &[Note], disabled: &[String]) -> Vec<NoteType> {
+pub(crate) fn list_types_with_disabled(notes: &[Note], disabled: &[String]) -> Vec<NoteType> {
     let live: Vec<&Note> = notes.iter().filter(|n| n.folder_id.as_deref() != Some(ARCHIVE)).collect();
     let mut types: Vec<NoteType> = Vec::new();
     let mut spellings: HashMap<String, HashMap<String, usize>> = HashMap::new();

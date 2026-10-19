@@ -755,8 +755,20 @@
 :is(.preview, .tagdown-reference-preview) .td-details > :nth-child(2) { margin-top: 0; }
 :is(.preview, .tagdown-reference-preview) .td-details > :last-child  { margin-bottom: 0; }
 
-/* ---- Mermaid passthrough (until mermaid.js replaces innerHTML with SVG) ---- */
+/* ---- Mermaid diagrams rendered by Pele ---- */
 :is(.preview, .tagdown-reference-preview) pre.mermaid {
+  --pele-bg: var(--pv-surface);
+  --pele-fg: var(--pv-ink);
+  --pele-muted: var(--pv-ink-soft);
+  --pele-line: var(--pv-ink-soft);
+  --pele-surface: var(--bg-preview);
+  --pele-surface-alt: var(--pv-surface);
+  --pele-border: var(--pv-ink-soft);
+  --pele-accent: var(--pv-accent);
+  --pele-critical: var(--danger);
+  --pele-error: var(--danger);
+  --pele-font: var(--font-ui);
+  --pele-font-mono: var(--font-mono);
   background: var(--pv-surface);
   border: 1px solid var(--pv-rule);
   border-radius: 8px;
@@ -768,9 +780,10 @@
   white-space: pre-wrap;
   text-align: center;
 }
-:is(.preview, .tagdown-reference-preview) pre.mermaid svg {
+:is(.preview, .tagdown-reference-preview) pre.mermaid > svg {
   max-width: 100%;
   height: auto;
+  vertical-align: middle;
 }
 
 /* ---------- code blocks (td-code) ---------- */

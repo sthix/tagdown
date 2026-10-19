@@ -44,7 +44,7 @@
 .presentation .presentation-content code { font-size: .8em; }
 .presentation .presentation-content img,
 .presentation .presentation-content svg { max-width: 100%; max-height: 520px; }
-/* Diagrams grow to fill the slide (Mermaid sets a small inline max-width). */
+/* Diagrams grow to fill the slide beyond Pele's natural inline width. */
 .presentation .presentation-content pre.mermaid svg { width: 100%; max-width: 100% !important; height: auto; }
 
 /* Title slides: centered in the canvas. */

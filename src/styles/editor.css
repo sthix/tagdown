@@ -179,7 +179,7 @@
 .prop-type-button:disabled { cursor: default; }
 .prop-type-menu {
   position: absolute; top: calc(100% + 2px); left: 0; z-index: 100;
-  min-width: 140px; padding: 5px;
+  min-width: 170px; max-height: min(420px, 65vh); overflow-y: auto; padding: 5px;
   background: var(--bg-dialog); border-radius: 10px; box-shadow: var(--shadow-lg);
   animation: menu-in .16s var(--ease-out) both;
 }
@@ -202,6 +202,18 @@
 .prop-key:invalid { box-shadow: 0 0 0 1.5px #d4574a; }
 .prop-input[type="date"], .prop-input[type="number"] { width: auto; max-width: 100%; font-variant-numeric: tabular-nums; }
 .prop-value { min-width: 0; color: var(--ink); }
+.prop-input[type="datetime-local"] { width: auto; max-width: 100%; font-variant-numeric: tabular-nums; }
+.prop-number { display: inline-flex; align-items: center; max-width: 100%; }
+.prop-number .prop-input { width: 9em; }
+.prop-unit { color: var(--ink-3); padding: 0 6px; }
+.prop-rating { display: inline-flex; gap: 1px; }
+.prop-rating button { border: 0; border-radius: 4px; background: none; color: var(--accent-soft); padding: 2px; font-size: 18px; cursor: pointer; }
+.prop-rating button:focus-visible { outline: 1.5px solid var(--accent-soft); }
+.prop-input.prop-longtext { min-height: 90px; height: auto; padding: 6px; resize: vertical; }
+.prop-display.is-longtext { white-space: pre-wrap; overflow-wrap: anywhere; }
+.prop-contact-link { overflow-wrap: anywhere; color: var(--accent-soft); }
+.prop-edit { margin-left: 8px; border: 0; background: none; color: var(--ink-3); font: inherit; cursor: pointer; }
+.prop-multiselect .prop-item { border: 0; color: var(--ink); font: inherit; cursor: pointer; }
 .prop-value input[type="checkbox"] { margin: 0 6px; accent-color: var(--accent-soft); }
 .prop-text { width: 100%; min-width: 0; }
 .prop-display {

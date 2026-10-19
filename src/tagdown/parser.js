@@ -704,8 +704,8 @@ function tryBlockText(text) {
   const mb = t.match(/^\$\$([\s\S]+?)\$\$$/);
   if (mb) return `<div class="td-math td-math-block">$$${esc(mb[1])}$$</div>`;
 
-  // Fenced code: ```lang ... ```. Mermaid gets a special wrapper so the
-  // mermaid.js library (if loaded) auto-renders it on display.
+  // Fenced code: ```lang ... ```. Mermaid gets a special wrapper so Pele
+  // upgrades the escaped source to SVG when the preview is displayed.
   const f = t.match(/^```(\w+)?\n([\s\S]*?)\n?```$/);
   if (f) {
     const lang = f[1] || '';

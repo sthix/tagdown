@@ -4,6 +4,8 @@ pub mod folders;
 pub mod frontmatter;
 pub mod history;
 pub mod journal;
+pub mod ai_privacy;
+pub mod meetings;
 pub mod links;
 pub mod models;
 pub mod properties;

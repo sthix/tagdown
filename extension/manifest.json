@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Tagdown Clipper",
+  "version": "0.1.0",
+  "description": "Save selected text or page text to your local Tagdown vault, with offline delivery.",
+  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1:43827/*"],
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "action": { "default_title": "Clip to Tagdown", "default_popup": "popup.html" }
+}

@@ -36,6 +36,7 @@ These guides will help you find your way around, build a habit of taking notes, 
 - [🌐 Sharing your notes](sharing.md): Export a document, present slides, or publish a website.
 - [⌨️ Keyboard shortcuts](keyboard-shortcuts.md): Keep your hands on the keyboard.
 - [🤖 Command line and AI assistants](cli-and-mcp.md): Work with your vault through the CLI and MCP server.
+- [Capture, meetings, and AI](capture-and-ai.md): Pair the browser clipper, insert templates, import calendar events, and connect an optional AI provider.
 - [🛠️ Development](development.md): Build Tagdown, run the tests, and contribute.
 
 ## Your notes stay yours

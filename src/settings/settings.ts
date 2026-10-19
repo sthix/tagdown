@@ -6,6 +6,8 @@ import { getEffectiveTheme, getThemePreference, onThemePreferenceChange, setThem
 import { ACCENTS, getPreference, onPreferenceChange, setPreference, type Preferences } from './preferences';
 import { SHORTCUT_GROUPS } from './shortcuts';
 import { chooseVaultFolder, forgetVault, listVaults, shortPath, switchVault } from '../vaults';
+import { openAiSettings } from '../ai';
+import { openCaptureSetup } from '../capture';
 
 // ---- What the pages hold ----
 //
@@ -34,6 +36,14 @@ const VIEW_OPTIONS: Option[] = [
 ];
 
 const PAGES: Page[] = [
+  {
+    id: 'integrations', title: 'Integrations', icon: 'globe',
+    intro: 'Capture from your browser and connect an optional AI provider.',
+    groups: [
+      { title: 'Capture', rows: [{ label: 'Browser clipper', description: 'Save selected text and web pages into this vault. Queued clips are delivered when Tagdown opens.', control: { kind: 'html', render: () => '<button type="button" class="td-button" data-integration="capture">Pair browser extension…</button>' } }] },
+      { title: 'Optional AI', rows: [{ label: 'Provider and saved actions', description: 'Use your own provider for writing actions, semantic search, vault questions, and voice transcription. Exclude individual notes from AI in the note menu.', control: { kind: 'html', render: () => '<button type="button" class="td-button" data-integration="ai">Configure AI…</button>' } }] },
+    ],
+  },
   {
     id: 'general',
     title: 'General',
@@ -228,6 +238,13 @@ export function initSettings(actions?: TemplateActions) {
   bindVaultList();
   bindHiddenProperties();
   bindTemplates();
+  dialog.querySelectorAll<HTMLButtonElement>('[data-integration]').forEach(button => button.addEventListener('click', () => {
+    window.clearTimeout(closeTimer);
+    dialog?.close();
+    dialog?.classList.remove('is-closing');
+    if (button.dataset.integration === 'ai') void openAiSettings();
+    else void openCaptureSetup();
+  }));
 
   dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     tab.addEventListener('click', () => activateTab(tab));

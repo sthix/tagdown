@@ -32,6 +32,12 @@ import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, se
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
 import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
 import { openQuickCapture } from './quickCapture';
+import { openMeetings } from './meetings';
+import { initializeCapture, openCaptureSetup } from './capture';
+import { openTemplatePicker } from './templatePicker';
+import { openAiSettings, openAiActions, openAskVault, openRelatedNotes, type AiContext } from './ai';
+import { openVoiceCapture } from './audio';
+import { aiResultEdit, type AiSelection } from './aiEdits';
 import { openLocalGraph } from './localGraph';
 import { offerLinkNote, onEmptyLine, openSaveLinkDialog, webUrl } from './webLinks';
 import { decorateFigures, setFigure } from './figures';
@@ -122,6 +128,7 @@ let allNotesCount = 0;
 // Every non-archived note, independent of the folder/tag/filter being viewed.
 // Sidebar counts read from this so they don't change with the current list.
 let libraryNotes: Note[] = [];
+let lastAiSelection: AiSelection | null = null;
 let tags: Tag[] = [];
 let selectedNote: Note | null = null;
 let selectedFolder: string | null = null;
@@ -179,7 +186,10 @@ const vaultPath = invoke<string>('vault_path').then((path) => {
 // Other vaults, for the palette; a switch saves what's pending first.
 let vaults: VaultEntry[] = [];
 void listVaults().then((list) => { vaults = list; });
-onBeforeVaultSwitch(settlePendingWork);
+onBeforeVaultSwitch(async () => {
+  document.querySelectorAll<HTMLDialogElement>('.ai-dialog').forEach(dialog => { dialog.close(); dialog.remove(); });
+  await settlePendingWork();
+});
 
 // A file dropped outside the editor would otherwise replace the app with it.
 for (const type of ['dragover', 'drop'] as const) {
@@ -287,13 +297,17 @@ async function boot() {
   await reloadNotes();
   renderFilterPills();
   await openStartupNote();
-  await listen('note-saved', () => { savedMessage = 'Saved'; renderStatus(); });
+  await listen<{ id: string }>('note-saved', event => {
+    scheduleListRefresh();
+    if (event.payload?.id === selectedNote?.id && saveTimer === undefined) { savedMessage = 'Saved'; renderStatus(); }
+  });
   await listen<{ note: Note; content: string }>('note-changed-externally', (event) => void onExternalChange(event.payload.note, event.payload.content));
   await listen<{ id: string }>('note-removed-externally', (event) => onExternalRemoval(event.payload.id));
   // Folders are directories: ones made, renamed or removed in Finder show up here.
   await listen('folders-changed-externally', scheduleListRefresh);
   // The app menu's File → New Tab / Close Tab (⌘T / ⌘W never reach the page).
   await listen<string>('menu', (event) => void runMenuCommand(event.payload));
+  await initializeCapture(quickCapture);
 }
 
 async function runMenuCommand(id: string) {
@@ -533,6 +547,16 @@ function paletteActions(): PaletteAction[] {
     ...(selectedNote ? [{ id: 'graph', label: 'Show graph', hint: 'This note’s links, both ways', shortcut: '⌘⇧G', icon: uiIcon('graph', 15), run: showGraph }] : []),
     { id: 'save-link', label: 'Save web link…', hint: 'A Link note with the page’s title and text', icon: uiIcon('globe', 15), run: () => openSaveLinkDialog({ save: (url) => saveWebLink(url) }) },
     { id: 'quick-capture', label: 'Quick capture', hint: 'Add a line to today’s journal', shortcut: '⌥⌘J', icon: uiIcon('compose', 15), run: quickCapture },
+    { id: 'meeting-notes', label: 'Create meeting note…', hint: 'Link people and projects, or import calendar events', icon: uiIcon('calendar', 15), run: showMeetingNotes },
+    { id: 'clipper-setup', label: 'Browser clipper setup…', hint: 'Pair the extension to capture selections and web pages', icon: uiIcon('globe', 15), run: openCaptureSetup },
+    { id: 'ai-settings', label: 'AI provider settings…', hint: 'Connect your own provider and save writing actions', icon: uiIcon('sliders', 15), run: openAiSettings },
+    { id: 'ask-vault', label: 'Ask this vault…', hint: 'Search by meaning and answer with note citations', icon: uiIcon('search', 15), run: showAskVault },
+    ...(selectedNote ? [
+      { id: 'ai-actions', label: 'AI writing actions…', hint: 'Summarize, improve, or extract tasks from selected text', icon: uiIcon('compose', 15), run: () => showNoteAi('actions') },
+      { id: 'ai-related', label: 'Find related notes…', hint: 'Find notes by embedding similarity', icon: uiIcon('graph', 15), run: () => showNoteAi('related') },
+      { id: 'voice-capture', label: 'Record voice note…', hint: 'Save audio and review an editable transcript', icon: uiIcon('compose', 15), run: () => showNoteAi('voice') },
+      { id: 'ai-exclude', label: noteExcludedFromAi(selectedNote) ? 'Allow AI access to this note' : 'Exclude this note from AI', hint: 'Controls integrated AI and MCP access', icon: uiIcon('sliders', 15), run: toggleAiExclusion },
+    ] : []),
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
       { id: 'journal-previous', label: 'Previous day', hint: formatDay(shiftDay(selectedNote.journal, -1)), shortcut: '⌥⌘←', icon: uiIcon('chevronLeft', 15), run: () => openJournal(shiftDay(selectedNote!.journal!, -1)) },
@@ -1432,6 +1456,70 @@ async function showGraph() {
     iconOf: (kind) => kind === 'Journal' ? iconSvg('calendar', 12) : typeIconHtml(findType(kind) ?? { name: kind, icon: null }, 12),
     open: (id, event) => void revealNote(id, openTarget(event)),
   });
+}
+
+async function showMeetingNotes() {
+  await settlePendingWork();
+  openMeetings({
+    people: libraryNotes.filter(note => typeOfNote(note)?.toLowerCase() === 'person'),
+    projects: libraryNotes.filter(note => typeOfNote(note)?.toLowerCase() === 'project'),
+    day: selectedNote?.journal ?? todayKey(),
+    beforeSave: settlePendingWork,
+    created: async (id) => { await reloadFolders(); await reloadNotes(); await revealNote(id); },
+  });
+}
+
+function noteExcludedFromAi(note: Note) {
+  return note.folderId === 'archive' || (note.properties ?? []).some(p => p.key.toLowerCase() === 'ai_exclude' &&
+    (p.type === 'checkbox' ? p.value === true : p.type === 'text' ? !['false', 'no', '0'].includes(p.value.trim().toLowerCase()) : true));
+}
+
+async function showAskVault() {
+  await settlePendingWork();
+  openAskVault(id => void revealNote(id));
+}
+
+async function toggleAiExclusion() {
+  if (!selectedNote) return;
+  const excluded = !noteExcludedFromAi(selectedNote);
+  if (await saveProperty('ai_exclude', { type: 'checkbox', value: excluded })) showNotice(excluded ? 'Excluded from AI and MCP access' : 'AI access allowed for this note');
+}
+
+async function showNoteAi(action: 'actions' | 'related' | 'voice') {
+  if (!selectedNote) return;
+  try {
+    const id = selectedNote.id;
+    const pane = activePane;
+    // The palette takes focus, so use the last selection remembered in the editor.
+    let snapshot: AiSelection = lastAiSelection?.noteId === id && lastAiSelection.content === content
+      ? { ...lastAiSelection } : { noteId: id, content, start: content.length, end: content.length };
+    if (blockEdit) commitBlockEdit();
+    if (snapshot.content !== content) snapshot = { noteId: id, content, start: content.length, end: content.length };
+    await settlePendingWork();
+    if (selectedNote?.id !== id || activePane !== pane || content !== snapshot.content) return;
+    const isCurrent = () => selectedNote?.id === id && activePane === pane && content === snapshot.content && (action === 'voice' || !noteExcludedFromAi(selectedNote));
+    const context: AiContext = {
+      noteId: id, content: snapshot.content, selectionStart: snapshot.start, selectionEnd: snapshot.end,
+      isCurrent,
+      apply: async (text, mode) => {
+        if (!isCurrent()) throw new Error('The note changed or AI access was disabled. Run the action again.');
+        const dialog = document.querySelector<HTMLDialogElement>('.ai-dialog[open]');
+        const edit = aiResultEdit(snapshot, id, content, text, mode);
+        // Snapshot also preserves recovery if the webview cannot maintain native undo.
+        await invoke('snapshot_note', { id, content: snapshot.content });
+        if (!dialog?.isConnected || !dialog.open) throw new Error('This action was closed before its result was applied.');
+        if (!isCurrent()) throw new Error('The note changed. Run the action again.');
+        dialog.close();
+        if (viewMode === 'preview') setViewMode('source');
+        const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
+        if (!source) throw new Error('Open the note source before applying this result.');
+        applyEdit(source, edit);
+      },
+    };
+    if (action === 'actions') await openAiActions(context);
+    else if (action === 'related') openRelatedNotes(context, noteId => void revealNote(noteId));
+    else openVoiceCapture(context);
+  } catch (error) { await message(String(error), { title: 'Could not open AI action', kind: 'warning' }); }
 }
 
 /** Add text to today's journal page without opening it. */
@@ -2534,8 +2622,8 @@ function propertyValueSuggestions(key: string, note?: Note | null): string[] {
   for (const note of libraryNotes.filter((n) => !templateTypeOf(n.title))) {
     for (const p of note.properties ?? []) {
       if (p.key.toLowerCase() !== key.toLowerCase()) continue;
-      if (p.type === 'text' && p.value) values.add(p.value);
-      if (p.type === 'list') p.value.forEach((item) => values.add(item));
+      if (typeof p.value === 'string' && p.type !== 'raw' && p.value) values.add(p.value);
+      if (p.type === 'list' || p.type === 'multiselect') p.value.forEach((item) => values.add(item));
     }
   }
   return [...values].slice(0, field ? 200 : 50);
@@ -2713,6 +2801,11 @@ function rememberCaret(textarea: HTMLTextAreaElement) {
   const line = textarea.value.slice(0, textarea.selectionStart).split('\n').length - 1;
   if (textarea.id === 'source') caretLine = line;
   else if (blockEdit?.el === textarea) caretLine = blockEdit.start + line;
+  if (!selectedNote || !textarea.isConnected) return;
+  const offset = textarea.id === 'source' ? 0 : blockEdit?.el === textarea
+    ? content.split('\n').slice(0, blockEdit.start).join('\n').length + (blockEdit.start ? 1 : 0) : null;
+  if (offset === null) return;
+  lastAiSelection = { noteId: selectedNote.id, content, start: offset + textarea.selectionStart, end: offset + textarea.selectionEnd };
 }
 
 /**
@@ -3138,7 +3231,7 @@ function openBlockEditor(wrap: HTMLElement, start: number, lineCount: number, hi
       if (blockEdit?.el !== textarea) return;
       // Formatting from the dock or the components menu keeps the block open.
       const active = document.activeElement;
-      if (active === textarea || active?.closest('.format-dock, .toolbar-menu')) return;
+      if (active === textarea || active?.closest('.format-dock, .toolbar-menu, .template-picker')) return;
       // Choosing images in the file dialog keeps the block open for them.
       if (pickingImages) return;
       commitBlockEdit();
@@ -3202,6 +3295,11 @@ function renderEditor() {
             <hr>
             <button type="button" role="menuitem" data-export="present">${uiIcon('play', 14)}<span>Present as slides</span><kbd>⌥⌘P</kbd></button>
             <button type="button" role="menuitem" data-export="history">${uiIcon('clock', 14)}<span>Version history</span><kbd>⌘⇧H</kbd></button>
+            <hr>
+            <button type="button" role="menuitem" data-export="ai-actions">${uiIcon('compose', 14)}<span>AI writing actions…</span></button>
+            <button type="button" role="menuitem" data-export="voice">${uiIcon('compose', 14)}<span>Record voice note…</span></button>
+            <button type="button" role="menuitem" data-export="related">${uiIcon('graph', 14)}<span>Find related notes…</span></button>
+            <button type="button" role="menuitem" data-export="ai-exclude">${uiIcon('sliders', 14)}<span>${noteExcludedFromAi(selectedNote) ? 'Allow AI access' : 'Exclude note from AI'}</span></button>
             <hr>` : ''}
             <button type="button" role="menuitem" data-export="split">${uiIcon('splitRight', 14)}<span>Split right</span><kbd>⌥⌘\\</kbd></button>
             <button type="button" role="menuitem" data-export="close-pane">${uiIcon('close', 14)}<span>Close this pane</span></button>
@@ -3536,7 +3634,13 @@ const wikilinkOptions = {
 // ↩ and Tab before list editing (and the block editor's own keys) see them.
 function attachEditingAids(textarea: HTMLTextAreaElement) {
   attachWikilinkAutocomplete(textarea, wikilinkOptions);
-  attachSlashCommands(textarea);
+  attachSlashCommands(textarea, { onTemplate: (editor) => openTemplatePicker(editor, {
+    templates: () => noteTypes,
+    load: async (id) => (await invoke<NoteContent>('get_note_content', { id })).content,
+    title: () => selectedNote?.title ?? '',
+    currentId: () => selectedNote?.id ?? null,
+    day: () => selectedNote?.journal ?? todayKey(),
+  }) });
   attachListEditing(textarea);
   attachImageInput(textarea);
   textarea.addEventListener('paste', (event) => {
@@ -3545,7 +3649,7 @@ function attachEditingAids(textarea: HTMLTextAreaElement) {
       offerLinkNote(url, () => saveWebLink(url, textarea).catch(async (error) => { await message(String(error), { title: 'Could not save the link', kind: 'warning' }); }));
     }
   });
-  for (const type of ['keyup', 'mouseup', 'input', 'focus']) textarea.addEventListener(type, () => rememberCaret(textarea));
+  for (const type of ['keyup', 'mouseup', 'input', 'focus', 'select']) textarea.addEventListener(type, () => queueMicrotask(() => rememberCaret(textarea)));
   textarea.addEventListener('tagdown:pick', (event) => {
     const pick = (event as CustomEvent<string>).detail;
     if (pick === 'block-link' || pick === 'block-embed') void copyBlockReference(pick === 'block-embed');
@@ -3781,6 +3885,7 @@ function bindExportMenu() {
       const run: Record<string, () => Promise<unknown> | void> = {
         html: exportNoteHtml, pdf: exportNotePdf, site: showPublish, present: presentNote, history: showVersionHistory,
         split: () => splitPane(selectedNote), 'close-pane': () => closePane(activePane),
+        'ai-actions': () => showNoteAi('actions'), voice: () => showNoteAi('voice'), related: () => showNoteAi('related'), 'ai-exclude': toggleAiExclusion,
       };
       void run[kind ?? 'html']?.();
     });

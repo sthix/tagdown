@@ -1,0 +1,4 @@
+.clipper-setup { width: min(540px, calc(100vw - 48px)); }
+.clipper-label { display: grid; gap: 8px; font-size: 13px; }
+.clipper-token { width: 100%; box-sizing: border-box; font: 12px ui-monospace, monospace; padding: 10px; color: inherit; background: transparent; border: 1px solid var(--border, #8885); border-radius: 6px; }
+.clipper-status { font-size: 12px; overflow-wrap: anywhere; }

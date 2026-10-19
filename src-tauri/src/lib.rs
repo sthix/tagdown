@@ -39,6 +39,9 @@ pub fn run() {
             _ => {}
         })
         .setup(move |app| {
+            if let Err(error) = commands::capture::initialize(app.handle()) {
+                eprintln!("capture unavailable: {error}");
+            }
             // Images in notes load from the vault through the asset protocol.
             app.asset_protocol_scope().allow_directory(&vault_root, true)?;
             let handle = app.handle().clone();
@@ -50,6 +53,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::capture::capture_connection,
+            commands::ai::ai_get_config,
+            commands::ai::ai_cancel,
+            commands::ai::ai_save_config,
+            commands::ai::ai_transform,
+            commands::ai::ai_index,
+            commands::ai::ai_ask,
+            commands::ai::ai_related,
+            commands::ai::save_audio_attachment,
+            commands::ai::ai_transcribe,
             commands::notes::list_notes,
             commands::notes::get_note_content,
             commands::notes::create_note,
@@ -71,6 +84,8 @@ pub fn run() {
             commands::notes::set_builtin_template_enabled,
             commands::notes::reset_builtin_template,
             commands::notes::create_typed_note,
+            commands::meetings::read_calendar_file,
+            commands::meetings::create_meeting,
             commands::notes::apply_type,
             commands::folders::list_folders,
             commands::folders::create_folder,

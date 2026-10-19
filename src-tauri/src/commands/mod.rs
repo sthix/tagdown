@@ -1,4 +1,7 @@
 pub mod attachments;
+pub mod ai;
+pub mod capture;
+pub mod meetings;
 pub mod export;
 pub mod folders;
 pub mod history;

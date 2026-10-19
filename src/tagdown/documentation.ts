@@ -240,7 +240,7 @@ export const tagdownDocumentation: DocumentationSection[] = [
       },
       {
         title: 'Properties',
-        description: 'Typed fields under a note’s title (Add property, or ⌘K). They live in the note’s frontmatter as plain YAML: text, numbers, true/false, dates (2026-11-14), lists, and [[links]] that count as backlinks. Queries filter on them with key=value, key!=value, ranges like priority=2.. or due=..today+7, has:key and -has:key, and sort with sort:due or sort:-priority.',
+        description: 'Typed fields under a note’s title (Add property, or ⌘K). Click the field icon to choose text, long text, number, currency, percent, duration, rating, checkbox, date, date and time, URL, email, phone, single select, multiple select or list. Select options come from values used across the vault; typing adds an option. Types stay in YAML comments in the note. Percent stores a fraction (75% is 0.75), duration stores seconds, and rating uses 0 to 5 stars. [[Links]] count as backlinks. Queries filter with key=value, key!=value, ranges like priority=2.. or due=..today+7, has:key and -has:key, and sort with sort:due or sort:-priority.',
         syntax: '## Due this week\n\n<query status=active due=..today+7 sort:due />\n\n## Unowned projects\n\n<query tag:project -has:owner />'
       },
       {

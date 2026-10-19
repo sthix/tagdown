@@ -46,7 +46,7 @@ fn error(id: Value, code: i64, message: &str) -> Value {
 
 impl Server {
     pub fn new(library: Library) -> Self {
-        Self { library }
+        Self { library: library.for_ai() }
     }
 
     /// Answer one JSON-RPC message; notifications get no answer.
@@ -449,6 +449,31 @@ mod tests {
         let (text, err) = call(&mut s, "create_note", json!({}));
         assert!(err && text == "missing argument: title");
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn mcp_never_reads_or_writes_excluded_notes() {
+        let (mut s, root) = server();
+        let note = s.library.vault.create_note(None).unwrap();
+        s.library.vault.save_note(&note.id,"# Secret record\n\nOnlyprivateword\n\n- [ ] Private action".into()).unwrap();
+        s.library.vault.set_property(&note.id,"ai_exclude",Some(crate::properties::PropertyValue::Checkbox(true)),None).unwrap();
+        for (tool,args) in [
+            ("read_note",json!({"note":note.id})),
+            ("append_to_note",json!({"note":note.id,"content":"changed"})),
+            ("replace_note_content",json!({"note":note.id,"content":"changed"})),
+            ("get_backlinks",json!({"note":note.id})),
+        ] { let (text,err)=call(&mut s,tool,args); assert!(err,"{tool}"); assert!(!text.contains("Onlyprivateword")); }
+        for (tool,args) in [
+            ("search_notes",json!({"query":"Onlyprivateword"})),
+            ("list_notes",json!({})),
+            ("list_tasks",json!({})),
+            ("run_query",json!({"query":"Onlyprivateword"})),
+        ] {
+            let (text,err)=call(&mut s,tool,args); assert!(!err,"{text}");
+            assert!(!text.contains("Secret record") && !text.contains("Private action"));
+            if tool != "search_notes" { assert!(!text.contains("Onlyprivateword")); }
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

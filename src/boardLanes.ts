@@ -6,7 +6,7 @@
 // whose value is a list sits in a lane per item; one without a value sits in
 // the "none" lane at the end.
 
-import { convertValue, valueText, type Property, type PropertyType, type PropertyValue } from './propertyValues';
+import { convertValue, displayText, valueText, type Property, type PropertyType, type PropertyValue } from './propertyValues';
 
 export type Lane = {
   /** The value compared: lowercase, links by title. */
@@ -28,6 +28,7 @@ export function laneLabel(value: string, type?: PropertyType): string {
   const link = value.trim().match(LINK);
   if (link) return (link[2] ?? link[1]).trim();
   if (type === 'checkbox') return value === 'true' ? 'Yes' : 'No';
+  if (type === 'percent' && value.trim() && Number.isFinite(Number(value))) return displayText({ type, value: Number(value) });
   return value.trim();
 }
 
@@ -40,7 +41,7 @@ export function laneKey(value: string): string {
 /** The values of `property` that place a note in lanes (none for an empty one). */
 export function laneValues(property: Property | undefined): string[] {
   if (!property || property.type === 'raw') return [];
-  if (property.type === 'list') return property.value.map((item) => item.trim()).filter(Boolean);
+  if (property.type === 'list' || property.type === 'multiselect') return property.value.map((item) => item.trim()).filter(Boolean);
   const text = valueText(property).trim();
   return text ? [text] : [];
 }
@@ -85,11 +86,13 @@ export function boardLanes(notes: LaneNote[], group: string, explicit: string[],
  * A list swaps the one item.
  */
 export function movedValue(property: Property | undefined, from: string | null, to: string | null, type: Exclude<PropertyType, 'raw'>): PropertyValue | null {
-  if (type === 'list') {
+  if (type === 'list' || type === 'multiselect') {
     const items = laneValues(property).filter((item) => from === null || laneKey(item) !== laneKey(from));
     if (to !== null && !items.some((item) => laneKey(item) === laneKey(to))) items.push(to);
-    return items.length ? { type: 'list', value: items } : null;
+    return items.length ? { type, value: items } : null;
   }
   if (to === null) return null;
+  // Lane values use stored fractions, while the percent editor accepts 0 to 100.
+  if (type === 'percent' && Number.isFinite(Number(to))) return { type, value: Number(to) };
   return convertValue({ type: 'text', value: to }, type);
 }

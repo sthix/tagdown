@@ -45,6 +45,23 @@ A note's properties (its frontmatter fields) sit under the title. When a note ha
 
 Properties are typed: text, numbers, true/false, dates (`2026-11-14`), lists, and `[[links]]`, which count as backlinks. Add one with **Add property** under the title or in the command palette (⌘K); they stay plain YAML in the note's frontmatter. A `type` property makes the note a [Book, Person or any other type](organizing.md#note-types), and [queries](queries-and-tasks.md#filtering-by-property) filter on properties and show them as tables, boards and cards.
 
+Click the icon to the left of a property to change its field type. The same editors work in query tables:
+
+| Field type | Editing and storage |
+| --- | --- |
+| Text / Long text | Short text or multiple lines. In long text, Enter inserts a line; ⌘Enter (Ctrl+Enter) saves. |
+| Number / Currency | Numeric amounts. Currency uses the neutral `¤` symbol, without assuming a denomination or converting amounts. |
+| Percent | Enter `75` for 75%; the file stores `0.75`. Numeric queries compare the stored fraction. |
+| Duration | Enter hours:minutes:seconds, minutes:seconds, or a number of seconds. Stored as seconds; numeric queries use seconds. |
+| Rating | Click one of five stars; click the current rating to clear it to zero. |
+| Checkbox | True or false. |
+| Date / Date and time | A calendar date, or a local date and time without a timezone. |
+| URL / Email / Phone | An address with an action to open the browser, email client or phone app, plus a separate Edit control. |
+| Single select / Multiple select | Pick from values already used for that property across the vault, or type a new option. Multiple select stores unique options and shows removable chips. |
+| List | Comma-separated text or wikilinks. Quote an item containing a comma. |
+
+Specialized types keep their choice in a YAML comment, for example `progress: 0.75 # tagdown:type=percent`. The underlying values remain ordinary YAML strings, numbers or lists, and types survive renaming, templates and reopening the vault. Nested YAML remains available as a read-only field. Created and updated times already belong to the note; linked records use `[[wikilinks]]` and [typed link fields](organizing.md#links-to-other-types).
+
 Fields you rarely look at, such as an `id` or a sync timestamp, can be hidden in every note: hover the row and click the eye. **Show hidden** under the list brings them back for a moment; unhide them for good from the row, or in **Settings → Editor → Hidden properties**. Hiding only changes the view; the field stays in the file.
 
 <picture>

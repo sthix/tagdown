@@ -20,7 +20,7 @@
     },
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }, { "url": "mailto:*" }, { "url": "tel:*" }]
     }
   ]
 }

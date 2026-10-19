@@ -1,0 +1,23 @@
+.ai-dialog { color: var(--text-primary); background: var(--bg-dialog); border: 1px solid var(--line-strong); border-radius: 12px; padding: 0; width: min(740px, 92vw); max-height: 88vh; box-shadow: var(--shadow-lg); }
+.ai-dialog::backdrop { background: var(--backdrop); }
+.ai-dialog header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.ai-dialog h2 { font-size: 17px; margin: 0; }
+.ai-dialog .ai-body { padding: 4px 20px 16px; overflow: auto; max-height: 62vh; }
+.ai-dialog p { font-size: 13px; line-height: 1.5; }
+.ai-dialog .ai-field { display: grid; gap: 7px; margin: 14px 0; font-size: 13px; }
+.ai-dialog input, .ai-dialog textarea, .ai-dialog select { font: inherit; color: inherit; background: var(--bg-field); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+.ai-dialog input[type=checkbox] { width: 16px; height: 16px; }
+.ai-dialog textarea { resize: vertical; width: 100%; box-sizing: border-box; line-height: 1.5; }
+.ai-dialog button { color: inherit; background: var(--bg-button); border: 1px solid var(--line-strong); border-radius: 6px; padding: 7px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.ai-dialog button.is-primary { background: var(--marker); color: var(--marker-ink); }
+.ai-dialog button:disabled { opacity: .5; cursor: default; }
+.ai-dialog button:hover:enabled { filter: brightness(1.15); }
+.ai-dialog footer { padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--line); }
+.ai-dialog .ai-status { margin: 0 20px 12px; min-height: 18px; }
+.ai-dialog .ai-prompt { padding: 4px 12px 12px; border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; }
+.ai-dialog .ai-answer-text { white-space: pre-wrap; line-height: 1.65; font-size: 14px; }
+.ai-dialog .ai-answer-text button { display: inline; padding: 0 3px; color: var(--accent, #b1b7ff); }
+.ai-dialog .ai-sources { padding-left: 24px; }
+.ai-dialog .ai-sources li { margin: 12px 0; }
+.ai-dialog .ai-sources small { display: block; opacity: .7; margin-top: 6px; white-space: pre-wrap; }
+.ai-dialog audio { width: 100%; margin: 12px 0; }

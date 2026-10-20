@@ -92,7 +92,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/child-types-dark.jpg" />
-  <img width="1280" height="720" alt="Author Template nested under Person in Types, with Person selected as its parent, email inherited, company switched off, and genre added as an Author-specific property" src="docs/images/child-types-light.jpg" />
+  <img width="1280" alt="Author Template nested under Person in Types, with Person selected as its parent, email inherited, company switched off, and genre added as an Author-specific property" src="docs/images/child-types-light.jpg" />
 </picture>
 
 See [creating a linked note from a template](docs/writing-notes.md#create-a-linked-note-from-a-template) for the slash-menu workflow, and [templates and child types](docs/organizing.md#child-types) for the **+** workflow, inheritance, and per-vault template settings.

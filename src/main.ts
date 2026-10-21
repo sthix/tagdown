@@ -440,7 +440,27 @@ function onExternalRemoval(id: string) {
   scheduleListRefresh();
 }
 
+// Web links anywhere in the app (notes, queries, properties) open in the
+// system browser; the WebView itself never navigates away from Tagdown.
+function externalHref(target: EventTarget | null) {
+  const link = (target as HTMLElement | null)?.closest?.<HTMLAnchorElement>('a[href]');
+  return link && /^(https?|mailto|tel):/i.test(link.href) ? link.href : null;
+}
+
+function bindExternalLinks() {
+  const open = (event: MouseEvent) => {
+    const href = externalHref(event.target);
+    if (!href) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void openUrl(href);
+  };
+  document.addEventListener('click', open, true);
+  document.addEventListener('auxclick', (event) => { if (event.button === 1) open(event); }, true);
+}
+
 function bindChrome() {
+  bindExternalLinks();
   document.querySelector('#settings-button')?.addEventListener('click', () => openSettings());
   document.querySelector('#open-palette')?.addEventListener('click', () => openPalette());
   document.querySelector('#sidebar-collapse')?.addEventListener('click', toggleFocusMode);

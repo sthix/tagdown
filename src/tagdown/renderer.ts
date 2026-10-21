@@ -2,7 +2,7 @@ import { tagdown } from './parser.js';
 import { markSource, splitBlocks, wrapBlocks, type SourceBlock } from './blocks';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import mermaid from 'mermaid';
+import { applyDiagrams } from './diagrams';
 
 const TAG_RE = /(^|\s)#([A-Za-z0-9_][A-Za-z0-9_/-]*)/g;
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A']);
@@ -74,19 +74,13 @@ export function renderEditablePreview(source: string): { html: string; blocks: S
   return wrapped === null ? { html: renderPreview(source), blocks: [] } : { html: wrapped, blocks };
 }
 
-// Mermaid renders every `.mermaid` element on window load unless told not to,
-// including ones in hidden panels, which come out zero-sized. Diagrams are
-// drawn only through applyExternals.
-mermaid.initialize({ startOnLoad: false });
-let mermaidConfiguredTheme: 'light' | 'dark' | null = null;
-let mermaidIdCounter = 0;
-
 /**
  * After `innerHTML = renderPreview(source)` is set on a live DOM root, call this
  * to upgrade `.td-math` spans into KaTeX-rendered formulas and `pre.mermaid`
- * blocks into Mermaid diagrams. Both libraries are bundled.
+ * blocks into Pele SVG diagrams. Both libraries are bundled; diagram colors
+ * follow the preview's CSS theme without re-rendering.
  */
-export async function applyExternals(root: HTMLElement, theme: 'light' | 'dark'): Promise<void> {
+export async function applyExternals(root: HTMLElement, _theme: 'light' | 'dark'): Promise<void> {
   // ---- KaTeX ----
   root.querySelectorAll<HTMLElement>('.td-math').forEach((el) => {
     // Avoid re-rendering an element KaTeX already touched.
@@ -109,31 +103,5 @@ export async function applyExternals(root: HTMLElement, theme: 'light' | 'dark')
   });
 
   // ---- Mermaid ----
-  const mermaidNodes = Array.from(root.querySelectorAll<HTMLElement>('pre.mermaid'));
-  if (mermaidNodes.length === 0) return;
-
-  if (mermaidConfiguredTheme !== theme) {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: theme === 'dark' ? 'dark' : 'default',
-      securityLevel: 'strict',
-    });
-    mermaidConfiguredTheme = theme;
-  }
-
-  for (const node of mermaidNodes) {
-    // Reset state from any previous render so the same DOM node can be reused.
-    node.removeAttribute('data-processed');
-    const source = (node.textContent || '').trim();
-    if (!source) continue;
-    const id = `td-mermaid-${++mermaidIdCounter}`;
-    try {
-      const { svg, bindFunctions } = await mermaid.render(id, source);
-      node.innerHTML = svg;
-      bindFunctions?.(node);
-    } catch (err) {
-      // On parse error mermaid throws; leave the source visible.
-      node.textContent = (err as Error)?.message || source;
-    }
-  }
+  applyDiagrams(root);
 }

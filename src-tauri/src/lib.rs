@@ -78,6 +78,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             quick_capture::open_quick_capture,
+            show_emoji_picker,
             commands::notes::list_notes,
             commands::notes::get_note_content,
             commands::notes::create_note,
@@ -145,6 +146,20 @@ pub fn run() {
                 }
             }
         });
+}
+
+/// Opens the macOS Emoji & Symbols palette; it types into whatever field has focus.
+#[tauri::command]
+fn show_emoji_picker<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    app.run_on_main_thread(|| {
+        let mtm = objc2::MainThreadMarker::new().expect("on the main thread");
+        objc2_app_kit::NSApplication::sharedApplication(mtm).orderFrontCharacterPalette(None);
+    })
+    .map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    Ok(())
 }
 
 /// The standard macOS menu, except that ⌘W closes a tab (⇧⌘W the window) and ⌘T opens one.

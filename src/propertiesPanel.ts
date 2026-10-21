@@ -7,6 +7,7 @@
 // block text) is shown but only editable in the file.
 
 import { renderPreview } from './tagdown/renderer';
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   convertValue, defaultValue, displayText, firstGrapheme, inputText, isAliasKey, isIconKey, EDITABLE_TYPES, keyProblem, noteIcon,
@@ -508,13 +509,10 @@ function textField(property: { key: string } & ({ type: TextType; value: string 
   return holder;
 }
 
-const EMOJI = [
-  '📝', '📌', '⭐️', '✅', '💡', '🔥', '🚀', '🎯', '📚', '📖', '🧠', '💼',
-  '🏠', '✈️', '🛒', '💰', '📅', '⏰', '🎨', '🎵', '🎬', '📷', '🧪', '🛠️',
-  '💻', '📱', '🌱', '🌍', '☕️', '🍽️', '🏃', '❤️', '🙂', '👤', '👥', '🗂️',
-];
+const isEmoji = (text: string) => /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(text);
+const showSystemEmojiPicker = () => invoke('show_emoji_picker').catch(() => {});
 
-/** A note's own emoji: the current one, picked from a few or typed (⌃⌘Space opens the system picker). */
+/** A note's own emoji, chosen in the macOS Emoji & Symbols palette (or typed / pasted). */
 function emojiField(property: Property, field: FieldOptions): HTMLElement {
   const holder = el('div', 'prop-emoji');
   const current = field.blank ? null : noteIcon([property]);
@@ -522,52 +520,42 @@ function emojiField(property: Property, field: FieldOptions): HTMLElement {
   button.type = 'button';
   button.textContent = current ?? 'Choose emoji';
   button.title = 'Change the note’s emoji';
-  button.setAttribute('aria-haspopup', 'dialog');
   button.setAttribute('aria-label', current ? `Emoji ${current}. Change it` : 'Choose an emoji');
   holder.append(button);
   const save = (emoji: string) => void field.save({ type: 'text', value: emoji });
+  if (current) {
+    const clear = el('button', 'prop-emoji-clear');
+    clear.type = 'button';
+    clear.textContent = '×';
+    clear.title = 'Use the type’s icon';
+    clear.setAttribute('aria-label', 'Remove the emoji and use the type’s icon');
+    clear.addEventListener('click', () => save(''));
+    holder.append(clear);
+  }
+  // The palette types into whatever has focus, so a field takes the button's place while it's open.
   button.addEventListener('click', () => {
-    const open = holder.querySelector('.prop-emoji-menu');
-    if (open) { open.remove(); return; }
-    const menu = el('div', 'prop-emoji-menu');
-    menu.setAttribute('role', 'dialog');
-    menu.setAttribute('aria-label', 'Choose an emoji');
-    const input = el('input', 'prop-input');
-    input.placeholder = 'Type or paste an emoji (⌃⌘Space)';
+    const input = el('input', 'prop-input prop-emoji-input');
+    input.placeholder = current ?? '⌃⌘Space';
     input.setAttribute('aria-label', 'Emoji');
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        const emoji = firstGrapheme(input.value.trim());
-        if (emoji) { menu.remove(); save(emoji); }
-      }
-    });
-    const grid = el('div', 'prop-emoji-grid');
-    for (const emoji of EMOJI) {
-      const pick = el('button');
-      pick.type = 'button';
-      pick.textContent = emoji;
-      pick.setAttribute('aria-pressed', String(emoji === current));
-      pick.addEventListener('click', () => { menu.remove(); save(emoji); });
-      grid.append(pick);
-    }
-    menu.append(input, grid);
-    if (current) {
-      const clear = el('button', 'prop-emoji-clear');
-      clear.type = 'button';
-      clear.textContent = 'Use the type’s icon';
-      clear.addEventListener('click', () => { menu.remove(); save(''); });
-      menu.append(clear);
-    }
-    holder.append(menu);
-    input.focus();
-    const close = (event: Event) => {
-      if (holder.contains(event.target as Node)) return;
-      menu.remove();
-      document.removeEventListener('mousedown', close, true);
+    let done = false;
+    const finish = (emoji: string | null) => {
+      if (done) return;
+      done = true;
+      if (emoji) save(emoji);
+      else { input.replaceWith(button); button.focus(); }
     };
-    document.addEventListener('mousedown', close, true);
-    menu.addEventListener('keydown', (event) => { if (event.key === 'Escape') { menu.remove(); button.focus(); } });
+    input.addEventListener('input', () => {
+      const emoji = firstGrapheme(input.value.trim());
+      if (emoji && isEmoji(emoji)) finish(emoji);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); finish(firstGrapheme(input.value.trim()) || null); }
+      if (event.key === 'Escape') { event.preventDefault(); finish(null); }
+    });
+    input.addEventListener('blur', () => finish(null));
+    button.replaceWith(input);
+    input.focus();
+    void showSystemEmojiPicker();
   });
   return holder;
 }

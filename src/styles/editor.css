@@ -192,7 +192,6 @@
 .prop-type-menu button[aria-checked="true"] { font-weight: 600; }
 .prop-type-icon { width: 18px; color: var(--ink-3); font-size: 11px; font-weight: 600; text-align: center; }
 /* `icon`: the note's own emoji. */
-.prop-emoji { position: relative; }
 .prop-emoji-button {
   height: 26px; min-width: 30px; padding: 0 6px;
   border: 0; border-radius: 6px; background: none;
@@ -200,26 +199,16 @@
 }
 .prop-emoji-button.is-empty { color: var(--ink-3); font: 13px var(--font-ui); }
 .prop-emoji-button:hover, .prop-emoji-button:focus-visible { background: var(--chip-bg); outline: none; }
-.prop-emoji-menu {
-  position: absolute; top: calc(100% + 2px); left: 0; z-index: 100;
-  width: 268px; padding: 8px;
-  background: var(--bg-dialog); border-radius: 10px; box-shadow: var(--shadow-lg);
-  animation: menu-in .16s var(--ease-out) both;
-}
-.prop-emoji-menu .prop-input { margin-bottom: 6px; background: var(--chip-bg); }
-.prop-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
-.prop-emoji-grid button {
-  aspect-ratio: 1; border: 0; border-radius: 6px; padding: 0;
-  background: none; font-size: 17px; line-height: 1; cursor: pointer;
-}
-.prop-emoji-grid button:hover, .prop-emoji-grid button:focus-visible { background: var(--chip-bg); outline: none; }
-.prop-emoji-grid button[aria-pressed="true"] { background: var(--marker-soft); }
+.prop-emoji { display: flex; align-items: center; gap: 2px; }
+.prop-emoji-input { width: 96px; background: var(--chip-bg); }
 .prop-emoji-clear {
-  width: 100%; margin-top: 6px; padding: 5px 8px;
-  border: 0; border-radius: 6px; background: none;
-  color: var(--ink-2); font: 12.5px var(--font-ui); text-align: left; cursor: pointer;
+  width: 20px; height: 20px; padding: 0;
+  border: 0; border-radius: 5px; background: none;
+  color: var(--ink-3); font: 14px/1 var(--font-ui); cursor: pointer;
+  opacity: 0; transition: opacity .12s;
 }
-.prop-emoji-clear:hover, .prop-emoji-clear:focus-visible { background: var(--chip-bg); outline: none; }
+.prop-emoji:hover .prop-emoji-clear, .prop-emoji-clear:focus-visible { opacity: 1; }
+.prop-emoji-clear:hover, .prop-emoji-clear:focus-visible { background: var(--chip-bg); color: var(--ink-2); outline: none; }
 .prop-key, .prop-input {
   width: 100%; min-width: 0; height: 26px;
   border: 0; border-radius: 6px; padding: 0 6px;

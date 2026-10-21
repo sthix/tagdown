@@ -7,9 +7,11 @@
 // block text) is shown but only editable in the file.
 
 import { renderPreview } from './tagdown/renderer';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import {
-  convertValue, defaultValue, EDITABLE_TYPES, keyProblem, parseInput, valueText,
-  type Property, type PropertyType, type PropertyValue,
+  convertValue, defaultValue, displayText, firstGrapheme, inputText, isAliasKey, isIconKey, EDITABLE_TYPES, keyProblem, noteIcon,
+  parseAliasInput, parseInput, valueText,
+  type Property, type PropertyType, type PropertyValue, type TextType, type ListType,
 } from './propertyValues';
 
 export type PanelOptions = {
@@ -159,7 +161,7 @@ export function renderPropertiesPanel(host: HTMLElement, options: PanelOptions) 
   if (focus === 'new') add.click();
   else if (focus) {
     const target = list.querySelector<HTMLElement>(`.prop-row[data-key="${CSS.escape(focus.key)}"] ${focus.part === 'key' ? '.prop-key' : '.prop-value'}`);
-    const field = target?.matches('input') ? target : target?.querySelector<HTMLElement>('input, button, [tabindex]');
+    const field = target?.matches('input') ? target : target?.querySelector<HTMLElement>('input, textarea, button, [tabindex]');
     field?.focus();
     if (field && !(field instanceof HTMLInputElement)) field.click();
   }
@@ -172,9 +174,9 @@ const EYE_OFF = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" str
 function chipText(property: Property): string {
   if (property.type === 'checkbox') return property.value ? 'Yes' : 'No';
   if (property.type === 'raw') return '{…}';
-  const text = property.type === 'list' ? property.value.join(', ') : valueText(property);
+  const text = displayText(property);
   const plain = text.replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, '$2').trim();
-  if (!plain) return '—';
+  if (!plain) return 'Empty';
   return plain.length > 32 ? `${plain.slice(0, 31)}…` : plain;
 }
 
@@ -263,6 +265,14 @@ function typeButton(property: Property, options: PanelOptions): HTMLElement {
   button.setAttribute('aria-label', `${property.key} is ${info.label}. Change type`);
   button.setAttribute('aria-haspopup', 'menu');
   holder.append(button);
+  if (isIconKey(property.key)) {
+    button.textContent = '☺';
+    button.title = 'The note’s emoji, shown in place of its type’s';
+    button.setAttribute('aria-label', `${property.key} is the note’s emoji`);
+    button.removeAttribute('aria-haspopup');
+    button.disabled = true;
+    return holder;
+  }
   if (property.type === 'raw') {
     button.disabled = true;
     return holder;
@@ -317,6 +327,7 @@ export type FieldOptions = {
  * input, or text and lists shown rendered (links work) and edited on click.
  */
 export function propertyField(property: Property, field: FieldOptions): HTMLElement {
+  if (isIconKey(property.key)) return emojiField(property, field);
   switch (property.type) {
     case 'checkbox': {
       const box = el('input');
@@ -329,27 +340,63 @@ export function propertyField(property: Property, field: FieldOptions): HTMLElem
       return box;
     }
     case 'number':
-    case 'date': {
+    case 'currency':
+    case 'percent':
+    case 'duration':
+    case 'date':
+    case 'datetime': {
       const input = el('input', 'prop-input');
-      input.type = property.type;
-      const shown = field.blank ? '' : String(property.value);
+      input.type = property.type === 'datetime' ? 'datetime-local' : property.type === 'duration' ? 'text' : property.type === 'date' ? 'date' : 'number';
+      const shown = field.blank ? '' : inputText(property);
       input.value = shown;
       input.classList.toggle('is-blank', !!field.blank);
       input.setAttribute('aria-label', property.key);
-      if (property.type === 'number') input.step = 'any';
+      if (input.type === 'number') input.step = 'any';
+      if (property.type === 'datetime') input.step = '1';
+      if (property.type === 'duration') input.placeholder = 'h:mm:ss';
+      input.title = property.type === 'percent' ? 'Percent (75 means 75%)' : property.type === 'currency' ? 'Currency amount' : property.type === 'duration' ? 'Hours:minutes:seconds, or seconds' : '';
       const type = property.type;
-      const commit = () => {
+      let saved = shown;
+      const commit = async () => {
+        if (input.value === saved && !field.blank) return;
         const next = parseInput(type, input.value);
-        if (!next) { input.value = shown; return; }
-        if (field.blank || valueText(next) !== valueText(property)) void field.save(next);
+        if (!next) { input.setCustomValidity('Enter a valid value.'); input.reportValidity(); return; }
+        input.setCustomValidity('');
+        const pending = input.value;
+        if (await field.save(next)) saved = pending;
+        else input.value = saved;
       };
-      input.addEventListener('change', commit);
+      input.addEventListener('input', () => input.setCustomValidity(''));
+      input.addEventListener('change', () => void commit());
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
-        if (event.key === 'Escape') { input.value = shown; input.blur(); }
+        if (event.key === 'Escape') { input.value = saved; input.setCustomValidity(''); input.blur(); }
       });
+      if (property.type === 'currency' || property.type === 'percent') {
+        const holder = el('div', 'prop-number');
+        const unit = el('span', 'prop-unit');
+        unit.textContent = property.type === 'percent' ? '%' : '¤';
+        holder.append(input, unit);
+        return holder;
+      }
       return input;
     }
+    case 'rating': {
+      const holder = el('div', 'prop-rating');
+      holder.setAttribute('role', 'group');
+      holder.setAttribute('aria-label', `${property.key}: rating out of 5`);
+      for (let i = 1; i <= 5; i++) {
+        const star = el('button');
+        star.type = 'button';
+        star.textContent = !field.blank && i <= property.value ? '★' : '☆';
+        star.setAttribute('aria-label', `Rate ${i} out of 5; click current rating to clear`);
+        star.setAttribute('aria-pressed', String(!field.blank && i === property.value));
+        star.addEventListener('click', () => void field.save({ type: 'rating', value: !field.blank && i === property.value ? 0 : i }));
+        holder.append(star);
+      }
+      return holder;
+    }
+    case 'multiselect': return multipleSelect(property, field);
     case 'raw': {
       const code = el('code', 'prop-raw');
       code.textContent = property.value.trim();
@@ -362,7 +409,7 @@ export function propertyField(property: Property, field: FieldOptions): HTMLElem
 }
 
 /** Text and lists: shown rendered (links work), edited in a text field. */
-function textField(property: Property & ({ type: 'text' } | { type: 'list' }), field: FieldOptions): HTMLElement {
+function textField(property: { key: string } & ({ type: TextType; value: string } | { type: ListType; value: string[] }), field: FieldOptions): HTMLElement {
   const holder = el('div', 'prop-text');
   const show = () => {
     holder.innerHTML = '';
@@ -370,13 +417,32 @@ function textField(property: Property & ({ type: 'text' } | { type: 'list' }), f
     view.tabIndex = 0;
     view.setAttribute('role', 'button');
     view.setAttribute('aria-label', `Edit ${property.key}`);
-    const items = property.type === 'list' ? property.value : property.value ? [property.value] : [];
+    const items = Array.isArray(property.value) ? property.value : property.value ? [property.value] : [];
     if (!items.length) {
       view.classList.add('is-empty');
       view.textContent = field.emptyLabel ?? 'Empty';
     } else {
-      view.innerHTML = items.map((item) => `<span class="prop-item">${inlineHtml(item)}</span>`).join('');
-      view.classList.toggle('is-list', property.type === 'list');
+      view.innerHTML = items.map((item) => `<span class="prop-item">${property.type === 'select' || property.type === 'longtext' ? escapeHtml(item) : inlineHtml(item)}</span>`).join('');
+      view.classList.toggle('is-list', property.type === 'list' || property.type === 'select');
+      view.classList.toggle('is-longtext', property.type === 'longtext');
+      if (['url', 'email', 'phone'].includes(property.type)) {
+        view.innerHTML = '';
+        const link = el('a', 'prop-contact-link');
+        link.textContent = String(property.value);
+        const href = property.type === 'email' ? `mailto:${property.value}` : property.type === 'phone' ? `tel:${String(property.value).replace(/[^+\dx#]/gi, '')}` : String(property.value);
+        // Validate before offering an action, including values read from a hand-edited file.
+        if (parseInput(property.type as 'url' | 'email' | 'phone', String(property.value))) link.href = href;
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (link.hasAttribute('href')) void openUrl(link.href);
+        });
+        const change = el('button', 'prop-edit');
+        change.type = 'button';
+        change.textContent = 'Edit';
+        change.addEventListener('click', (event) => { event.stopPropagation(); edit(); });
+        view.append(link, change);
+      }
       field.decorate(view);
     }
     view.addEventListener('click', (event) => {
@@ -388,23 +454,28 @@ function textField(property: Property & ({ type: 'text' } | { type: 'list' }), f
         field.openLink(link.dataset.target || '');
         return;
       }
+      if ((event.target as HTMLElement).closest('a')) return;
       edit();
     });
     view.addEventListener('keydown', (event) => {
+      if (event.target !== view) return;
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); edit(); }
     });
     holder.append(view);
   };
   const edit = () => {
     holder.innerHTML = '';
-    const input = el('input', 'prop-input');
-    input.value = valueText(property);
+    const input = property.type === 'longtext' ? el('textarea', 'prop-input prop-longtext') : el('input', 'prop-input');
+    input.value = inputText(property);
+    if (input instanceof HTMLInputElement) input.type = property.type === 'url' ? 'url' : property.type === 'email' ? 'email' : property.type === 'phone' ? 'tel' : 'text';
     input.spellcheck = false;
     input.setAttribute('aria-label', property.key);
     if (property.type === 'list') input.placeholder = 'Comma, separated, items';
     if (field.emptyLabel) input.placeholder = property.type === 'list' ? `${field.emptyLabel}, comma-separated` : field.emptyLabel;
+    const alias = isAliasKey(property.key) && (property.type === 'text' || property.type === 'list');
+    if (alias) input.placeholder = 'Another name, or several, comma-separated';
     const suggestions = field.suggestions();
-    if (suggestions.length) {
+    if (suggestions.length && input instanceof HTMLInputElement) {
       const list = el('datalist');
       list.id = field.listId;
       list.append(...suggestions.map((v) => Object.assign(document.createElement('option'), { value: v })));
@@ -414,23 +485,126 @@ function textField(property: Property & ({ type: 'text' } | { type: 'list' }), f
     let done = false;
     const finish = async (keep: boolean) => {
       if (done) return;
+      const next = keep ? (alias ? parseAliasInput(input.value) : parseInput(property.type, input.value)) : null;
+      if (keep && !next) { input.setCustomValidity(`Enter a valid ${typeInfo(property.type).label.toLowerCase()}.`); input.reportValidity(); return; }
       done = true;
-      const next = keep ? parseInput(property.type, input.value) : null;
-      if (next && valueText(next) !== valueText(property)) {
+      if (next && (field.blank || JSON.stringify(next) !== JSON.stringify(value(property)))) {
         if (await field.save(next)) return;
       }
       show();
     };
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') { event.preventDefault(); void finish(true); }
+    input.addEventListener('keydown', (rawEvent) => {
+      const event = rawEvent as KeyboardEvent;
+      if (event.key === 'Enter' && (property.type !== 'longtext' || event.metaKey || event.ctrlKey)) { event.preventDefault(); void finish(true); }
       if (event.key === 'Escape') { event.preventDefault(); void finish(false); }
     });
     input.addEventListener('blur', () => void finish(true));
+    input.addEventListener('input', () => input.setCustomValidity(''));
     holder.append(input);
     input.focus();
     input.select();
   };
   show();
+  return holder;
+}
+
+const EMOJI = [
+  '📝', '📌', '⭐️', '✅', '💡', '🔥', '🚀', '🎯', '📚', '📖', '🧠', '💼',
+  '🏠', '✈️', '🛒', '💰', '📅', '⏰', '🎨', '🎵', '🎬', '📷', '🧪', '🛠️',
+  '💻', '📱', '🌱', '🌍', '☕️', '🍽️', '🏃', '❤️', '🙂', '👤', '👥', '🗂️',
+];
+
+/** A note's own emoji: the current one, picked from a few or typed (⌃⌘Space opens the system picker). */
+function emojiField(property: Property, field: FieldOptions): HTMLElement {
+  const holder = el('div', 'prop-emoji');
+  const current = field.blank ? null : noteIcon([property]);
+  const button = el('button', current ? 'prop-emoji-button' : 'prop-emoji-button is-empty');
+  button.type = 'button';
+  button.textContent = current ?? 'Choose emoji';
+  button.title = 'Change the note’s emoji';
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.setAttribute('aria-label', current ? `Emoji ${current}. Change it` : 'Choose an emoji');
+  holder.append(button);
+  const save = (emoji: string) => void field.save({ type: 'text', value: emoji });
+  button.addEventListener('click', () => {
+    const open = holder.querySelector('.prop-emoji-menu');
+    if (open) { open.remove(); return; }
+    const menu = el('div', 'prop-emoji-menu');
+    menu.setAttribute('role', 'dialog');
+    menu.setAttribute('aria-label', 'Choose an emoji');
+    const input = el('input', 'prop-input');
+    input.placeholder = 'Type or paste an emoji (⌃⌘Space)';
+    input.setAttribute('aria-label', 'Emoji');
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const emoji = firstGrapheme(input.value.trim());
+        if (emoji) { menu.remove(); save(emoji); }
+      }
+    });
+    const grid = el('div', 'prop-emoji-grid');
+    for (const emoji of EMOJI) {
+      const pick = el('button');
+      pick.type = 'button';
+      pick.textContent = emoji;
+      pick.setAttribute('aria-pressed', String(emoji === current));
+      pick.addEventListener('click', () => { menu.remove(); save(emoji); });
+      grid.append(pick);
+    }
+    menu.append(input, grid);
+    if (current) {
+      const clear = el('button', 'prop-emoji-clear');
+      clear.type = 'button';
+      clear.textContent = 'Use the type’s icon';
+      clear.addEventListener('click', () => { menu.remove(); save(''); });
+      menu.append(clear);
+    }
+    holder.append(menu);
+    input.focus();
+    const close = (event: Event) => {
+      if (holder.contains(event.target as Node)) return;
+      menu.remove();
+      document.removeEventListener('mousedown', close, true);
+    };
+    document.addEventListener('mousedown', close, true);
+    menu.addEventListener('keydown', (event) => { if (event.key === 'Escape') { menu.remove(); button.focus(); } });
+  });
+  return holder;
+}
+
+/** Options come from this property's values across the vault; typing adds a new one. */
+function multipleSelect(property: { key: string; type: ListType; value: string[] }, field: FieldOptions): HTMLElement {
+  const holder = el('div', 'prop-multiselect');
+  const chips = el('div', 'prop-display is-list');
+  for (const item of property.value) {
+    const chip = el('button', 'prop-item');
+    chip.type = 'button';
+    chip.textContent = `${item} ×`;
+    chip.setAttribute('aria-label', `Remove ${item} from ${property.key}`);
+    chip.addEventListener('click', () => void field.save({ type: 'multiselect', value: property.value.filter((v) => v !== item) }));
+    chips.append(chip);
+  }
+  const input = el('input', 'prop-input');
+  input.placeholder = 'Select or add an option';
+  input.setAttribute('aria-label', `Add option to ${property.key}`);
+  input.setAttribute('list', field.listId);
+  const list = el('datalist');
+  list.id = field.listId;
+  list.append(...field.suggestions().filter((v) => !property.value.includes(v)).map((v) => Object.assign(el('option'), { value: v })));
+  let pending = false;
+  const add = async () => {
+    const option = input.value.trim();
+    if (!option || pending) return;
+    pending = true;
+    if (await field.save({ type: 'multiselect', value: [...new Set([...property.value, option])] })) input.value = '';
+    pending = false;
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void add(); }
+    if (event.key === 'Escape') { input.value = ''; input.blur(); }
+  });
+  input.addEventListener('change', () => void add());
+  holder.append(chips, input, list);
   return holder;
 }
 
@@ -462,7 +636,7 @@ function newRow(options: RowOptions, cancel: () => void): HTMLElement {
     }
     done = true;
     // A name other notes use starts with the type they give it.
-    const known = options.knownType(name);
+    const known = isIconKey(name) ? 'text' : options.knownType(name);
     if (!(await options.save(name, defaultValue(known && known !== 'raw' ? known : 'text')))) done = false;
   };
   key.addEventListener('keydown', (event) => {

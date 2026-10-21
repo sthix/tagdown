@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { emitTo, listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { save, message } from '@tauri-apps/plugin-dialog';
 import { initSettings, openSettings } from './settings/settings';
@@ -24,14 +24,16 @@ import { propertiesFolded, renderPropertiesPanel, setPropertiesFolded } from './
 import { isInheritanceKey, renderTemplateInheritance, type TemplateInheritance } from './templateInheritance';
 import { typeMatches, typeTree } from './typeHierarchy';
 import { showContextMenu, type MenuItem } from './contextMenu';
+import { noteIcon } from './propertyValues';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { asLinks, linkHint, type LinkField } from './linkFields';
+import { cascadeTask, subtaskStates } from './taskCascade';
 import { nextTaskLine } from './taskRepeat';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
 import { chooseVaultFolder, listVaults, onBeforeVaultSwitch, shortPath, switchVault, type VaultEntry } from './vaults';
-import { appendBlock, calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
-import { openQuickCapture } from './quickCapture';
+import { calendarHtml, captureText, formatDay, isDayKey, monthOf, relativeDay, shiftDay, shiftMonth, todayKey, type CalendarMonth } from './journal';
+import { openQuickCapture, type CaptureRequest, type CaptureResult } from './quickCapture';
 import { openTemplatePicker, templateNoteTitle, templateReferenceEdit, type InsertableTemplate, type TemplateTarget } from './templatePicker';
 import { openLocalGraph } from './localGraph';
 import { offerLinkNote, onEmptyLine, openSaveLinkDialog, webUrl } from './webLinks';
@@ -298,6 +300,13 @@ async function boot() {
   await listen('folders-changed-externally', scheduleListRefresh);
   // The app menu's File → New Tab / Close Tab (⌘T / ⌘W never reach the page).
   await listen<string>('menu', (event) => void runMenuCommand(event.payload));
+  await listen('quick-capture-open', quickCapture);
+  await listen<CaptureRequest>('quick-capture-save', async ({ payload }) => {
+    const result: CaptureResult = { id: payload.id };
+    try { await saveQuickCapture(payload.day, payload.text, payload.asTask); }
+    catch (error) { result.error = String(error); }
+    await emitTo('quick-capture', 'quick-capture-result', result);
+  });
 }
 
 async function runMenuCommand(id: string) {
@@ -1023,7 +1032,7 @@ function paintTabs(pane: Pane) {
     const current = index === pane.active;
     const folder = note ? folders.find((f) => f.id === note.folderId)?.name : null;
     const tip = tab.noteId ? `${title}${folder ? ` · ${folder}` : ''}` : 'New tab: find a note with ⌘K';
-    const icon = !tab.noteId ? uiIcon('search', 12) : iconSvg(note?.journal ? 'calendar' : 'notes', 12);
+    const icon = !tab.noteId ? uiIcon('search', 12) : note ? noteIconHtml(note, 12) : iconSvg('notes', 12);
     return `<div class="tab ${current ? 'is-current' : ''} ${tab.noteId ? '' : 'is-blank'}" role="tab" aria-selected="${current}" tabindex="${current ? 0 : -1}" draggable="${tab.noteId ? 'true' : 'false'}" data-tab="${index}" title="${escapeHtml(tip)}">
       <span class="tab-icon" aria-hidden="true">${icon}</span><span class="tab-title">${escapeHtml(title)}</span>
       ${lone ? '' : `<button type="button" class="tab-close" data-close-tab="${index}" tabindex="-1" title="Close tab (⌘W)" aria-label="Close ${escapeHtml(title)}">${uiIcon('close', 10)}</button>`}
@@ -1440,22 +1449,20 @@ async function showGraph() {
 
 /** Add text to today's journal page without opening it. */
 function quickCapture() {
-  openQuickCapture({
-    save: async (day, raw, asTask) => {
-      const text = captureText(raw, asTask);
-      if (selectedNote?.journal === day) {
-        // The page is open here: add to the editor, which saves it as usual.
-        showDiskContent(appendBlock(content, text));
-        scheduleSave();
-      } else {
-        const { note, content: next } = await invoke<{ note: Note; content: string }>('append_to_journal', { day, text });
-        // Panes showing the page take the new text; lists and queries catch up.
-        await onExternalChange(note, next);
-        invalidateQueries();
-      }
-      showNotice('Added to today’s journal');
-    },
-  });
+  if (!isTauri()) { openQuickCapture({ save: saveQuickCapture }); return; }
+  void invoke('open_quick_capture').catch(error => showNotice(`Couldn’t open quick capture: ${error}`));
+}
+
+async function saveQuickCapture(day: string, raw: string, asTask: boolean) {
+  // Finish pending block edits before appending, including when today's page is open.
+  if (blockEdit) commitBlockEdit();
+  await settlePendingWork();
+  const text = captureText(raw, asTask);
+  const { note, content: next } = await invoke<{ note: Note; content: string }>('append_to_journal', { day, text });
+  // The append has committed. A refresh failure must not invite a duplicate retry.
+  await onExternalChange(note, next).catch(console.error);
+  invalidateQueries();
+  showNotice('Added to today’s journal');
 }
 
 /** Open a day's journal page, creating it (from the "Journal Template" note, if any) the first time. */
@@ -1952,10 +1959,24 @@ function renderNotes() {
   renderTypes();
 }
 
-/** The emoji of a note's type, before its title in the list. */
+/** A note's emoji: its own `icon`, else its type's (templates only show their own). */
+function noteEmoji(note: Note): string | null {
+  const type = templateTypeOf(note.title) ? null : findType(typeOfNote(note))?.icon;
+  return noteIcon(note.properties) ?? type ?? null;
+}
+
+/** A note's emoji before its title in the list. */
 function typeIcon(note: Note) {
-  const icon = findType(typeOfNote(note))?.icon;
-  return icon && !templateTypeOf(note.title) ? `<span class="note-type-icon" aria-hidden="true">${escapeHtml(icon)}</span>` : '';
+  const icon = noteEmoji(note);
+  return icon ? `<span class="note-type-icon" aria-hidden="true">${escapeHtml(icon)}</span>` : '';
+}
+
+/** A note's emoji, else its type's shape, else a plain note (or calendar for a journal page). */
+function noteIconHtml(note: Note, size: number) {
+  const emoji = noteEmoji(note);
+  const type = findType(typeOfNote(note));
+  if (emoji || type) return typeIconHtml({ name: type?.name ?? '', icon: emoji }, size);
+  return iconSvg(note.journal ? 'calendar' : 'notes', size);
 }
 
 type TagNode = { path: string; name: string; children: TagNode[]; hasRecord: boolean };
@@ -2575,8 +2596,8 @@ function propertyValueSuggestions(key: string, note?: Note | null): string[] {
   for (const note of libraryNotes.filter((n) => !templateTypeOf(n.title))) {
     for (const p of note.properties ?? []) {
       if (p.key.toLowerCase() !== key.toLowerCase()) continue;
-      if (p.type === 'text' && p.value) values.add(p.value);
-      if (p.type === 'list') p.value.forEach((item) => values.add(item));
+      if (typeof p.value === 'string' && p.type !== 'raw' && p.value) values.add(p.value);
+      if (p.type === 'list' || p.type === 'multiselect') p.value.forEach((item) => values.add(item));
     }
   }
   return [...values].slice(0, field ? 200 : 50);
@@ -2717,6 +2738,8 @@ async function saveProperty(key: string, given: PropertyValue | null, renameFrom
     const note = await invoke<Note>('set_property', { id, key, value, renameFrom: renameFrom ?? null });
     libraryNotes = libraryNotes.map((n) => (n.id === id ? note : n));
     knownNotes.set(id, note);
+    // Its emoji may have changed.
+    paintAllTabs();
     // The same note open in another split shows the change too.
     for (const pane of panes) if (pane !== activePane) withPane(pane, () => { if (selectedNote?.id === id) { selectedNote = note; paintProperties(); } });
     if (selectedNote?.id !== id) return true;
@@ -2842,13 +2865,10 @@ function daySummaryHtml() {
   const day = selectedNote?.journal && backlinks?.id === selectedNote.id ? backlinks.day : null;
   if (!day) return '<section class="backlinks day-summary" data-day-summary hidden></section>';
   const time = (at: string) => new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  const row = (note: Note, meta: string) => {
-    const type = findType(typeOfNote(note));
-    return `
+  const row = (note: Note, meta: string) => `
     <div class="backlink day-note" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
-      <div class="backlink-title">${type ? typeIconHtml(type, 13) : iconSvg(note.journal ? 'calendar' : 'notes', 13)}<strong>${escapeHtml(tabTitleOf(note))}</strong><span class="day-note-meta">${escapeHtml(meta)}</span></div>
+      <div class="backlink-title">${noteIconHtml(note, 13)}<strong>${escapeHtml(tabTitleOf(note))}</strong><span class="day-note-meta">${escapeHtml(meta)}</span></div>
     </div>`;
-  };
   const group = (label: string, count: number, body: string) => count ? `<h3 class="backlinks-group">${label}<span>${count}</span></h3>${body}` : '';
   const total = day.tasks.length + day.created.length + day.edited.length + day.dated.length;
   const list = [
@@ -2858,10 +2878,31 @@ function daySummaryHtml() {
     group('Dated this day', day.dated.length, day.dated.map(({ note, keys }) => row(note, keys.join(', '))).join('')),
   ].join('');
   return `
-    <section class="backlinks day-summary" data-day-summary aria-label="This day">
-      <h2>This day${total ? `<span>${total}</span>` : ''}</h2>
-      ${list || '<p class="backlinks-empty">Notes created or edited on this day, notes with this date, and tasks for it show up here.</p>'}
+    <section class="backlinks day-summary${isSectionCollapsed('day') ? ' is-collapsed' : ''}" data-day-summary aria-label="This day">
+      ${sectionHeadingHtml('day', 'This day', total)}
+      <div class="backlinks-body">${list || '<p class="backlinks-empty">Notes created or edited on this day, notes with this date, and tasks for it show up here.</p>'}</div>
     </section>`;
+}
+
+// Which of the sections under a note ("This day", "Linked mentions") are folded away, for every note.
+const COLLAPSED_SECTIONS_KEY = 'tagdown.collapsedSections';
+type FoldableSection = 'day' | 'mentions';
+
+function collapsedSections(): FoldableSection[] {
+  try { return JSON.parse(localStorage.getItem(COLLAPSED_SECTIONS_KEY) || '[]') ?? []; } catch { return []; }
+}
+
+function isSectionCollapsed(section: FoldableSection) {
+  return collapsedSections().includes(section);
+}
+
+function setSectionCollapsed(section: FoldableSection, collapsed: boolean) {
+  const rest = collapsedSections().filter((name) => name !== section);
+  try { localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(collapsed ? [...rest, section] : rest)); } catch { /* not remembered */ }
+}
+
+function sectionHeadingHtml(section: FoldableSection, label: string, count: number) {
+  return `<h2><button type="button" class="backlinks-toggle" data-fold-section="${section}" aria-expanded="${!isSectionCollapsed(section)}">${uiIcon('chevronDown', 12)}${label}${count ? `<span>${count}</span>` : ''}</button></h2>`;
 }
 
 function backlinksHtml() {
@@ -2881,14 +2922,11 @@ function backlinksHtml() {
     const only = holder.children.length === 1 && holder.firstElementChild?.tagName === 'P' ? holder.firstElementChild : null;
     return only ? `<div class="backlink-line">${only.innerHTML}</div>` : `<div class="backlink-line has-children">${holder.innerHTML}</div>`;
   };
-  const card = ({ note, mentions }: Backlink) => {
-    const type = findType(typeOfNote(note));
-    return `
+  const card = ({ note, mentions }: Backlink) => `
     <div class="backlink" role="link" tabindex="0" data-open-note="${escapeHtml(note.id)}">
-      <div class="backlink-title">${type ? typeIconHtml(type, 13) : iconSvg('notes', 13)}<strong>${escapeHtml(note.title || 'Untitled')}</strong></div>
+      <div class="backlink-title">${noteIconHtml(note, 13)}<strong>${escapeHtml(note.title || 'Untitled')}</strong></div>
       ${mentions.map(mention).join('')}
     </div>`;
-  };
   // With notes of several types linking here, each type gets its own group (other notes last).
   const groups = new Map<string, Backlink[]>();
   for (const item of items) {
@@ -2904,9 +2942,9 @@ function backlinksHtml() {
     }).join('')
     : items.map(card).join('');
   return `
-    <section class="backlinks" data-backlinks aria-label="Linked mentions">
-      <h2>Linked mentions${items.length ? `<span>${items.length}</span>` : ''}</h2>
-      ${list || `<p class="backlinks-empty">No other notes link here yet. Link to this note with <code>[[${escapeHtml(selectedNote.title || 'Untitled')}]]</code>.</p>`}
+    <section class="backlinks${isSectionCollapsed('mentions') ? ' is-collapsed' : ''}" data-backlinks aria-label="Linked mentions">
+      ${sectionHeadingHtml('mentions', 'Linked mentions', items.length)}
+      <div class="backlinks-body">${list || `<p class="backlinks-empty">No other notes link here yet. Link to this note with <code>[[${escapeHtml(selectedNote.title || 'Untitled')}]]</code>.</p>`}</div>
     </section>`;
 }
 
@@ -3478,6 +3516,14 @@ function renderEditor() {
         });
       return;
     }
+    const fold = target.closest<HTMLButtonElement>('[data-fold-section]');
+    if (fold) {
+      const collapsed = fold.getAttribute('aria-expanded') === 'true';
+      fold.setAttribute('aria-expanded', String(!collapsed));
+      fold.closest('.backlinks')?.classList.toggle('is-collapsed', collapsed);
+      setSectionCollapsed(fold.dataset.foldSection as FoldableSection, collapsed);
+      return;
+    }
     const backlink = target.closest<HTMLElement>('[data-open-note]');
     if (backlink) {
       event.preventDefault();
@@ -3719,6 +3765,9 @@ function wrapSelection(left: string, right: string) {
   scheduleSave();
 }
 
+/** What a task's subtasks were before it was ticked, by note and task text, so unticking restores them. */
+const subtasksBeforeTick = new Map<string, boolean[]>();
+
 function toggleTaskAt(taskIndex: number) {
   const lines = content.split('\n');
   let seen = 0;
@@ -3728,6 +3777,11 @@ function toggleTaskAt(taskIndex: number) {
     if (seen === taskIndex) {
       const next = m[2] === ' ' ? 'x' : ' ';
       lines[i] = m[1] + next + m[3];
+      // Subtasks follow a tick, and get their own states back when it's undone.
+      const remembered = `${selectedNote?.id}\n${m[3]}`;
+      if (next === 'x') subtasksBeforeTick.set(remembered, subtaskStates(lines, i));
+      cascadeTask(lines, i, next === 'x', subtasksBeforeTick.get(remembered));
+      if (next === ' ') subtasksBeforeTick.delete(remembered);
       // A repeating task comes back: its next one goes above it.
       const again = next === 'x' ? nextTaskLine(lines[i], todayKey()) : null;
       if (again) lines.splice(i, 0, again);

@@ -69,3 +69,17 @@ test('moving a card sets, swaps or clears the value', () => {
   assert.deepEqual(movedValue(list, 'Alex', 'sam', 'list'), { type: 'list', value: ['[[Sam]]'] }, 'without doubling an item it has');
   assert.equal(movedValue({ key: 'owners', type: 'list', value: ['Alex'] }, 'alex', null, 'list'), null);
 });
+
+test('multiple select boards group each option and preserve the other options on a move', () => {
+  const property = { key: 'status', type: 'multiselect', value: ['Doing', 'Important'] };
+  const { lanes } = boardLanes([note('a', property)], 'status', [], 'multiselect');
+  assert.deepEqual(lanes.map((l) => [l.key, l.ids]), [['doing', ['a']], ['important', ['a']]]);
+  assert.deepEqual(movedValue(property, 'Doing', 'Done', 'multiselect'), { type: 'multiselect', value: ['Important', 'Done'] });
+  assert.deepEqual(movedValue(property, 'Doing', 'important', 'multiselect'), { type: 'multiselect', value: ['Important'] });
+  assert.deepEqual(movedValue(undefined, null, 'Done', 'select'), { type: 'select', value: 'Done' });
+});
+
+test('percentage lanes display percents and moving cards preserves stored fractions', () => {
+  assert.equal(laneLabel('0.75', 'percent'), '75%');
+  assert.deepEqual(movedValue(undefined, null, '0.75', 'percent'), { type: 'percent', value: 0.75 });
+});

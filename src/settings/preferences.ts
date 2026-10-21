@@ -48,6 +48,8 @@ export type Preferences = {
   accent: Accent;
   /** The faint paper texture on the window background. */
   grain: boolean;
+  /** The typeface for note titles and headings. */
+  titleFont: 'serif' | 'sans';
   /** Whether a note's properties start folded to one line; `auto` folds more than three. */
   propertiesFold: 'auto' | 'expanded' | 'collapsed';
   /** Property names kept out of sight in every note, until “Show hidden”. */
@@ -68,6 +70,7 @@ export const DEFAULTS: Preferences = {
   dragHeadingSections: true,
   accent: 'yellow',
   grain: true,
+  titleFont: 'serif',
   propertiesFold: 'auto',
   hiddenProperties: [],
 };
@@ -109,6 +112,8 @@ export function applyPreferences() {
   else delete document.documentElement.dataset.accent;
   if (getPreference('grain')) delete document.documentElement.dataset.grain;
   else document.documentElement.dataset.grain = 'off';
+  if (getPreference('titleFont') === 'sans') document.documentElement.dataset.titleFont = 'sans';
+  else delete document.documentElement.dataset.titleFont;
 }
 
 export function onPreferenceChange(callback: (name: keyof Preferences) => void) {

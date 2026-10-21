@@ -146,6 +146,7 @@ impl Vault {
     /// Create a note with `content` as its body, optionally as the journal page
     /// for a day, starting with `properties` in its frontmatter.
     pub(crate) fn create_note_with(&self, folder_id: Option<String>, content: &str, journal: Option<NaiveDate>, properties: &[Property]) -> Result<Note, String> {
+        for p in properties { crate::properties::check_key(&p.key)?; p.value.validate()?; }
         let now = Utc::now();
         let meta = NoteFrontmatter {
             id: Uuid::new_v4().to_string(),
@@ -588,6 +589,27 @@ mod tests {
         let saved = vault.save_note(&note.id, "# A\n\nNew body".into()).unwrap();
         assert_eq!(saved.properties, set.properties);
         assert!(vault.set_property(&note.id, "status", None, None).unwrap().properties.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn specialized_properties_survive_body_edits_and_reopening() {
+        let dir = env::temp_dir().join(format!("tagdown-test-{}", Uuid::new_v4()));
+        let vault = Vault::open_or_create(dir.clone()).unwrap();
+        let properties = vec![
+            Property { key: "summary".into(), value: PropertyValue::Longtext("  one\n\ntwo\t".into()) },
+            Property { key: "labels".into(), value: PropertyValue::Multiselect(vec!["a, b".into(), "[[Sam]]".into()]) },
+            Property { key: "progress".into(), value: PropertyValue::Percent(0.75) },
+            Property { key: "scheduled".into(), value: PropertyValue::Datetime("2026-10-19T14:30:00".into()) },
+        ];
+        let note = vault.create_note_with(None, "# Fields\n\nBody", None, &properties).unwrap();
+        assert_eq!(note.properties, properties);
+        vault.save_note(&note.id, "# Fields\n\nChanged body".into()).unwrap();
+        drop(vault);
+        let reopened = Vault::open_or_create(dir.clone()).unwrap();
+        let saved = reopened.get_note_content(&note.id).unwrap();
+        assert_eq!(reopened.list_notes(None, SortOrder::UpdatedDesc).unwrap().iter().find(|n| n.id == note.id).unwrap().properties, properties);
+        assert_eq!(saved.content, "# Fields\n\nChanged body");
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -132,6 +132,9 @@
   --pv-note-tip-icon: #6a4cb3;
 }
 
+/* Settings → Appearance → Title font: sans-serif titles and headings. */
+:root[data-title-font="sans"] { --font-display: var(--font-ui); }
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   /* Warm charcoal rather than blue graphite. */

@@ -20,7 +20,7 @@ execFileSync('npx', [
   '--skipLibCheck',
 ], { stdio: 'inherit' });
 
-const { parseListInput, parseInput, convertValue, defaultValue, valueText, keyProblem } = await import(new URL('../dist-test/props/propertyValues.js', import.meta.url).href);
+const { parseListInput, parseInput, convertValue, defaultValue, displayText, inputText, valueText, keyProblem, EDITABLE_TYPES, noteIcon, firstGrapheme, parseAliasInput, isAliasKey, isIconKey } = await import(new URL('../dist-test/props/propertyValues.js', import.meta.url).href);
 
 test('list fields split on commas outside links and quotes', () => {
   assert.deepEqual(parseListInput('Alex, [[Sam, the elder]], "a, b" ,, '), ['Alex', '[[Sam, the elder]]', 'a, b']);
@@ -57,4 +57,64 @@ test('names must be usable and unique', () => {
   assert.match(keyProblem('#x', []), /can’t be/);
   assert.match(keyProblem('owner', ['owner']), /already has/);
   assert.equal(keyProblem('owner', ['owner'], 'owner'), null);
+});
+
+test('all editable types have defaults and lossless input representations', () => {
+  for (const { type } of EDITABLE_TYPES) {
+    const value = defaultValue(type, '2026-10-19');
+    assert.deepEqual(parseInput(type, inputText(value)), value, type);
+  }
+  const items = { type: 'list', value: ['a, b', 'say "hi"', 'C:\\notes', '[[Sam, the elder]]'] };
+  assert.deepEqual(parseInput('list', inputText(items)), items);
+});
+
+test('specialized fields validate without losing multiline or international text', () => {
+  assert.deepEqual(parseInput('longtext', '  line one\n\nline two\t '), { type: 'longtext', value: '  line one\n\nline two\t ' });
+  assert.equal(parseInput('date', '2026-02-30'), null);
+  assert.equal(parseInput('date', '2025-02-29'), null);
+  assert.ok(parseInput('date', '2024-02-29'));
+  assert.deepEqual(parseInput('datetime', '2026-10-19T14:30'), { type: 'datetime', value: '2026-10-19T14:30:00' });
+  for (const text of ['2026-02-30T10:00', '2026-10-19T25:00', '2026-10-19T10:60']) assert.equal(parseInput('datetime', text), null);
+  assert.ok(parseInput('url', 'https://example.com/path?q=a#part'));
+  for (const text of ['javascript:alert(1)', 'file:///tmp/a', 'https://']) assert.equal(parseInput('url', text), null);
+  assert.ok(parseInput('email', 'sascha+notes@example.de'));
+  assert.equal(parseInput('email', 'bad@'), null);
+  assert.ok(parseInput('phone', '+49 (30) 123-456'));
+  assert.equal(parseInput('phone', 'call me'), null);
+  assert.deepEqual(parseInput('multiselect', 'Doing, Done, Doing'), { type: 'multiselect', value: ['Doing', 'Done'] });
+});
+
+test('percent, duration, currency and rating preserve numeric semantics', () => {
+  assert.deepEqual(parseInput('percent', '75%'), { type: 'percent', value: 0.75 });
+  assert.equal(displayText({ type: 'percent', value: 0.75 }), '75%');
+  assert.deepEqual(parseInput('duration', '1:30:05.5'), { type: 'duration', value: 5405.5 });
+  assert.deepEqual(parseInput('duration', '90'), { type: 'duration', value: 90 });
+  assert.equal(displayText({ type: 'duration', value: 5405.5 }), '1:30:05.5');
+  for (const text of ['-5', '1:60', '1.5:02', 'Infinity']) assert.equal(parseInput('duration', text), null);
+  assert.equal(displayText({ type: 'currency', value: 12.5 }), '¤12.50');
+  for (const text of ['6', '-1', '2.5', 'Infinity']) assert.equal(parseInput('rating', text), null);
+  assert.equal(displayText({ type: 'rating', value: 3 }), '★★★☆☆');
+  assert.deepEqual(convertValue({ type: 'percent', value: 0.75 }, 'number'), { type: 'number', value: 0.75 });
+  assert.deepEqual(convertValue({ type: 'number', value: 0.75 }, 'percent'), { type: 'percent', value: 0.75 });
+  assert.deepEqual(convertValue({ type: 'date', value: '2026-10-19' }, 'datetime'), { type: 'datetime', value: '2026-10-19T00:00:00' });
+  assert.deepEqual(convertValue({ type: 'list', value: ['a', 'b'] }, 'multiselect'), { type: 'multiselect', value: ['a', 'b'] });
+});
+
+test('a note’s icon is the first emoji of its icon property', () => {
+  assert.equal(noteIcon([{ key: 'Icon', type: 'text', value: ' 🚀 ' }]), '🚀');
+  assert.equal(noteIcon([{ key: 'icon', type: 'text', value: '👩🏽‍💻 extra' }]), '👩🏽‍💻', 'skin tone and joiners stay one emoji');
+  assert.equal(noteIcon([{ key: 'icon', type: 'list', value: ['🇩🇪', '📚'] }]), '🇩🇪');
+  assert.equal(noteIcon([{ key: 'icon', type: 'text', value: '' }]), null, 'blank keeps the type’s icon');
+  assert.equal(noteIcon([{ key: 'emoji', type: 'text', value: '🚀' }]), null);
+  assert.equal(noteIcon(undefined), null);
+  assert.equal(firstGrapheme(''), '');
+  assert.ok(isIconKey(' ICON ') && !isIconKey('icons'));
+});
+
+test('aliases save as text for one name and a list for several', () => {
+  assert.ok(isAliasKey('alias') && isAliasKey('Aliases') && !isAliasKey('aka'));
+  assert.deepEqual(parseAliasInput(' Sam '), { type: 'text', value: 'Sam' });
+  assert.deepEqual(parseAliasInput('Sam, Samuel, Sam'), { type: 'list', value: ['Sam', 'Samuel'] });
+  assert.deepEqual(parseAliasInput('"Rivera, S.", Sam'), { type: 'list', value: ['Rivera, S.', 'Sam'] }, 'quoted commas stay in a name');
+  assert.deepEqual(parseAliasInput(''), { type: 'text', value: '' });
 });

@@ -664,22 +664,23 @@ impl PropertyFilter {
 
 fn equals(value: &PropertyValue, want: &str, today: NaiveDate) -> bool {
     match value {
-        PropertyValue::Number(n) => want.parse::<f64>().is_ok_and(|w| *n == w),
+        v if v.number().is_some() => want.parse::<f64>().is_ok_and(|w| v.number() == Some(w)),
         PropertyValue::Checkbox(b) => matches!((b, want.to_lowercase().as_str()), (true, "true" | "yes") | (false, "false" | "no")),
         PropertyValue::Date(d) => date_value(want, today) == Some(*d),
-        PropertyValue::Text(t) => link_text(t) == link_text(want),
-        PropertyValue::List(items) => items.iter().any(|item| link_text(item) == link_text(want)),
+        PropertyValue::Datetime(t) => date_value(want, today).map_or_else(|| t == want || t.strip_suffix(":00") == Some(want), |d| t.starts_with(&d.to_string())),
         PropertyValue::Raw(_) => false,
+        v => v.texts().iter().any(|t| link_text(t) == link_text(want)),
     }
 }
 
 fn in_range(value: &PropertyValue, lo: Option<&str>, hi: Option<&str>, today: NaiveDate) -> bool {
     match value {
-        PropertyValue::Number(n) => {
+        v if v.number().is_some() => {
+            let n = v.number().unwrap();
             let bound = |b: Option<&str>| b.map(|b| b.parse::<f64>().ok());
             match (bound(lo), bound(hi)) {
                 (Some(None), _) | (_, Some(None)) => false,
-                (lo, hi) => lo.flatten().is_none_or(|lo| *n >= lo) && hi.flatten().is_none_or(|hi| *n <= hi),
+                (lo, hi) => lo.flatten().is_none_or(|lo| n >= lo) && hi.flatten().is_none_or(|hi| n <= hi),
             }
         }
         PropertyValue::Date(d) => {
@@ -688,6 +689,11 @@ fn in_range(value: &PropertyValue, lo: Option<&str>, hi: Option<&str>, today: Na
                 (Some(None), _) | (_, Some(None)) => false,
                 (lo, hi) => lo.flatten().is_none_or(|lo| *d >= lo) && hi.flatten().is_none_or(|hi| *d <= hi),
             }
+        }
+        PropertyValue::Datetime(t) => {
+            let bound = |b: &str, end: bool| date_value(b, today).map(|d| format!("{d}T{}", if end { "23:59:59" } else { "00:00:00" }))
+                .or_else(|| chrono::NaiveDateTime::parse_from_str(b, "%Y-%m-%dT%H:%M:%S").or_else(|_| chrono::NaiveDateTime::parse_from_str(b, "%Y-%m-%dT%H:%M")).ok().map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string()));
+            lo.is_none_or(|lo| bound(lo, false).is_some_and(|lo| *t >= lo)) && hi.is_none_or(|hi| bound(hi, true).is_some_and(|hi| *t <= hi))
         }
         _ => false,
     }
@@ -698,17 +704,19 @@ fn in_range(value: &PropertyValue, lo: Option<&str>, hi: Option<&str>, today: Na
 fn compare(a: &PropertyValue, b: &PropertyValue) -> Ordering {
     fn rank(v: &PropertyValue) -> u8 {
         match v {
-            PropertyValue::Number(_) => 0,
-            PropertyValue::Date(_) => 1,
+            v if v.number().is_some() => 0,
+            PropertyValue::Date(_) | PropertyValue::Datetime(_) => 1,
             PropertyValue::Checkbox(_) => 2,
-            PropertyValue::Text(_) | PropertyValue::List(_) => 3,
             PropertyValue::Raw(_) => 4,
+            _ => 3,
         }
     }
     let text = |v: &PropertyValue| v.texts().first().map(|t| link_text(t)).unwrap_or_default();
     match (a, b) {
-        (PropertyValue::Number(x), PropertyValue::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+        (x, y) if x.number().is_some() && y.number().is_some() => x.number().partial_cmp(&y.number()).unwrap_or(Ordering::Equal),
         (PropertyValue::Date(x), PropertyValue::Date(y)) => x.cmp(y),
+        (PropertyValue::Datetime(x), PropertyValue::Datetime(y)) => x.cmp(y),
+        (PropertyValue::Date(_), PropertyValue::Datetime(_)) | (PropertyValue::Datetime(_), PropertyValue::Date(_)) => a.display().cmp(&b.display()),
         (PropertyValue::Checkbox(x), PropertyValue::Checkbox(y)) => x.cmp(y),
         _ if rank(a) != rank(b) => rank(a).cmp(&rank(b)),
         _ => text(a).cmp(&text(b)),
@@ -803,6 +811,25 @@ mod tests {
         assert_eq!(t("sort:-due"), vec!["Atlas", "Beacon", "Dune", "Comet"], "notes without it last, most recent first");
         assert_eq!(q("status=active sort:due").columns, vec!["status", "due"]);
         assert_eq!(q("status=active").notes[0].properties.len(), 4);
+    }
+
+    #[test]
+    fn specialized_properties_filter_and_sort_by_their_underlying_values() {
+        use PropertyValue::*;
+        let today = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
+        for value in [Currency(12.5), Percent(12.5), Duration(12.5), Rating(4.0)] {
+            let n = value.number().unwrap();
+            assert!(equals(&value, &n.to_string(), today));
+            assert!(in_range(&value, Some("0"), Some("20"), today));
+            assert_eq!(compare(&value, &Number(n + 1.0)), Ordering::Less);
+        }
+        assert!(equals(&Select("Doing".into()), "doing", today));
+        assert!(equals(&Multiselect(vec!["Doing".into(), "Important".into()]), "important", today));
+        let dt = Datetime("2026-10-19T14:30:00".into());
+        assert!(equals(&dt, "today", today));
+        assert!(in_range(&dt, Some("today"), Some("today"), today));
+        assert!(!in_range(&dt, Some("2026-10-19T15:00"), None, today));
+        assert_eq!(compare(&dt, &Datetime("2026-10-20T09:00:00".into())), Ordering::Less);
     }
 
     #[test]

@@ -290,7 +290,7 @@ impl Vault {
         let wanted = url.trim().trim_end_matches('/');
         Ok(self.notes_with_content()?.into_iter().map(|(n, _)| n).find(|n| {
             n.folder_id.as_deref() != Some("archive")
-                && n.properties.iter().any(|p| p.key.eq_ignore_ascii_case(URL_KEY) && matches!(&p.value, PropertyValue::Text(t) if t.trim().trim_end_matches('/') == wanted))
+                && n.properties.iter().any(|p| p.key.eq_ignore_ascii_case(URL_KEY) && matches!(&p.value, PropertyValue::Text(t) | PropertyValue::Url(t) if t.trim().trim_end_matches('/') == wanted))
         }))
     }
 

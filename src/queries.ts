@@ -7,7 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { renderPreview } from './tagdown/renderer';
-import { defaultValue, valueText, type Property, type PropertyType, type PropertyValue } from './propertyValues';
+import { defaultValue, displayText, valueText, type Property, type PropertyType, type PropertyValue } from './propertyValues';
 import { propertyField } from './propertiesPanel';
 import { getOption, nextSort, setOption, withColumns } from './queryText';
 import { boardLanes, laneKey, movedValue, propertyOf, type Lane } from './boardLanes';
@@ -324,7 +324,7 @@ function propertyChips(note: QueryNote, columns: string[]): string {
   const chips = columns.flatMap((column) => {
     const property = note.properties?.find((p) => p.key.toLowerCase() === column.toLowerCase());
     if (!property || property.type === 'raw') return [];
-    const text = property.type === 'checkbox' ? (property.value ? '✓' : '✗') : valueText(property).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target);
+    const text = property.type === 'checkbox' ? (property.value ? '✓' : '✗') : displayText(property).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target);
     if (!text) return [];
     return [`<span class="td-query-prop"><span class="td-query-prop-key">${escapeHtml(property.key)}</span>${escapeHtml(text)}</span>`];
   });
@@ -334,7 +334,7 @@ function propertyChips(note: QueryNote, columns: string[]): string {
 /** A value as plain text, links as their labels. */
 function plainText(property: Property): string {
   if (property.type === 'checkbox') return property.value ? '✓' : '';
-  return valueText(property).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target);
+  return displayText(property).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target);
 }
 
 /**

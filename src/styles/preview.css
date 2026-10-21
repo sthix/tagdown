@@ -755,8 +755,20 @@
 :is(.preview, .tagdown-reference-preview) .td-details > :nth-child(2) { margin-top: 0; }
 :is(.preview, .tagdown-reference-preview) .td-details > :last-child  { margin-bottom: 0; }
 
-/* ---- Mermaid passthrough (until mermaid.js replaces innerHTML with SVG) ---- */
+/* ---- Mermaid diagrams rendered by Pele ---- */
 :is(.preview, .tagdown-reference-preview) pre.mermaid {
+  --pele-bg: var(--pv-surface);
+  --pele-fg: var(--pv-ink);
+  --pele-muted: var(--pv-ink-soft);
+  --pele-line: var(--pv-ink-soft);
+  --pele-surface: var(--bg-preview);
+  --pele-surface-alt: var(--pv-surface);
+  --pele-border: var(--pv-ink-soft);
+  --pele-accent: var(--pv-accent);
+  --pele-critical: var(--danger);
+  --pele-error: var(--danger);
+  --pele-font: var(--font-ui);
+  --pele-font-mono: var(--font-mono);
   background: var(--pv-surface);
   border: 1px solid var(--pv-rule);
   border-radius: 8px;
@@ -768,9 +780,10 @@
   white-space: pre-wrap;
   text-align: center;
 }
-:is(.preview, .tagdown-reference-preview) pre.mermaid svg {
+:is(.preview, .tagdown-reference-preview) pre.mermaid > svg {
   max-width: 100%;
   height: auto;
+  vertical-align: middle;
 }
 
 /* ---------- code blocks (td-code) ---------- */
@@ -860,13 +873,39 @@
   font-size: 10.5px;
   letter-spacing: 0;
 }
+.preview .backlinks-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 -18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.preview .backlinks-toggle svg {
+  margin-right: -2px;
+  opacity: 0;
+  transition: transform .15s ease, opacity .12s ease;
+}
+.preview .backlinks-toggle:hover, .preview .backlinks-toggle:focus-visible { color: var(--ink-2); }
+.preview .backlinks:hover .backlinks-toggle svg,
+.preview .backlinks-toggle:focus-visible svg,
+.preview .backlinks.is-collapsed .backlinks-toggle svg { opacity: 1; }
+.preview .backlinks.is-collapsed .backlinks-toggle svg { transform: rotate(-90deg); }
+.preview .backlinks.is-collapsed h2 { margin-bottom: 0; }
+.preview .backlinks.is-collapsed .backlinks-body { display: none; }
 .preview .backlinks-empty { margin: 0; color: var(--ink-3); font-size: 12.5px; }
 .preview .backlinks-group {
   display: flex; align-items: center; gap: 6px;
   margin: 12px 0 4px; padding: 0 10px;
   color: var(--ink-2); font: 600 12px var(--font-ui); letter-spacing: 0;
 }
-.preview .backlinks-group:first-of-type { margin-top: 4px; }
+.preview .backlinks-body > .backlinks-group:first-child { margin-top: 4px; }
 .preview .backlinks-group span { color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
 .preview .backlinks-group .type-emoji, .preview .backlink-title .type-emoji { width: auto; line-height: 1; }
 .preview .backlinks-empty code { font-size: 11.5px; }

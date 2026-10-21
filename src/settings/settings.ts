@@ -154,6 +154,18 @@ const PAGES: Page[] = [
         rows: [
           { label: 'Preview text size', control: { kind: 'range', name: 'previewFontSize', min: 13, max: 20, unit: 'px' } },
           {
+            label: 'Title font',
+            description: 'The typeface for note titles and headings.',
+            control: {
+              kind: 'segmented',
+              name: 'titleFont',
+              options: [
+                { value: 'serif', label: 'Serif' },
+                { value: 'sans', label: 'Sans-serif' },
+              ],
+            },
+          },
+          {
             label: 'Line length',
             description: 'How wide text runs in the full preview (⌘3).',
             control: {

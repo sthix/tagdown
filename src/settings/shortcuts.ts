@@ -9,6 +9,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['⌘K'], action: 'Command palette' },
       { keys: ['⌘N'], action: 'New note' },
       { keys: ['⌘⇧J'], action: 'Today’s journal page' },
+      { keys: ['⌥⌘J'], action: 'Quick capture from any app' },
       { keys: ['⌘S'], action: 'Save now' },
       { keys: ['⌘,'], action: 'Settings' },
       { keys: ['⌘\\'], action: 'Focus mode' },

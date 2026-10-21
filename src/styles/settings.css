@@ -1162,24 +1162,6 @@
 .hidden-prop span { color: var(--ink-3); font-size: 14px; line-height: 1; }
 .hidden-prop:hover { background: var(--pressed-overlay); color: var(--ink); }
 
-/* Quick capture: the confirm dialog's shell with a text box. */
-.capture-dialog { width: min(480px, calc(100vw - 48px)); }
-.capture-text {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-field);
-  color: var(--ink);
-  font: 14px/1.5 var(--font-ui);
-  resize: vertical;
-}
-.capture-text:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
-.capture-error { margin: 0; color: var(--danger); font-size: 12.5px; }
-.capture-actions { align-items: center; }
-.capture-task { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12.5px; cursor: pointer; }
-.capture-task input { margin: 0; accent-color: var(--accent); }
-.capture-hint { margin-right: auto; margin-left: 8px; color: var(--ink-3); font-size: 11.5px; }
 
 /* Saving a web link: the box, and the offer after pasting a link. */
 .link-dialog .link-url { font-family: var(--font-mono); font-size: 13px; }

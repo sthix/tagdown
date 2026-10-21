@@ -4,6 +4,7 @@ use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 mod commands;
+mod quick_capture;
 
 // The vault lives in `tagdown-core`; re-exported so commands can use `crate::models` etc.
 pub use tagdown_core::{history, journal, links, models, properties, query, search_index, site, tasks, templates, types, vault, vaults, watcher, weblink};
@@ -30,15 +31,41 @@ pub fn run() {
         .manage(Mutex::new(AppState { vault }))
         .manage(search)
         .menu(app_menu)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            // Tabs live in the page; it handles these.
-            id @ ("new-tab" | "close-tab") => { let _ = app.emit("menu", id); }
-            "close-window" => {
-                if let Some(window) = app.get_webview_window("main") { let _ = window.close(); }
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Keep the editor and its save handler available to global capture.
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
-            _ => {}
+        })
+        .on_menu_event(|app, event| {
+            if let Some(capture) = app.get_webview_window("quick-capture") {
+                if capture.is_focused().unwrap_or(false) {
+                    match event.id().as_ref() {
+                        "close-tab" | "close-window" => {
+                            let _ = capture.emit("quick-capture-dismiss", ());
+                            return;
+                        }
+                        "new-tab" => return,
+                        _ => {}
+                    }
+                }
+            }
+            match event.id().as_ref() {
+                // Tabs live in the page; it handles these.
+                id @ ("new-tab" | "close-tab") => { let _ = app.emit("menu", id); }
+                "close-window" => {
+                    if let Some(window) = app.get_webview_window("main") { let _ = window.close(); }
+                }
+                _ => {}
+            }
         })
         .setup(move |app| {
+            if let Err(error) = quick_capture::register(app.handle()) {
+                eprintln!("quick capture shortcut unavailable: {error}");
+            }
             // Images in notes load from the vault through the asset protocol.
             app.asset_protocol_scope().allow_directory(&vault_root, true)?;
             let handle = app.handle().clone();
@@ -50,6 +77,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            quick_capture::open_quick_capture,
             commands::notes::list_notes,
             commands::notes::get_note_content,
             commands::notes::create_note,
@@ -106,8 +134,17 @@ pub fn run() {
             commands::attachments::import_attachment,
             commands::attachments::find_attachment,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }
 
 /// The standard macOS menu, except that ⌘W closes a tab (⇧⌘W the window) and ⌘T opens one.

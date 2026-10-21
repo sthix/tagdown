@@ -25,7 +25,7 @@ A day's page is titled with its date in `YYYY-MM-DD` form, so `[[2026-10-13]]` l
 
 ## Quick capture
 
-With Tagdown active, press **⌥⌘J** (or choose **Quick capture** in the command palette) to jot something down without leaving the note you're in. Type, press **↩**, and it's added to the end of today's page, which is started if needed. **⇧↩** adds a new line; tick **As a task** to add it as an open task.
+Press **⌥⌘J** from any app while Tagdown is running (or choose **Quick capture** in the command palette). A floating capture bar appears above your windows, including across Spaces and fullscreen apps. Type, press **↩**, and it's added to the end of today's page, which is started if needed. **⇧↩** adds a new line; tick **As a task** to add it as an open task. **Esc** dismisses the bar and keeps your draft for next time. Closing the editor window keeps capture available; **⌘Q** quits Tagdown.
 
 A capture that's a list item, like `- Call Sam`, joins the list at the end of the page instead of starting a new one. From the terminal, `tagdown today "- Call Sam"` does the same.
 

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick capture interaction fixture</title>
+  <style>
+    body { margin: 0; background: #373632; }
+    #capture { width: min(732px, calc(100vw - 48px)); margin: 100px auto 40px; }
+    output { display: block; text-align: center; color: #fff; font: 14px system-ui; }
+  </style>
+  <div id="capture"></div>
+  <output aria-live="polite"></output>
+  <script type="module">
+    import { mountQuickCapture } from '/src/quickCapture.ts';
+    import '/src/styles/tokens.css';
+    const params = new URLSearchParams(location.search);
+    if (params.has('dark')) document.documentElement.dataset.theme = 'dark';
+    let count = 0;
+    mountQuickCapture(document.querySelector('#capture'), {
+      save: async (day, text, asTask) => {
+        count++;
+        if (params.has('fail')) throw new Error('The journal could not be saved. Try again.');
+        document.querySelector('output').textContent = JSON.stringify({ day, text, asTask, count });
+      },
+      close: () => { document.querySelector('#capture').hidden = true; },
+    });
+  </script>
+</html>

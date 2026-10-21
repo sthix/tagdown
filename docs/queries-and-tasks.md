@@ -103,7 +103,7 @@ A task is any list item written as `- [ ]` (open) or `- [x]` (done):
 - [ ] Publish the docs site
 ```
 
-Click a checkbox in the preview to tick it; the source is updated for you.
+Click a checkbox in the preview to tick it; the source is updated for you. Ticking a task also ticks every task nested under it. Untick it again and the nested tasks go back to how they were, as long as you haven't added or removed any in between and the app hasn't restarted.
 
 ### Days, priorities and repeats
 

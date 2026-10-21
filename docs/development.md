@@ -7,7 +7,7 @@ Tagdown Editor is a [Tauri v2](https://v2.tauri.app) app:
 | Layer | Technology | Where |
 | --- | --- | --- |
 | UI | Vanilla TypeScript + Vite | `src/` |
-| Tagdown parser and renderer | TypeScript, KaTeX, Mermaid | `src/tagdown/` |
+| Tagdown parser and renderer | TypeScript, KaTeX, Pele (Mermaid-syntax diagrams) | `src/tagdown/` |
 | App commands | Rust (Tauri commands) | `src-tauri/src/commands/` |
 | Vault, search, links, history, queries | Rust (`tagdown-core` crate) | `src-tauri/core/src/` |
 | CLI and MCP server | Rust (`tagdown` binary) | `src-tauri/core/src/bin/tagdown.rs`, `src-tauri/core/src/mcp.rs` |
@@ -28,6 +28,7 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 ```text
 .
 ├── src/
+│   ├── bootstrap.ts        # entry point: the editor, or the quick capture window
 │   ├── main.ts             # app shell: sidebar, note list, editor, shortcuts
 │   ├── commandPalette.ts   # ⌘K palette
 │   ├── wikilinks.ts        # title/path/alias resolution and ranked autocomplete
@@ -44,8 +45,10 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 │   ├── typeHierarchy.ts    # nested type rows and descendant matching
 │   ├── linkFields.ts       # properties that link to notes of another type
 │   ├── taskRepeat.ts       # the next task of a repeating one
+│   ├── taskCascade.ts      # ticking a task ticks its subtasks; unticking restores them
 │   ├── journal.ts          # day keys, the journal calendar, appending to a page
-│   ├── quickCapture.ts     # ⌥⌘J quick capture box
+│   ├── quickCapture.ts     # appending a capture to today's page
+│   ├── quickCaptureWindow.ts # the floating ⌥⌘J capture bar
 │   ├── localGraph.ts       # the ⌘⇧G graph of a note's links
 │   ├── webLinks.ts         # saving a web link as a Link note (box and paste offer)
 │   ├── localImages.ts      # images copied into attachments/ and loaded from the vault
@@ -56,9 +59,10 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 │   ├── publish.ts          # static website publishing
 │   ├── settings/           # settings dialog, theme, and editor preferences
 │   ├── styles/             # CSS (tokens.css holds the light and dark palettes)
-│   └── tagdown/            # parser, renderer, blocks, slides, syntax reference data
+│   └── tagdown/            # parser, renderer, blocks, slides, diagrams, syntax reference data
 ├── src-tauri/
 │   ├── src/commands/       # Tauri commands called from the UI
+│   ├── src/quick_capture.rs # the global ⌥⌘J shortcut and capture window
 │   └── core/src/           # vault, vaults, folders, frontmatter, properties,
 │                           # search_index, links (backlinks, local graph), history,
 │                           # tasks, query, types (inheritance), templates (built-ins),
@@ -68,7 +72,7 @@ The one thing that reaches the network is saving a web link (`weblink.rs`): it f
 ├── scripts/gen-syntax.mjs  # generates core/src/syntax.md from the reference data
 ├── tests/                  # Node tests for rendering, blocks, lists, slash commands, slides,
 │                           # board lanes, table selection, journal, graph layout,
-│                           # web links, figures, task repeats, syntax
+│                           # web links, figures, task repeats and subtasks, diagrams, syntax
 └── docs/                   # this documentation
 ```
 

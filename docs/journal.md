@@ -38,7 +38,7 @@ Below a day's page, **This day** collects the rest of the day from across the va
 - **Edited**: older notes you last changed that day. A note edited again later moves to that later day.
 - **Dated this day**: notes with a date property set to the day, such as `date: 2026-10-13` on a meeting note.
 
-Click any of them to open it. **Linked mentions** follows below.
+Click any of them to open it. **Linked mentions** follows below. Click either heading to fold that section; it stays folded on every page until you open it again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/journal-day-dark.png" />

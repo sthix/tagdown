@@ -59,7 +59,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 ### Writing
 
 - **Tabs and side-by-side panes**: ⌘-click any note or link for a new tab, ⌥⌘-click (or drag it to the edge) to see two notes side by side. Tabs and panes are remembered per vault.
-- **Properties that stay out of the way**: frontmatter fields as typed inputs that fold to one line of chips (⌘⇧I), and fields like `id` can be hidden in every note.
+- **Properties that stay out of the way**: frontmatter fields as typed inputs that fold to one line of chips (⌘⇧I), and fields like `id` can be hidden in every note. An `icon` property gives any note its own emoji.
 - **Source, split, and preview modes** (⌘1 / ⌘2 / ⌘3), and **edit in place** by clicking any block in the preview.
 - **Slash commands**: type `/` to turn a line into a heading, list, or task, or to insert any component, a note link, or a date.
 - **Linked notes from templates**: `/template` creates a note in a new tab with its title selected. Name it, and the link left in the original note updates with the title. Works in source, split, and preview modes, including an empty final block.
@@ -69,7 +69,7 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Formatting toolbar** with one-click templates for every Tagdown component.
 - **Command palette** (⌘K) to jump to any note, search, or run any action.
 - **Focus mode** (⌘\\) hides everything but the note.
-- **Light and dark themes** (⌘⇧D), or follow the system, with sixteen **accent colours** to tint the app and an optional paper grain.
+- **Light and dark themes** (⌘⇧D), or follow the system, with sixteen **accent colours** to tint the app, an optional paper grain, and serif or sans-serif titles.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/panes-dark.png" />
@@ -81,13 +81,13 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Local-first vaults** of plain `.md` files (`~/Documents/Tagdown` by default, or any folder, Obsidian vaults included), whose folders on disk are Tagdown's folders. Keep several and switch between them.
 - **Tags** from the note body or frontmatter, shown as a colour-coded tree.
 - **Wikilinks** with autocomplete by title, file path, or a unique frontmatter alias. Suggestions prioritize matching names, then recently edited and frequently linked notes. Links follow title renames automatically and show up as *Linked mentions* under the target note. A local graph (⌘⇧G) shows a note's links both ways, colored by note type.
-- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J while Tagdown is active, or `tagdown today "…"` in a terminal) adds a line to today's page.
+- **Journal** (⌘⇧J): a page for every day with a calendar, `[[2026-10-13]]` date links, and a template for new days. Each day lists its open tasks and the notes created, edited or dated that day. Quick capture (⌥⌘J from any app while Tagdown is running, or `tagdown today "…"` in a terminal) adds a line to today's page.
 - **Full-text search** backed by Tantivy, with `tag:`, `title:`, `"phrases"`, and `-exclusions`.
 - **Editable starter templates** for Journal, Book, Person, Project, Meeting, and Recipe, ready when you open a vault. **Settings → Templates** lets you edit, turn off, or reset each one without changing existing notes.
 - **Note types and child types**: use the **+** on a type row to create a child, such as Author under Person. Children inherit properties and icons; switch inherited fields off, override their defaults, or add your own. Parent views and link fields include children. A template property such as `author: "[[Person]]"` suggests and creates notes of that type.
 - **Saved web links**: paste a link on an empty line (or use *Save web link…*) to keep the page as a Link note with its title, description and opening text.
 - **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables (tick rows to set a property on all of them at once), kanban **boards** (drag a card to change its status) or **cards** with cover images.
-- **Tasks** with a day (`[[2026-10-20]]`), a priority (`!high`) and repeats (`every:week`), ticked right in any list. ⌘⇧T shows them as **Today**, **Upcoming** and **Inbox**.
+- **Tasks** with a day (`[[2026-10-20]]`), a priority (`!high`) and repeats (`every:week`), ticked right in any list; ticking one ticks its subtasks too. ⌘⇧T shows them as **Today**, **Upcoming** and **Inbox**.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
 
 <picture>
@@ -228,7 +228,7 @@ The guides below are also published at **[sthix.github.io/tagdown](https://sthix
 | Vault, search, CLI, MCP | Rust (`tagdown-core`) |
 | Search | Tantivy |
 | Math rendering | KaTeX |
-| Diagrams | Mermaid |
+| Diagrams | Pele (Mermaid syntax) |
 | Storage model | Local filesystem vault of Markdown files |
 
 ## Validation

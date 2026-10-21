@@ -60,6 +60,8 @@ Click the icon to the left of a property to change its field type. The same edit
 | Single select / Multiple select | Pick from values already used for that property across the vault, or type a new option. Multiple select stores unique options and shows removable chips. |
 | List | Comma-separated text or wikilinks. Quote an item containing a comma. |
 
+Two property names do something special. **`icon`** gives the note its own emoji: click it to pick one, or type or paste any emoji (⌃⌘Space opens the macOS picker). It shows before the note's title in the note list, its tab, and linked mentions, in place of its [type's](organizing.md#note-types) icon; **Use the type's icon** clears it. **`alias`** or **`aliases`** gives the note [other names](organizing.md#aliases) to link by: type one name, or several separated by commas, and it's saved as text or a list.
+
 Specialized types keep their choice in a YAML comment, for example `progress: 0.75 # tagdown:type=percent`. The underlying values remain ordinary YAML strings, numbers or lists, and types survive renaming, templates and reopening the vault. Nested YAML remains available as a read-only field. Created and updated times already belong to the note; linked records use `[[wikilinks]]` and [typed link fields](organizing.md#links-to-other-types).
 
 Fields you rarely look at, such as an `id` or a sync timestamp, can be hidden in every note: hover the row and click the eye. **Show hidden** under the list brings them back for a moment; unhide them for good from the row, or in **Settings → Editor → Hidden properties**. Hiding only changes the view; the field stays in the file.
@@ -148,7 +150,7 @@ The floating toolbar at the bottom of the editor inserts headings, bold, italic,
 
 ## Themes and accents
 
-Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS, and set the preview's text size and line length.
+Tagdown has a light and a dark theme. **⌘⇧D** switches between them. In **Settings → Appearance** (⌘,) you can also choose **System** to follow macOS, and set the preview's text size, the **Title font** (serif, the default, or sans-serif for note titles and headings), and line length.
 
 The **Accent** row picks the highlighter colour the whole app is tinted with, from sixteen: yellow (the default), lime, green, mint, teal, cyan, blue, indigo, purple, magenta, pink, red, coral, orange, peach, or graphite. It colours the marker behind the current sidebar item, text selection, the window's tint, and the app's controls, in both themes. **Paper grain** turns the faint texture on the window background on or off.
 
@@ -168,7 +170,7 @@ The **Accent** row picks the highlighter colour the whole app is tinted with, fr
 
 - **General.** What opens on launch (the tabs and panes you had open, today's journal page, or the most recent note), which view a note starts in or whether to remember the last one, whether archiving a note asks first, and where your vault lives, with **Reveal in Finder**. Deleting a note for good always asks.
 - **Editor.** Spellcheck, the size of the source text, when properties start folded, the properties hidden in every note, and **Headings move their section**, on by default, which decides whether dragging a heading takes the content under it along.
-- **Appearance.** Theme, accent colour, paper grain, preview text size, and line length.
+- **Appearance.** Theme, accent colour, paper grain, preview text size, title font, and line length.
 - **Shortcuts.** Every keyboard shortcut, also listed in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ## The built-in reference

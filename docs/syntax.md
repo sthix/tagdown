@@ -128,7 +128,7 @@ graph LR
 ```
 ````
 
-Math is rendered with KaTeX and diagrams with Mermaid.
+Math is rendered with KaTeX. Diagrams are written in Mermaid syntax and drawn with Pele, in the preview's light or dark colours.
 
 ## Media
 

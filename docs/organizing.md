@@ -84,7 +84,7 @@ A note titled after the type plus "Template" (**Book Template**, **Person Templa
 
 - its **properties**, with their values, so every Book gets `author`, `rating` and `started` (a property can also [link to another type](#links-to-other-types));
 - its **text** below the title;
-- its **`icon:`** property, an emoji, is the type's icon in the sidebar and the note list. It isn't copied into new notes.
+- its **`icon:`** property, an emoji, is the type's icon in the sidebar and the note list. It isn't copied into new notes. Any single note can still set an `icon` of its own, which shows instead of the type's (see [properties](writing-notes.md#properties)).
 
 <!-- {% raw %} -->
 
@@ -216,7 +216,7 @@ Results show highlighted excerpts. The same syntax works in [queries](queries-an
 - `[[Note title#Heading]]` jumps to a heading; `[[Note title|label]]` shows a different label.
 - A link can also name a note by its file, the way Obsidian writes them: `[[blog/my-post]]` for `blog/my-post.md`, or just `[[my-post]]` when no other note has that file name. A note whose title matches wins over a file match.
 - When you rename a note, links to it by title are updated automatically. Links that name it by its file still find it, so they're left as they are.
-- Below each note, **Linked mentions** lists the notes that link to it, with the lines that mention it.
+- Below each note, **Linked mentions** lists the notes that link to it, with the lines that mention it. Click its heading to fold it away; it stays folded in every note until you open it again.
 
 ### Aliases
 
@@ -226,7 +226,7 @@ Give a note alternate names with an `aliases` property. For example, a note titl
 aliases: [Atlas, Launch plan]
 ```
 
-`[[Atlas]]` and `[[Launch plan]]` then open that note, and their references count in linked mentions and the local graph. A single text value works too, as does the singular property name `alias`. Alias matching ignores case.
+`[[Atlas]]` and `[[Launch plan]]` then open that note, and their references count in linked mentions and the local graph. A single text value works too, as does the singular property name `alias`. In the properties panel, type one name or several separated by commas: one is saved as text, several as a list. Alias matching ignores case.
 
 Type `[[` and part of a title, file path, or alias to find a note. Suggestions prioritize how well the name matches, then recent edits and backlink counts. Selecting a suggestion inserts the note's title, using a file path with a title label when needed to distinguish notes with the same title.
 

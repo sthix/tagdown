@@ -14,14 +14,14 @@ import { boardLanes, laneKey, movedValue, propertyOf, type Lane } from './boardL
 import { resolveLocalImages } from './localImages';
 import { pickRows, selectionFor, type TableSelection } from './tableSelection';
 
-type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string };
+export type QueryNote = { id: string; title: string; folder: string | null; tags: string[]; updatedAt: string; createdAt?: string; properties?: Property[]; excerpt?: string; cover?: string; thoughtReasons?: string[] };
 export type NewNote = { folderId: string | null; tags: string[]; properties: Property[] };
 export type QueryTask = {
   noteId: string; noteTitle: string; text: string; done: boolean; line: number;
   /** Its day (YYYY-MM-DD), priority (1 high to 3 low) and repeat, and its text without those words. */
   date?: string | null; priority?: number | null; repeat?: string | null; label?: string;
 };
-type QueryOutput = {
+export type QueryOutput = {
   show: 'notes' | 'tasks' | 'table' | 'board' | 'cards';
   notes: QueryNote[];
   tasks: QueryTask[];
@@ -161,6 +161,11 @@ function paint(body: HTMLElement, result: Result, options: FillOptions, query: s
       ${byDay ? `<h4 class="td-query-day">${escapeHtml(group.title)}</h4>` : `<a class="td-query-note" href="#" data-open-note="${escapeHtml(group.id)}">${escapeHtml(group.title || 'Untitled')}</a>`}
       <ul class="td-query-tasks">${group.tasks.map(item).join('')}</ul>
     </div>`).join('') + more;
+}
+
+/** Reuse the query layouts for a workspace collection with already-loaded results. */
+export function renderQueryOutput(body: HTMLElement, output: QueryOutput, query: string, table: TableActions) {
+  paint(body, { ok: true, output }, { excludeId: null, table }, query);
 }
 
 /** A task's row, ticked through `toggleQueryTask`; `withNote` links the note it's in. */

@@ -53,6 +53,15 @@ pub async fn set_property(
 }
 
 #[tauri::command]
+pub async fn set_target_date(id: String, day: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    let note = state.vault.set_target_date(&id, day.as_deref())?;
+    search.index(&note, &state.vault.get_note_content(&id)?.content);
+    let _ = app.emit("note-saved", &note);
+    Ok(note)
+}
+
+#[tauri::command]
 pub async fn move_note(id: String, folder_id: Option<String>, app: tauri::AppHandle, state: State<'_, Mutex<AppState>>, search: State<'_, SearchState>) -> Result<Note, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     let note = state.vault.update_note_folder(&id, folder_id)?;

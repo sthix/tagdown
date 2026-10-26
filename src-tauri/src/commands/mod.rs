@@ -1,4 +1,5 @@
 pub mod attachments;
+pub mod collections;
 pub mod export;
 pub mod folders;
 pub mod history;

@@ -311,5 +311,24 @@
 .journal-cal-day.is-today { box-shadow: inset 0 0 0 1px var(--marker-strong); }
 .journal-cal-day.is-selected { background: var(--marker); color: var(--marker-ink); }
 .journal-cal-day.is-selected::after { background: var(--marker-ink); }
+.journal-cal-day.has-scheduled:not(.is-selected) { background: var(--marker-soft); color: var(--marker-text); }
+.journal-cal-day.is-date-drop { background: var(--marker); color: var(--marker-ink); outline: 2px solid var(--marker-strong); outline-offset: 1px; }
+.calendar-section-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 0; border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; }
+.calendar-section-toggle[aria-expanded="false"] .ui-icon { transform: rotate(-90deg); }
+.calendar-section-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+.sidebar-calendar[hidden] { display: none; }
+.sidebar-calendar .journal-cal { margin: 4px 12px 8px; }
+.note-target-date { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--ink-2); font-size: 10.5px; }
+.doc-target-date { display: inline-flex; align-items: center; gap: 4px; padding: 2px 5px; border: 0; border-radius: 5px; color: var(--ink-2); background: var(--chip-bg); font: inherit; cursor: pointer; }
+.doc-target-date:hover { color: var(--ink); background: var(--hover-overlay); }
+.doc-target-date:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.schedule-dialog { width: min(390px, calc(100vw - 32px)); }
+.schedule-note-title { margin: 8px 0; color: var(--ink); font: 600 17px/1.4 var(--font-display); overflow-wrap: anywhere; }
+.schedule-dialog .capture-text { box-sizing: border-box; width: 100%; margin: 0; font-size: 14px; }
+.schedule-shortcuts { display: flex; gap: 8px; margin: 10px 0; }
+.schedule-calendar .journal-cal { margin: 14px 0 18px; padding: 12px; }
+.schedule-calendar .journal-cal-day { width: 32px; height: 32px; font-size: 12px; }
+.schedule-dialog [data-clear] { margin-right: auto; }
+.schedule-dialog [data-clear][hidden] { display: none; }
 .journal-cal-day:focus-visible,
 .journal-cal-nav:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

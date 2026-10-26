@@ -10,7 +10,7 @@ The journal gives every day its own page, in the spirit of Logseq's journals. Op
 ## Today's page
 
 - Click **Journal** in the sidebar, or press **⌘⇧J** from anywhere. Today's page opens, and is created if it doesn't exist yet.
-- The note list shows a month calendar above your days, newest first. Days with a page have a dot. Click any day, past or future, to open or start its page.
+- The note list shows your days newest first. Use **Calendar** below the main Library links in the sidebar to navigate dates. Days with a page have a dot. Click any day, past or future, to open or start its page.
 - On a journal page, **‹** and **›** next to the date step to the previous and next day (**⌥⌘←** / **⌥⌘→**). **Today** jumps back.
 
 Journal pages are ordinary notes: they show up in **All Notes**, and search, tags, tasks, queries, backlinks, version history and export all work on them. The Journal is a view of just the days, ordered by date.
@@ -22,6 +22,16 @@ A day's page is titled with its date in `YYYY-MM-DD` form, so `[[2026-10-13]]` l
 - Type `[[today`, `[[yesterday` or `[[tomorrow` and the link autocomplete offers that day's date.
 - Clicking a link to a day without a page starts that page.
 - **Linked mentions** at the bottom of a day lists every note that links to it. Writing "Call the bank on [[2026-10-20]]" in any note puts that line under October 20.
+
+## Schedule a note
+
+Open **Calendar** in the sidebar to keep a month grid beside any note list. Drag a regular note or an open note tab onto a day to schedule it there. A highlighted day has scheduled notes; its tooltip gives the count. Clicking a day opens its journal page. The calendar can be collapsed, and Tagdown remembers that choice.
+
+You can also click **Schedule** under a note's title, use **Schedule note…** from its right-click menu, or find the command with ⌘K. Choose a date in the picker, click a calendar day, or use **Today** / **Tomorrow**. A scheduled note shows its target day in the note list and header. Click it to reschedule or choose **Clear date** to remove the schedule.
+
+The day is stored as a typed `target_date` property in the note's Markdown frontmatter. It places the note under **This day → Dated this day** with the label **Scheduled**. Rescheduling changes that property, without moving the file or changing the note's creation date, task deadlines, or other date properties. Other date properties can still make the note appear on their own days. Scheduling does not create a journal page until you open that day.
+
+Journal pages, templates, and archived notes cannot be scheduled this way. Give a task its own date link when you want to schedule the task itself.
 
 ## Quick capture
 

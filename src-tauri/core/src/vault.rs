@@ -229,6 +229,25 @@ impl Vault {
         Ok(self.note_at(&path, meta, &content))
     }
 
+    /// Schedule a regular note without changing its creation time, body, or task dates.
+    pub fn set_target_date(&self, id: &str, day: Option<&str>) -> Result<Note, String> {
+        let date = day.map(|value| {
+            crate::journal::parse_day(value)
+                .filter(|date| date.format("%Y-%m-%d").to_string() == value)
+                .ok_or_else(|| "Use a real date in YYYY-MM-DD format.".to_string())
+        }).transpose()?;
+        let path = self.note_path(id)?;
+        let (meta, _) = self.read_note(&path)?;
+        if meta.journal.is_some() || crate::journal::parse_day(&meta.title).is_some()
+            || meta.folder_id.as_deref() == Some(ARCHIVE_ID) || crate::types::template_type(&meta.title).is_some() {
+            return Err("Schedule a regular note. Journal pages, templates, and archived notes keep their own dates.".into());
+        }
+        let key = parse_properties(&meta.extra).into_iter()
+            .find(|p| p.key.eq_ignore_ascii_case(crate::journal::TARGET_DATE_KEY))
+            .map(|p| p.key).unwrap_or_else(|| crate::journal::TARGET_DATE_KEY.into());
+        self.set_property(id, &key, date.map(PropertyValue::Date), None)
+    }
+
     /// Change related properties together, without an intermediate state on disk.
     pub(crate) fn set_properties(&self, id: &str, changes: &[(String, Option<PropertyValue>)]) -> Result<Note, String> {
         let path = self.note_path(id)?;

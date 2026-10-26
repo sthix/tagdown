@@ -23,6 +23,8 @@
 //   sort:due | sort:-priority      by a property, ascending (or descending with -)
 //   folder:Name                    only notes in this folder ("quote" names with spaces)
 //   limit:N                        at most N items (50 by default)
+//   is:pinned | untagged | journal | thought | empty | unlinked
+//                                  built-in note filters; use -is: to exclude
 //
 // and property filters (see properties.rs), any number of them:
 //   status=active                  equals; for a list, holds the item; links match by title
@@ -154,6 +156,7 @@ struct Spec {
     task_date: Option<String>,
     /// `priority:` for tasks: 1 high, 2 medium, 3 low.
     task_priority: Option<u8>,
+    note_filters: Vec<(String, bool)>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -172,6 +175,8 @@ pub struct QueryNote {
     /// For cards: the `cover:` property, else the note's first image.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub thought_reasons: Vec<String>,
 }
 
 /// What a note added from a table starts with, so it matches the query.
@@ -257,7 +262,7 @@ fn property_filter(token: &str) -> Option<PropertyFilter> {
 }
 
 fn parse(raw: &str) -> Result<Spec, String> {
-    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new(), group: None, lanes: Vec::new(), task_date: None, task_priority: None };
+    let mut spec = Spec { filter: String::new(), show: Show::Notes, status: TaskFilter::Open, sort: Sort::Updated, folder: None, limit: DEFAULT_LIMIT, properties: Vec::new(), columns: None, tags: Vec::new(), group: None, lanes: Vec::new(), task_date: None, task_priority: None, note_filters: Vec::new() };
     let mut filter = Vec::new();
     for token in tokens(raw) {
         if let Some(has) = token.strip_prefix("has:").map(|k| (false, k)).or_else(|| token.strip_prefix("-has:").map(|k| (true, k))) {
@@ -322,6 +327,13 @@ fn parse(raw: &str) -> Result<Spec, String> {
             },
             "limit" => spec.limit = value.parse::<usize>().map_err(|_| format!("limit: must be a number, not \"{value}\""))?.clamp(1, MAX_LIMIT),
             "folder" => spec.folder = Some(value.to_string()),
+            "is" | "-is" => {
+                let value = value.to_lowercase();
+                if !matches!(value.as_str(), "pinned" | "untagged" | "journal" | "thought" | "empty" | "unlinked") {
+                    return Err(format!("is: must be pinned, untagged, journal, thought, empty or unlinked, not \"{value}\""));
+                }
+                spec.note_filters.push((value, key.starts_with('-')));
+            }
             "tag" => {
                 spec.tags.push(value.trim_start_matches('#').to_string());
                 filter.push(token);
@@ -345,6 +357,30 @@ pub fn run(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, f
     run_at(raw, notes, index, folders, exclude_id, Local::now().date_naive())
 }
 
+/// Check `raw` the way `run` would, without reading any note: for saving a query to run later.
+pub fn validate(raw: &str, index: Option<&SearchIndex>, folders: &[FolderRecord]) -> Result<(), String> {
+    let spec = parse(raw)?;
+    if let Some(date) = spec.task_date.as_deref() {
+        DateFilter::parse(date, Local::now().date_naive())?;
+    }
+    folder_id(&spec, folders)?;
+    if !spec.filter.trim().is_empty() {
+        index.ok_or("search is unavailable")?.matching_ids(&spec.filter, 1)?;
+    }
+    Ok(())
+}
+
+/// The `folder:` a query names, by name (ignoring case) or id.
+fn folder_id(spec: &Spec, folders: &[FolderRecord]) -> Result<Option<String>, String> {
+    spec.folder.as_ref().map(|name| {
+        folders
+            .iter()
+            .find(|f| normalize_title(&f.name) == normalize_title(name) || f.id == *name)
+            .map(|f| f.id.clone())
+            .ok_or_else(|| format!("no folder named \"{name}\""))
+    }).transpose()
+}
+
 /// `run`, with `today` for dates like `today+7`.
 pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>, folders: &[FolderRecord], exclude_id: Option<&str>, today: NaiveDate) -> Result<QueryOutput, String> {
     let spec = parse(raw)?;
@@ -362,24 +398,18 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
     if let Some(explicit) = &spec.columns {
         columns = explicit.clone();
     }
-    let folder_id = match &spec.folder {
-        Some(name) => Some(
-            folders
-                .iter()
-                .find(|f| normalize_title(&f.name) == normalize_title(name) || f.id == *name)
-                .map(|f| f.id.clone())
-                .ok_or_else(|| format!("no folder named \"{name}\""))?,
-        ),
-        None => None,
-    };
+    let folder_id = folder_id(&spec, folders)?;
     let matching: Option<Vec<String>> = if spec.filter.trim().is_empty() {
         None
     } else {
         let index = index.ok_or("search is unavailable")?;
         Some(index.matching_ids(&spec.filter, notes.len().max(1))?)
     };
+    // Review filters need every note's links, so they're only worked out once the query is known to be valid.
+    let review = spec.note_filters.iter().any(|(kind, _)| matches!(kind.as_str(), "thought" | "empty" | "unlinked"))
+        .then(|| crate::thoughts::review_index(&notes));
 
-    let types = if spec.properties.iter().any(|f| f.key.eq_ignore_ascii_case(TYPE_KEY)) {
+    let types =if spec.properties.iter().any(|f| f.key.eq_ignore_ascii_case(TYPE_KEY)) {
         crate::types::list_types(&notes.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>())
     } else { Vec::new() };
     let mut selected: Vec<(Note, String)> = notes
@@ -390,6 +420,18 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
             None => n.folder_id.as_deref() != Some("archive"),
         })
         .filter(|(n, _)| matching.as_ref().is_none_or(|ids| ids.contains(&n.id)))
+        .filter(|(n, _)| spec.note_filters.iter().all(|(kind, negate)| {
+            let matches = match kind.as_str() {
+                "pinned" => n.starred,
+                "untagged" => n.tags.is_empty(),
+                "journal" => n.journal.is_some(),
+                "thought" => review.as_ref().is_some_and(|r| r.thoughts.contains_key(&n.id)),
+                "empty" => review.as_ref().is_some_and(|r| r.empty.contains(&n.id)),
+                "unlinked" => review.as_ref().is_some_and(|r| r.unlinked.contains(&n.id)),
+                _ => false,
+            };
+            matches != *negate
+        }))
         .filter(|(n, _)| spec.properties.iter().all(|f| {
             if f.key.eq_ignore_ascii_case(TYPE_KEY) && crate::types::template_type(&n.title).is_none() {
                 if let Match::Equals(wanted) = &f.matcher {
@@ -462,7 +504,8 @@ pub fn run_at(raw: &str, notes: Vec<(Note, String)>, index: Option<&SearchIndex>
                 .take(spec.limit)
                 .map(|(n, content)| {
                     let (excerpt, cover) = if spec.show == Show::Cards { (Some(excerpt(&content)), cover(&n, &content)) } else { (None, None) };
-                    QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, created_at: n.created_at, properties: n.properties, excerpt, cover }
+                    let thought_reasons = review.as_ref().and_then(|r| r.thoughts.get(&n.id)).cloned().unwrap_or_default();
+                    QueryNote { folder: folder_name(&n.folder_id), id: n.id, title: n.title, tags: n.tags, updated_at: n.updated_at, created_at: n.created_at, properties: n.properties, excerpt, cover, thought_reasons }
                 })
                 .collect(),
             tasks: Vec::new(),
@@ -775,6 +818,54 @@ mod tests {
         assert_eq!(out.tasks.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), vec!["Revisit budget", "Draft brief"]);
         let out = run("show:tasks status:done", notes, Some(&index), &folders, None).unwrap();
         assert_eq!(out.tasks.iter().map(|t| (t.note_title.as_str(), t.text.as_str(), t.line)).collect::<Vec<_>>(), vec![("Atlas", "Kickoff", 4)]);
+    }
+
+    #[test]
+    fn saved_collection_filters_match_note_flags_and_combine_with_queries() {
+        let (mut notes, index, folders) = vault();
+        notes[0].0.starred = true;
+        notes[1].0.tags.clear();
+        notes[2].0.journal = NaiveDate::from_ymd_opt(2026, 10, 26);
+        notes[3].0.starred = true;
+        let q = |raw: &str| run(raw, notes.clone(), Some(&index), &folders, None).unwrap();
+        assert_eq!(titles(&q("is:pinned")), vec!["Atlas"], "archived pins stay excluded");
+        assert_eq!(titles(&q("is:untagged")), vec!["Beacon"]);
+        assert_eq!(titles(&q("is:journal -is:pinned")), vec!["Dashboard"]);
+        assert_eq!(titles(&q("is:pinned folder:work tag:project sort:title show:table")), vec!["Atlas"]);
+        assert_eq!(q("is:pinned show:tasks").tasks.len(), 1);
+        assert_eq!(titles(&q("folder:archive is:pinned")), vec!["Old"]);
+        assert!(run("is:unknown", notes, None, &folders, None).unwrap_err().contains("is: must be"));
+    }
+
+    #[test]
+    fn validation_reports_what_running_would_without_notes() {
+        let (notes, index, folders) = vault();
+        for raw in ["is:pinned folder:work show:table", "tag:project show:tasks date:today", "\"two words\" sort:-due", ""] {
+            assert!(validate(raw, Some(&index), &folders).is_ok(), "{raw}");
+            assert!(run(raw, notes.clone(), Some(&index), &folders, None).is_ok(), "{raw}");
+        }
+        for raw in ["is:unknown", "folder:missing", "show:tasks date:someday", "limit:many"] {
+            assert_eq!(validate(raw, Some(&index), &folders).unwrap_err(), run(raw, notes.clone(), Some(&index), &folders, None).unwrap_err(), "{raw}");
+        }
+        assert!(validate("words", None, &folders).is_err(), "text needs the search index");
+        assert!(validate("is:pinned type:Book sort:title", None, &folders).is_ok());
+    }
+
+    #[test]
+    fn review_queries_share_whole_vault_connections_and_explain_results() {
+        let notes = vec![
+            (note("a", "Alpha", &["idea"], None, 2), "# Alpha\n\nA developed idea.".into()),
+            (note("b", "Beta", &[], None, 1), "# Beta\n\nSee [[Alpha]].".into()),
+            (note("c", "Untitled", &[], None, 0), "# Untitled".into()),
+        ];
+        let q = |raw: &str, exclude| run(raw, notes.clone(), None, &[], exclude).unwrap();
+        let out = q("is:thought show:cards", None);
+        assert_eq!(titles(&out), vec!["Untitled"]);
+        assert_eq!(out.notes[0].thought_reasons, vec!["untitled", "empty", "unlinked"]);
+        assert_eq!(titles(&q("is:empty", None)), vec!["Untitled"]);
+        assert_eq!(titles(&q("-is:unlinked sort:title", None)), vec!["Alpha", "Beta"]);
+        assert_eq!(titles(&q("-is:thought sort:title", Some("b"))), vec!["Alpha"], "the containing note's inbound link still counts");
+        assert!(q("is:thought -is:empty", None).notes.is_empty());
     }
 
     fn with(mut n: Note, props: &[(&str, PropertyValue)]) -> Note {

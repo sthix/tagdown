@@ -564,7 +564,7 @@ pub struct LocalGraph {
 }
 
 /// The ids of the notes `note` links to, in its text or its properties.
-fn links_from(note: &Note, content: &str, targets: &LinkTargets) -> BTreeSet<String> {
+pub(crate) fn links_from(note: &Note, content: &str, targets: &LinkTargets) -> BTreeSet<String> {
     let in_properties = note.properties.iter().flat_map(|p| p.value.texts()).flat_map(parse_wikilinks);
     parse_wikilinks(content)
         .into_iter()

@@ -15,7 +15,12 @@ import { buildStandaloneHtml, exportFileName, printNote } from './export';
 import { openVersionHistory } from './history';
 import { startPresentation } from './presentation';
 import { openPublishDialog } from './publish';
-import { fillQueries, invalidateQueries, openTaskList, taskItemHtml, toggleQueryTask, type QueryTask, type TableActions } from './queries';
+import { fillQueries, invalidateQueries, openTaskList, taskItemHtml, toggleQueryTask, type NewNote, type QueryTask, type QueryOutput, type TableActions } from './queries';
+import { openCollectionDialog, renderCollectionWorkspace } from './collections';
+import { setOption } from './queryText';
+import { collectionScope, isThoughtsCollection, THOUGHTS_COLLECTION, type Collection } from './collectionModel';
+import { canReviewNote, inboxProperty } from './thoughts';
+import { bindCalendarDrop, canScheduleNote, openScheduleDialog, scheduledDays, targetDate } from './noteScheduling';
 import { attachWikilinkAutocomplete, normalizeTitle, noteAliases, resolveTarget, splitTarget } from './wikilinks';
 import { applyCommand, attachSlashCommands, SLASH_HINT, type SlashCommand } from './slashCommands';
 import { applyEdit, attachListEditing } from './listEditing';
@@ -47,6 +52,7 @@ import './styles/preview.css';
 import './styles/settings.css';
 import './styles/palette.css';
 import './styles/workspace.css';
+import './styles/collections.css';
 
 type SortOrder = 'updatedDesc' | 'createdDesc' | 'titleAsc' | 'titleDesc' | 'wordCountDesc';
 type QuickFilter = 'all' | 'pinned' | 'untagged' | 'recent';
@@ -134,6 +140,18 @@ let noteTypes: NoteType[] = [];
 let creatingType = false;
 let creatingTypeParent: string | null = null;
 let activeFilter: QuickFilter = 'all';
+let collections: Collection[] = [];
+let selectedCollection: Collection | null = null;
+let collectionOutput: QueryOutput | null = null;
+let collectionError: string | null = null;
+let collectionViewOpen = false;
+let listLoadVersion = 0;
+let thoughtBusy = false;
+// The sidebar badge: how many notes Thoughts holds, or null before the first count.
+let thoughtsCount: number | null = null;
+let thoughtsCountTimer = 0;
+let thoughtsCountRun = 0;
+let thoughtUndo: { id: string; title: string; key: string; previous: PropertyValue | null } | null = null;
 let expandedTags: Record<string, boolean> = {};
 let content = '';
 let viewMode: ViewMode = getPreference(getPreference('rememberViewMode') ? 'lastViewMode' : 'defaultViewMode');
@@ -162,9 +180,17 @@ const linkSyncs = new Map<string, { timer: number; title: string }>();
 // "Linked mentions" for the open note, once loaded, and on a journal page what else happened that day.
 let backlinks: { id: string; items: Backlink[]; day: DaySummary | null } | null = null;
 const TAG_PREVIEW_LIMIT = 6;
+const THOUGHTS_COUNT_DELAY = 800;
+/** Palette actions about the open note, hidden while a collection covers it. */
+const NOTE_PALETTE_ACTIONS = new Set([
+  'schedule-note', 'graph', 'send-to-thoughts', 'journal-previous', 'journal-next', 'source', 'split', 'preview',
+  'split-right', 'fold-properties', 'unhide-properties', 'export-html', 'export-pdf', 'present', 'add-property',
+  'block-link', 'block-embed', 'history',
+]);
 let tagDraftColor: TagColorKey = 'blue';
-// The month the journal calendar shows.
+// The month the sidebar calendar shows.
 let journalMonth: CalendarMonth = monthOf(todayKey());
+let sidebarCalendarOpen = (() => { try { return localStorage.getItem('tagdown.sidebarCalendar') !== 'closed'; } catch { return true; } })();
 
 initializeTheme();
 applyPreferences();
@@ -217,8 +243,20 @@ app.innerHTML = `
     </div>
     <nav class="sidebar-scroll" aria-label="Library">
       <section>
-        <h2 class="section-header"><span>Library</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">${uiIcon('plus', 13)}</button></h2>
+        <h2 class="section-header"><span>Library</span></h2>
+        <div id="library-links"></div>
+      </section>
+      <section>
+        <h2 class="section-header"><button id="toggle-calendar" class="calendar-section-toggle" type="button" aria-controls="sidebar-calendar" aria-expanded="${sidebarCalendarOpen}"><span>Calendar</span>${uiIcon('chevronDown', 12)}</button></h2>
+        <div id="sidebar-calendar" class="sidebar-calendar" ${sidebarCalendarOpen ? '' : 'hidden'}></div>
+      </section>
+      <section>
+        <h2 class="section-header"><span>Folders</span><button id="new-folder" class="section-add" type="button" title="New folder" aria-label="New folder">${uiIcon('plus', 13)}</button></h2>
         <div id="folders"></div>
+      </section>
+      <section>
+        <h2 class="section-header"><span>Collections</span><button id="new-collection" class="section-add" type="button" title="New collection" aria-label="New collection">${uiIcon('plus', 13)}</button></h2>
+        <div id="collections"></div>
       </section>
       <section>
         <h2 class="section-header"><span>Types</span><button id="new-type" class="section-add" type="button" title="New note type" aria-label="New note type">${uiIcon('plus', 13)}</button></h2>
@@ -241,6 +279,8 @@ app.innerHTML = `
           <span class="scope-icon" aria-hidden="true"></span>
           <h1 id="note-list-title">All Notes</h1>
           <span id="note-list-count">0</span>
+          <button id="open-collection" class="mini-icon-button" type="button" title="Open collection" aria-label="Open collection" hidden>${uiIcon('collection', 14)}</button>
+          <button id="save-collection" class="mini-icon-button" type="button" title="Save list as collection" aria-label="Save list as collection">${uiIcon('collection', 14)}</button>
           <button id="note-list-new" class="mini-icon-button" type="button" title="New note (⌘N)" aria-label="New note">${uiIcon('plus', 14)}</button>
         </div>
         <div class="filter-pills" role="group" aria-label="Quick filters">
@@ -249,15 +289,18 @@ app.innerHTML = `
       </header>
       <div id="notes"></div>
     </section>
-    <section class="editor-pane"><div class="workspace" id="workspace"></div></section>
+    <section class="editor-pane"><div class="workspace" id="workspace"></div><section id="collection-workspace" class="collection-workspace" aria-label="Collection" hidden></section></section>
   </main>
 `;
 
+const libraryLinksEl = document.querySelector<HTMLDivElement>('#library-links')!;
 const folderEl = document.querySelector<HTMLDivElement>('#folders')!;
 const noteEl = document.querySelector<HTMLDivElement>('#notes')!;
 const tagEl = document.querySelector<HTMLDivElement>('#tags')!;
 const typeEl = document.querySelector<HTMLDivElement>('#types')!;
 const workspaceEl = document.querySelector<HTMLDivElement>('#workspace')!;
+const collectionSidebarEl = document.querySelector<HTMLDivElement>('#collections')!;
+const collectionWorkspaceEl = document.querySelector<HTMLElement>('#collection-workspace')!;
 // The open pane's editor; see "Panes and tabs".
 let editorRoot: HTMLDivElement;
 const noteListTitleEl = document.querySelector<HTMLHeadingElement>('#note-list-title')!;
@@ -287,6 +330,7 @@ async function boot() {
   bindChrome();
   await reloadFolders();
   await reloadTags();
+  await reloadCollections();
   await reloadNotes();
   renderFilterPills();
   await openStartupNote();
@@ -444,7 +488,7 @@ function onExternalRemoval(id: string) {
 // system browser; the WebView itself never navigates away from Tagdown.
 function externalHref(target: EventTarget | null) {
   const link = (target as HTMLElement | null)?.closest?.<HTMLAnchorElement>('a[href]');
-  return link && /^(https?|mailto|tel):/i.test(link.href) ? link.href : null;
+  return link && !link.getAttribute('href')?.startsWith('#') && /^(https?|mailto|tel):/i.test(link.href) ? link.href : null;
 }
 
 function bindExternalLinks() {
@@ -469,6 +513,16 @@ function bindChrome() {
   renderThemeToggle();
   document.querySelector('#new-note')?.addEventListener('click', createNote);
   document.querySelector('#note-list-new')?.addEventListener('click', createNote);
+  document.querySelector('#new-collection')?.addEventListener('click', () => editCollection());
+  document.querySelector('#save-collection')?.addEventListener('click', () => editCollection());
+  document.querySelector('#open-collection')?.addEventListener('click', () => {
+    if (selectedCollection) void selectCollection(selectedCollection);
+  });
+  document.querySelector('#toggle-calendar')?.addEventListener('click', () => {
+    sidebarCalendarOpen = !sidebarCalendarOpen;
+    try { localStorage.setItem('tagdown.sidebarCalendar', sidebarCalendarOpen ? 'open' : 'closed'); } catch { /* keep the session choice */ }
+    renderSidebarCalendar();
+  });
   document.querySelector('#new-folder')?.addEventListener('click', () => {
     const parent = isUserFolder(selectedFolder) ? selectedFolder : null;
     startFolderCreate(parent);
@@ -491,38 +545,54 @@ function bindChrome() {
     });
   });
 
+  // While a collection covers the editor, shortcuts for "this note" do nothing rather than act on a note you can't see.
   window.addEventListener('keydown', async (event) => {
     if (event.metaKey && event.key.toLowerCase() === 'k') { event.preventDefault(); openPalette(); return; }
     if (isPaletteOpen()) return;
+    // Esc leaves a collection for the note behind it, wherever focus is, unless a field or menu is using the key.
+    const menuOpen = () => [...document.querySelectorAll<HTMLElement>('[role="menu"]')].some((menu) => menu.offsetParent !== null);
+    if (event.key === 'Escape' && collectionViewOpen && !event.defaultPrevented && !document.querySelector('dialog[open]') && !menuOpen()
+      && !(event.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')) {
+      event.preventDefault();
+      closeCollectionView();
+      return;
+    }
     // Tabs and splits.
-    if (event.metaKey && event.altKey && event.code === 'Backslash') { event.preventDefault(); await splitPane(selectedNote); return; }
+    if (event.metaKey && event.altKey && event.code === 'Backslash') { event.preventDefault(); if (collectionViewOpen) return; await splitPane(selectedNote); return; }
     if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 't') { event.preventDefault(); await newTab(); return; }
-    if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'w') { event.preventDefault(); await closeTab(activePane, activePane.active); return; }
+    if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'w') {
+      event.preventDefault();
+      if (collectionViewOpen) closeCollectionView();
+      else await closeTab(activePane, activePane.active);
+      return;
+    }
     if (event.ctrlKey && !event.metaKey && event.key === 'Tab') { event.preventDefault(); await cycleTab(event.shiftKey ? -1 : 1); return; }
     if (event.metaKey && event.shiftKey && (event.code === 'BracketLeft' || event.code === 'BracketRight')) { event.preventDefault(); await cycleTab(event.code === 'BracketLeft' ? -1 : 1); return; }
     if (event.metaKey && event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); focusPane(event.key === 'ArrowLeft' ? -1 : 1); return; }
-    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'i') { event.preventDefault(); toggleProperties(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'i') { event.preventDefault(); if (collectionViewOpen) return; toggleProperties(); return; }
     if (event.metaKey && event.key === '\\') { event.preventDefault(); toggleFocusMode(); return; }
     if (event.metaKey && event.key === ',') { event.preventDefault(); openSettings(); }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); toggleTheme(); }
     if (event.metaKey && event.key === 's') { event.preventDefault(); await flushSave(); }
-    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') { event.preventDefault(); await exportNoteHtml(); return; }
-    if (event.metaKey && event.altKey && event.code === 'KeyP') { event.preventDefault(); await presentNote(); return; }
-    if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); await exportNotePdf(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'e') { event.preventDefault(); if (collectionViewOpen) return; await exportNoteHtml(); return; }
+    if (event.metaKey && event.altKey && event.code === 'KeyP') { event.preventDefault(); if (collectionViewOpen) return; await presentNote(); return; }
+    if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); if (collectionViewOpen) return; await exportNotePdf(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 't') { event.preventDefault(); await showOpenTasks(); return; }
-    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'g') { event.preventDefault(); await showGraph(); return; }
-    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); await showVersionHistory(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'g') { event.preventDefault(); if (collectionViewOpen) return; await showGraph(); return; }
+    if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'h') { event.preventDefault(); if (collectionViewOpen) return; await showVersionHistory(); return; }
     // ⌥ changes the key's character on macOS, so this one goes by the physical key.
     if (event.metaKey && event.altKey && !event.shiftKey && event.code === 'KeyJ') { event.preventDefault(); quickCapture(); return; }
     if (event.metaKey && event.shiftKey && event.key.toLowerCase() === 'j') { event.preventDefault(); await openJournal(todayKey()); return; }
     if (event.metaKey && event.altKey && selectedNote?.journal && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault();
+      if (collectionViewOpen) return;
       await openJournal(shiftDay(selectedNote.journal, event.key === 'ArrowLeft' ? -1 : 1));
       return;
     }
     if (event.metaKey && event.key.toLowerCase() === 'n') { event.preventDefault(); await createNote(); }
     if (event.metaKey && ['1', '2', '3'].includes(event.key)) {
       event.preventDefault();
+      if (collectionViewOpen) return;
       setViewMode(event.key === '1' ? 'source' : event.key === '2' ? 'split' : 'preview');
     }
   });
@@ -555,6 +625,11 @@ function renderThemeToggle() {
 }
 
 function paletteActions(): PaletteAction[] {
+  const actions = allPaletteActions();
+  return collectionViewOpen ? actions.filter((action) => !NOTE_PALETTE_ACTIONS.has(action.id)) : actions;
+}
+
+function allPaletteActions(): PaletteAction[] {
   const dark = getEffectiveTheme() === 'dark';
   return [
     { id: 'new', label: selectedType ? `New ${selectedType}` : 'New note', hint: isUserFolder(selectedFolder) ? `in ${folders.find((f) => f.id === selectedFolder)?.name ?? 'folder'}` : undefined, shortcut: '⌘N', icon: uiIcon('compose', 15), run: createNote },
@@ -563,9 +638,14 @@ function paletteActions(): PaletteAction[] {
     )),
     { id: 'new-note-type', label: 'New note type…', hint: 'Like Book or Person, with a template', icon: uiIcon('type', 15), run: () => { creatingType = true; renderTypes(); } },
     { id: 'journal-today', label: 'Open today’s journal', hint: formatDay(todayKey()), shortcut: '⌘⇧J', icon: uiIcon('calendar', 15), run: () => openJournal(todayKey()) },
+    ...(selectedNote && canScheduleNote(selectedNote) ? [{ id: 'schedule-note', label: targetDate(selectedNote) ? 'Reschedule note…' : 'Schedule note…', hint: 'Place this note on a journal day', icon: uiIcon('calendar', 15), run: () => scheduleNote(selectedNote!) }] : []),
     ...(selectedNote ? [{ id: 'graph', label: 'Show graph', hint: 'This note’s links, both ways', shortcut: '⌘⇧G', icon: uiIcon('graph', 15), run: showGraph }] : []),
     { id: 'save-link', label: 'Save web link…', hint: 'A Link note with the page’s title and text', icon: uiIcon('globe', 15), run: () => openSaveLinkDialog({ save: (url) => saveWebLink(url) }) },
     { id: 'quick-capture', label: 'Quick capture', hint: 'Add a line to today’s journal', shortcut: '⌥⌘J', icon: uiIcon('compose', 15), run: quickCapture },
+    { id: 'new-collection', label: 'Save list as collection…', hint: 'Keep rules and a layout in the sidebar', icon: uiIcon('collection', 15), run: () => editCollection() },
+    { id: 'thoughts', label: 'Open Thoughts', hint: 'Review incomplete or disconnected notes', icon: uiIcon('collection', 15), run: () => selectCollection(THOUGHTS_COLLECTION) },
+    ...(selectedNote && canReviewNote(selectedNote) ? [{ id: 'send-to-thoughts', label: 'Send note to Thoughts', icon: uiIcon('collection', 15), run: () => sendToThoughts(selectedNote!.id) }] : []),
+    ...collections.map((collection) => ({ id: `collection-${collection.id}`, label: collection.name, hint: 'Open collection', icon: uiIcon('collection', 15), run: () => selectCollection(collection) })),
     { id: 'journal-yesterday', label: 'Open yesterday’s journal', icon: uiIcon('calendar', 15), run: () => openJournal(shiftDay(todayKey(), -1)) },
     ...(selectedNote?.journal ? [
       { id: 'journal-previous', label: 'Previous day', hint: formatDay(shiftDay(selectedNote.journal, -1)), shortcut: '⌥⌘←', icon: uiIcon('chevronLeft', 15), run: () => openJournal(shiftDay(selectedNote!.journal!, -1)) },
@@ -641,6 +721,7 @@ async function revealNote(id: string, where: OpenTarget = 'here') {
   const note = all.find((candidate) => candidate.id === id);
   if (!note) return;
   if (!notes.some((candidate) => candidate.id === id)) {
+    clearCollection();
     selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : null;
     selectedTag = null;
     selectedType = null;
@@ -899,6 +980,7 @@ function focusPane(step: -1 | 1) {
 
 /** ⌘T: a new tab, with the palette open to pick what goes in it. */
 async function newTab(pane: Pane = activePane) {
+  showCollectionView(false);
   activatePane(pane);
   if (pane.tabs[pane.active]?.noteId) {
     await settlePendingWork();
@@ -956,6 +1038,7 @@ async function cycleTab(step: -1 | 1) {
 }
 
 async function switchTab(pane: Pane, index: number) {
+  showCollectionView(false);
   activatePane(pane);
   if (index === pane.active || !pane.tabs[index]) return;
   if (blockEdit) commitBlockEdit();
@@ -1168,6 +1251,7 @@ function hidePaneDrops() {
 function clearDropMarks() {
   hidePaneDrops();
   document.querySelectorAll('.tab.drop-before, .tab.drop-after').forEach((tab) => tab.classList.remove('drop-before', 'drop-after'));
+  document.querySelectorAll('.journal-cal-day.is-date-drop').forEach((day) => day.classList.remove('is-date-drop'));
 }
 
 /** Dragging a note or tab over a pane: the middle opens it here, the sides split. */
@@ -1292,6 +1376,12 @@ function noteActionItems(note: Note): MenuItem[] {
       },
     },
     { label: 'Show in note list', icon: iconSvg('notes', 14), run: () => revealInList(note.id) },
+    ...(canScheduleNote(note) ? [{ label: targetDate(note) ? 'Reschedule note…' : 'Schedule note…', icon: uiIcon('calendar', 14), run: () => scheduleNote(note) }] : []),
+    ...(canReviewNote(note) ? [{
+      label: isThoughtsCollection(selectedCollection) ? 'Mark processed' : 'Send to Thoughts',
+      icon: uiIcon('checklist', 14),
+      run: () => isThoughtsCollection(selectedCollection) ? processThought(note.id) : sendToThoughts(note.id),
+    }] : []),
   ];
 }
 
@@ -1300,6 +1390,7 @@ async function revealInList(id: string) {
   const note = await findNote(id);
   if (!note) return;
   if (!notes.some((candidate) => candidate.id === id)) {
+    clearCollection();
     selectedFolder = note.folderId === 'archive' ? 'archive' : note.journal ? 'journal' : note.folderId;
     selectedTag = null;
     selectedType = null;
@@ -1487,6 +1578,7 @@ async function saveQuickCapture(day: string, raw: string, asTask: boolean) {
 
 /** Open a day's journal page, creating it (from the "Journal Template" note, if any) the first time. */
 async function openJournal(day: string) {
+  clearCollection();
   await settlePendingWork();
   const note = await invoke<Note>('open_journal', { day });
   journalMonth = monthOf(day);
@@ -1506,7 +1598,16 @@ async function openJournal(day: string) {
 
 function journalCalendarHtml() {
   const withPages = new Set(libraryNotes.flatMap((note) => note.journal ? [note.journal] : []));
-  return calendarHtml(journalMonth, withPages, selectedNote?.journal ?? null);
+  return calendarHtml(journalMonth, withPages, selectedNote?.journal ?? targetDate(selectedNote), scheduledDays(libraryNotes));
+}
+
+function renderSidebarCalendar() {
+  const host = document.querySelector<HTMLElement>('#sidebar-calendar')!;
+  host.hidden = !sidebarCalendarOpen;
+  document.querySelector('#toggle-calendar')!.setAttribute('aria-expanded', String(sidebarCalendarOpen));
+  if (!sidebarCalendarOpen) { host.replaceChildren(); return; }
+  host.innerHTML = journalCalendarHtml();
+  bindJournalCalendar(host);
 }
 
 function bindJournalCalendar(root: HTMLElement) {
@@ -1515,10 +1616,50 @@ function bindJournalCalendar(root: HTMLElement) {
   });
   root.querySelectorAll<HTMLButtonElement>('[data-month-shift]').forEach((button) => {
     button.addEventListener('click', () => {
-      journalMonth = shiftMonth(journalMonth, Number(button.dataset.monthShift));
-      renderNotes();
+      const direction = button.dataset.monthShift!;
+      journalMonth = shiftMonth(journalMonth, Number(direction));
+      renderSidebarCalendar();
+      root.querySelector<HTMLButtonElement>(`[data-month-shift="${direction}"]`)?.focus();
     });
   });
+  bindCalendarDrop(root, {
+    mime: NOTE_MIME,
+    accepts: (id) => { const note = knownNotes.get(id); return !!note && canScheduleNote(note); },
+    schedule: saveTargetDate,
+    fail: (error) => { void message(String(error), { title: 'Could not schedule the note', kind: 'warning' }); },
+  });
+}
+
+function scheduleNote(note: Note) {
+  openScheduleDialog(note, (day) => saveTargetDate(note.id, day));
+}
+
+function paintScheduleButton() {
+  const button = editorRoot.querySelector<HTMLButtonElement>('[data-schedule-note]');
+  if (!button || !selectedNote) return;
+  const day = targetDate(selectedNote);
+  button.innerHTML = `${uiIcon('calendar', 12)}<span>${day ? escapeHtml(formatDay(day, 'short')) : 'Schedule'}</span>`;
+  button.title = day ? `Reschedule note (${day})` : 'Schedule note';
+  button.setAttribute('aria-label', day ? 'Reschedule note' : 'Schedule note');
+}
+
+async function saveTargetDate(id: string, day: string | null) {
+  if (day !== null && !isDayKey(day)) throw new Error('Choose a real date.');
+  if (blockEdit) commitBlockEdit();
+  await settlePendingWork();
+  const updated = await invoke<Note>('set_target_date', { id, day });
+  knownNotes.set(updated.id, updated);
+  libraryNotes = libraryNotes.map((note) => note.id === id ? updated : note);
+  forEachPane(() => {
+    if (selectedNote?.id === id) { selectedNote = updated; paintProperties(); paintScheduleButton(); }
+  });
+  if (day) journalMonth = monthOf(day);
+  invalidateQueries();
+  scheduleListRefresh();
+  // The write has succeeded. Refresh errors must not make the picker offer a duplicate retry.
+  await reloadFolders().then(reloadNotes).catch(console.error);
+  forEachPane(() => { if (selectedNote?.journal) void loadBacklinks(selectedNote.id); });
+  showNotice(day ? `Scheduled “${updated.title || 'Untitled'}” for ${formatDay(day, 'short')}` : 'Target date cleared');
 }
 
 function startFolderCreate(parentId: string | null) {
@@ -1536,6 +1677,7 @@ async function commitFolderCreate(name: string, parentId: string | null) {
   if (!created || !folder) return;
   if (parentId) expandedFolders[parentId] = true;
   selectedFolder = folder.id;
+  clearCollection();
   await reloadFolders();
   await reloadNotes();
 }
@@ -1573,12 +1715,328 @@ async function reloadFolders() {
   closeMissingTabs();
   renderFolders();
   await reloadTypes();
+  scheduleThoughtsCount();
+}
+
+// ---- Saved collections ----
+
+async function reloadCollections() {
+  try {
+    collections = await invoke<Collection[]>('list_collections');
+    renderCollections();
+  } catch (error) {
+    collectionSidebarEl.innerHTML = `<p class="collection-empty collection-error" role="alert">${escapeHtml(String(error))}</p><button type="button" class="confirm-button">Retry</button>`;
+    collectionSidebarEl.querySelector('button')!.addEventListener('click', () => void reloadCollections());
+  }
+}
+
+/**
+ * Count Thoughts a moment after the library settles. The review needs every note's
+ * links, so a burst of saves shares one count instead of each paying for it.
+ */
+function scheduleThoughtsCount() {
+  window.clearTimeout(thoughtsCountTimer);
+  thoughtsCountTimer = window.setTimeout(async () => {
+    const run = ++thoughtsCountRun;
+    try {
+      const output = await invoke<QueryOutput>('run_query', { query: 'is:thought limit:1', excludeId: null });
+      if (run === thoughtsCountRun) setThoughtsCount(output.total);
+    } catch { /* keep the last count; the collection itself reports errors */ }
+  }, THOUGHTS_COUNT_DELAY);
+}
+
+function setThoughtsCount(count: number) {
+  if (count === thoughtsCount) return;
+  thoughtsCount = count;
+  renderCollections();
+}
+
+function renderCollections() {
+  const destinations = [THOUGHTS_COLLECTION, ...collections];
+  collectionSidebarEl.innerHTML = destinations.map((collection) => `
+    <div class="collection-row${selectedCollection?.id === collection.id ? ' selected' : ''}">
+      <button type="button" class="collection-open" data-collection="${escapeHtml(collection.id)}" ${selectedCollection?.id === collection.id ? 'aria-current="page"' : ''}><span class="collection-nav-icon" aria-hidden="true">${collection.icon ? escapeHtml(collection.icon) : uiIcon('collection', 14)}</span><span class="collection-nav-label"><span class="${markerClass(selectedCollection?.id === collection.id)}">${escapeHtml(collection.name)}</span></span>${isThoughtsCollection(collection) && thoughtsCount ? `<span class="collection-badge" aria-label="${thoughtsCount} to review">${thoughtsCount > 99 ? '99+' : thoughtsCount}</span>` : ''}</button>
+      ${isThoughtsCollection(collection) ? '' : `<button type="button" class="collection-menu" data-collection-menu="${escapeHtml(collection.id)}" aria-label="Options for ${escapeHtml(collection.name)}">${uiIcon('more', 13)}</button>`}
+    </div>`).join('');
+  collectionSidebarEl.querySelectorAll<HTMLButtonElement>('[data-collection]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const collection = destinations.find((c) => c.id === button.dataset.collection);
+      if (collection) void selectCollection(collection);
+    });
+  });
+  const collectionMenu = (collection: Collection): MenuItem[] => [
+    { label: 'Open collection', icon: uiIcon('collection', 14), run: () => selectCollection(collection) },
+    ...(isThoughtsCollection(collection) ? [] : [
+      { label: 'Edit collection…', icon: uiIcon('sliders', 14), run: () => editCollection(collection) },
+      { label: 'Delete collection…', icon: uiIcon('trash', 14), danger: true, run: () => deleteCollection(collection) },
+    ]),
+  ];
+  collectionSidebarEl.querySelectorAll<HTMLButtonElement>('[data-collection-menu]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const collection = collections.find((c) => c.id === button.dataset.collectionMenu);
+      if (!collection) return;
+      const rect = button.getBoundingClientRect();
+      showContextMenu(rect.left, rect.bottom, collectionMenu(collection));
+    });
+  });
+  collectionSidebarEl.querySelectorAll<HTMLButtonElement>('[data-collection]').forEach((button) => {
+    button.addEventListener('contextmenu', (event) => {
+      const collection = destinations.find((c) => c.id === button.dataset.collection);
+      if (!collection) return;
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY, collectionMenu(collection));
+    });
+  });
+}
+
+/** A saved `folder:` value (an id, or a name typed in the rules) as the sidebar names it. */
+function collectionFolderName(value: string) {
+  return folders.find((folder) => folder.id === value)?.name ?? null;
+}
+
+function showCollectionView(show: boolean) {
+  collectionViewOpen = show;
+  collectionWorkspaceEl.hidden = !show;
+  workspaceEl.hidden = show;
+  document.querySelector('.sheet')!.classList.toggle('is-collection', show);
+  if (!show) collectionWorkspaceEl.replaceChildren();
+}
+
+function clearCollection() {
+  if (!selectedCollection && !collectionViewOpen) return;
+  listLoadVersion++;
+  thoughtUndo = null;
+  selectedCollection = null;
+  collectionOutput = null;
+  collectionError = null;
+  showCollectionView(false);
+  document.querySelector<HTMLButtonElement>('#open-collection')!.hidden = true;
+  renderFilterPills();
+  renderCollections();
+}
+
+async function selectCollection(collection: Collection) {
+  if (blockEdit) commitBlockEdit();
+  await settlePendingWork();
+  if (selectedCollection?.id !== collection.id) thoughtUndo = null;
+  noteMarkerChange();
+  selectedCollection = collection;
+  collectionOutput = null;
+  collectionError = null;
+  selectedFolder = selectedTag = selectedType = null;
+  activeFilter = 'all';
+  renderFilterPills();
+  renderCollections();
+  showCollectionView(true);
+  paintCollection();
+  await reloadNotes();
+}
+
+function editCollection(collection?: Collection) {
+  const initial = collection ?? {
+    name: isThoughtsCollection(selectedCollection) ? 'Thoughts view' : selectedCollection ? `${selectedCollection.name} copy` : selectedType ?? (selectedTag ? `#${selectedTag}` : selectedFolder ? folders.find((f) => f.id === selectedFolder)?.name ?? 'Journal' : ''),
+    icon: selectedCollection?.icon ?? '',
+    query: selectedCollection?.query ?? collectionScope({ folder: selectedFolder, tag: selectedTag, type: selectedType, filter: activeFilter }),
+  };
+  openCollectionDialog(initial, {
+    editing: !!collection,
+    preview: (query) => invoke<QueryOutput>('run_query', { query: setOption(query, 'limit', '1'), excludeId: null }),
+    save: async (draft) => {
+      if (blockEdit) commitBlockEdit();
+      await settlePendingWork();
+      const saved = await invoke<Collection>('save_collection', { ...draft, id: collection?.id ?? null });
+      collections = collection ? collections.map((c) => c.id === saved.id ? saved : c) : [...collections, saved];
+      await selectCollection(saved);
+    },
+  });
+}
+
+async function deleteCollection(collection: Collection) {
+  if (!await confirmDialog({ title: 'Delete collection?', message: `Delete “${collection.name}”?`, detail: 'The notes in this collection stay in your vault.', confirmLabel: 'Delete collection', danger: true })) return;
+  try {
+    await invoke('delete_collection', { id: collection.id });
+    collections = collections.filter((c) => c.id !== collection.id);
+    if (selectedCollection?.id === collection.id) { clearCollection(); await reloadNotes(); }
+    else renderCollections();
+  } catch (error) {
+    await message(String(error), { title: 'Could not delete the collection', kind: 'warning' });
+  }
+}
+
+async function changeCollectionQuery(oldQuery: string, query: string) {
+  const collection = selectedCollection;
+  if (!collection || collection.query !== oldQuery || collectionWorkspaceEl.inert) return;
+  collectionWorkspaceEl.inert = true;
+  try {
+    const saved = await invoke<Collection>('save_collection', { ...collection, query });
+    collections = collections.map((c) => c.id === saved.id ? saved : c);
+    if (selectedCollection?.id === saved.id) { selectedCollection = saved; await reloadNotes(); }
+  } catch (error) {
+    await message(String(error), { title: 'Could not update the collection', kind: 'warning' });
+    paintCollection();
+  } finally { collectionWorkspaceEl.inert = false; }
+}
+
+function paintCollection() {
+  if (!selectedCollection || !collectionViewOpen) return;
+  const actions: TableActions = {
+    ...tableActions,
+    editQuery: (old, next) => { void changeCollectionQuery(old, next); },
+    createRow: (newNote, title) => createQueryRow(newNote, title, null),
+  };
+  renderCollectionWorkspace(collectionWorkspaceEl, selectedCollection, collectionOutput, collectionError, {
+    actions,
+    folderName: collectionFolderName,
+    open: (id, event) => { void revealNote(id, openTarget(event)); },
+    edit: () => editCollection(isThoughtsCollection(selectedCollection) ? undefined : selectedCollection!),
+    review: isThoughtsCollection(selectedCollection) ? {
+      process: processThought,
+      busy: thoughtBusy,
+      undo: thoughtUndo ? { title: thoughtUndo.title, run: undoThought } : undefined,
+    } : undefined,
+    close: closeCollectionView,
+    refresh: () => { void reloadNotes(); },
+    toggleTask: async (input) => {
+      input.disabled = true;
+      try {
+        if (blockEdit) commitBlockEdit();
+        await settlePendingWork();
+        await toggleQueryTask(input);
+        await reloadFolders();
+        const updated = knownNotes.get(input.dataset.taskNote!);
+        const { content: next } = await invoke<NoteContent>('get_note_content', { id: input.dataset.taskNote });
+        if (updated) await onExternalChange(updated, next);
+        await reloadNotes();
+      } catch (error) {
+        input.checked = !input.checked;
+        await message(String(error), { title: 'Could not update the task', kind: 'warning' });
+      } finally { input.disabled = false; }
+    },
+  });
+}
+
+function closeCollectionView() {
+  showCollectionView(false);
+  renderNotes();
+  document.querySelector<HTMLButtonElement>('#open-collection')!.focus();
+}
+
+async function changeInbox(id: string, key: string, value: PropertyValue | null) {
+  if (blockEdit) commitBlockEdit();
+  await settlePendingWork();
+  const updated = await invoke<Note>('set_property', { id, key, value, renameFrom: null });
+  knownNotes.set(updated.id, updated);
+  libraryNotes = libraryNotes.map((note) => note.id === id ? updated : note);
+  forEachPane(() => { if (selectedNote?.id === id) { selectedNote = updated; paintProperties(); } });
+  invalidateQueries();
+  scheduleListRefresh();
+  return updated;
+}
+
+async function processThought(id: string) {
+  if (thoughtBusy) return;
+  const restoreFocus = isThoughtsCollection(selectedCollection) && collectionViewOpen;
+  thoughtBusy = true;
+  paintCollection();
+  try {
+    if (blockEdit) commitBlockEdit();
+    await settlePendingWork();
+    await reloadFolders();
+    const note = knownNotes.get(id);
+    if (!note || !canReviewNote(note)) return;
+    const property = inboxProperty(note);
+    const key = property?.key ?? 'inbox';
+    let previous: PropertyValue | null = null;
+    if (property) { const { key: _key, ...value } = property; previous = value; }
+    const updated = await changeInbox(id, key, { type: 'checkbox', value: false });
+    thoughtUndo = { id: updated.id, title: updated.title, key, previous };
+    await reloadFolders();
+    await reloadNotes();
+  } catch (error) {
+    await message(String(error), { title: 'Could not update Thoughts', kind: 'warning' });
+  } finally {
+    thoughtBusy = false;
+    paintCollection();
+    if (restoreFocus) focusThoughtAction();
+  }
+}
+
+async function undoThought() {
+  const undo = thoughtUndo;
+  if (!undo || thoughtBusy) return;
+  thoughtBusy = true;
+  paintCollection();
+  try {
+    await reloadFolders();
+    const note = knownNotes.get(undo.id);
+    const property = note ? inboxProperty(note) : undefined;
+    if (!note || property?.type !== 'checkbox' || property.value !== false) {
+      thoughtUndo = null;
+      await message('This note’s inbox status has changed. Use Send to Thoughts to review it again.', { title: 'Could not undo', kind: 'info' });
+      return;
+    }
+    await changeInbox(undo.id, undo.key, undo.previous);
+    thoughtUndo = null;
+    await reloadFolders();
+    await reloadNotes();
+  } catch (error) {
+    await message(String(error), { title: 'Could not undo', kind: 'warning' });
+  } finally {
+    thoughtBusy = false;
+    paintCollection();
+    focusThoughtAction(undo.id);
+  }
+}
+
+function focusThoughtAction(id?: string) {
+  if (!isThoughtsCollection(selectedCollection) || !collectionViewOpen || document.querySelector('dialog[open]')) return;
+  const preferred = id ? collectionWorkspaceEl.querySelector<HTMLButtonElement>(`[data-process-thought="${CSS.escape(id)}"]`) : null;
+  (preferred ?? collectionWorkspaceEl.querySelector<HTMLButtonElement>('[data-process-thought], [data-undo-thought]'))?.focus({ preventScroll: true });
+}
+
+async function sendToThoughts(id: string) {
+  if (thoughtBusy) return;
+  thoughtBusy = true;
+  try {
+    const note = await findNote(id);
+    if (!note || !canReviewNote(note)) return;
+    await changeInbox(id, inboxProperty(note)?.key ?? 'inbox', { type: 'checkbox', value: true });
+    if (thoughtUndo?.id === id) thoughtUndo = null;
+    await reloadFolders();
+    await selectCollection(THOUGHTS_COLLECTION);
+  } catch (error) {
+    await message(String(error), { title: 'Could not send to Thoughts', kind: 'warning' });
+  } finally { thoughtBusy = false; paintCollection(); }
 }
 
 async function reloadNotes() {
   // Any change to the notes can change what query blocks list.
   invalidateQueries();
-  notes = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
+  const version = ++listLoadVersion;
+  const collection = selectedCollection;
+  if (collection) {
+    try {
+      const output = await invoke<QueryOutput>('run_query', { query: collection.query, excludeId: null });
+      if (version !== listLoadVersion) return;
+      collectionOutput = output;
+      collectionError = null;
+      if (isThoughtsCollection(collection)) { thoughtsCountRun++; setThoughtsCount(output.total); }
+      const ids = output.show === 'tasks' ? [...new Set(output.tasks.map((task) => task.noteId))] : output.notes.map((note) => note.id);
+      notes = ids.flatMap((id) => knownNotes.get(id) ? [knownNotes.get(id)!] : []);
+    } catch (error) {
+      if (version !== listLoadVersion) return;
+      collectionOutput = null;
+      collectionError = String(error);
+      notes = [];
+    }
+    renderFolders();
+    renderNotes();
+    paintCollection();
+    return;
+  }
+  const loaded = await invoke<Note[]>('list_notes', { folderId: selectedFolder, sort: 'updatedDesc' satisfies SortOrder });
+  if (version !== listLoadVersion) return;
+  notes = loaded;
   // Archived notes only show up in the Archive itself, not in All.
   if (!selectedFolder) notes = notes.filter((note) => note.folderId !== 'archive');
   // A tag or a type narrows All Notes.
@@ -1630,11 +2088,11 @@ function renderFolders() {
     `;
   };
 
-  folderEl.innerHTML = `
-    <button class="folder system-folder ${selectedFolder === null && !selectedTag && !selectedType ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
+  libraryLinksEl.innerHTML = `
+    <button class="folder system-folder ${selectedFolder === null && !selectedTag && !selectedType && !selectedCollection ? 'selected' : ''}" data-folder="" style="padding-left: ${rowInset(0)}px" type="button">
       <span class="folder-disclosure is-empty" aria-hidden="true"></span>
       <span class="folder-icon" aria-hidden="true">${iconSvg('notes', 13)}</span>
-      <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag && !selectedType)}">All Notes</span></span>
+      <span class="folder-name"><span class="${markerClass(selectedFolder === null && !selectedTag && !selectedType && !selectedCollection)}">All Notes</span></span>
       <span class="folder-count">${allNotesCount}</span>
     </button>
     <button class="folder system-folder ${selectedFolder === 'journal' ? 'selected' : ''}" data-folder="journal" style="padding-left: ${rowInset(0)}px" type="button" title="Journal (⌘⇧J for today)">
@@ -1649,16 +2107,20 @@ function renderFolders() {
       <span class="folder-name"><span class="${markerClass(selectedFolder === 'archive')}">Archive</span></span>
       <span class="folder-count">${archive?.noteCount ?? 0}</span>
     </button>
+  `;
+  folderEl.innerHTML = `
     ${createRow(null, 0)}
     ${(childrenByParent.get(null) ?? []).map((folder) => renderFolderRow(folder, 0)).join('')}
   `;
 
-  folderEl.querySelectorAll<HTMLButtonElement>('.folder').forEach((button) => {
+  const navigationRows = [libraryLinksEl, folderEl].flatMap((root) => [...root.querySelectorAll<HTMLButtonElement>('.folder')]);
+  navigationRows.forEach((button) => {
     button.addEventListener('click', async () => {
       // The Journal opens on today's page, the way a diary falls open.
       if (button.dataset.folder === 'journal') { await openJournal(todayKey()); return; }
       noteMarkerChange();
       selectedFolder = button.dataset.folder || null;
+      clearCollection();
       selectedTag = null;
       selectedType = null;
       activeFilter = 'all';
@@ -1707,7 +2169,7 @@ function renderFolders() {
       await reloadNotes();
     });
   });
-  folderEl.querySelectorAll<HTMLButtonElement>('.folder').forEach((button) => bindFolderDragHandlers(button));
+  navigationRows.forEach((button) => bindFolderDragHandlers(button));
   const createInput = document.querySelector<HTMLInputElement>('#folder-create-input');
   if (createInput) {
     requestAnimationFrame(() => createInput.focus());
@@ -1736,6 +2198,12 @@ function renderFolders() {
   scopeIconEl.innerHTML = selectedTag ? uiIcon('hash', 16)
     : selectedType ? typeIconHtml(currentType ?? { name: selectedType, icon: null }, 16)
     : currentFolder ? folderIconSvg(currentFolder.icon) : iconSvg(selectedFolder === 'archive' ? 'archive' : selectedFolder === 'journal' ? 'calendar' : 'notes');
+  if (selectedCollection) {
+    noteListTitleEl.textContent = selectedCollection.name;
+    scopeIconEl.innerHTML = uiIcon('collection', 16);
+  }
+  document.querySelector<HTMLButtonElement>('#open-collection')!.hidden = !selectedCollection;
+  document.querySelector<HTMLButtonElement>('#save-collection')!.hidden = !!selectedCollection;
   const newButton = document.querySelector<HTMLButtonElement>('#note-list-new');
   if (newButton) {
     const label = selectedType ? `New ${currentType?.name ?? selectedType}` : 'New note';
@@ -1876,6 +2344,7 @@ function bindFolderDragHandlers(button: HTMLButtonElement) {
 }
 
 function renderFilterPills() {
+  document.querySelector<HTMLElement>('.filter-pills')!.hidden = !!selectedCollection;
   document.querySelectorAll<HTMLButtonElement>('.filter-pills button').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.filter === activeFilter);
   });
@@ -1891,22 +2360,21 @@ function applyQuickFilter(list: Note[]): Note[] {
 }
 
 function renderNotes() {
+  renderSidebarCalendar();
   const visible = applyQuickFilter(notes);
   noteListCountEl.textContent = `${visible.length}`;
   const inJournal = selectedFolder === 'journal';
-  const calendar = inJournal ? journalCalendarHtml() : '';
   if (!visible.length) {
-    const filtered = activeFilter !== 'all';
-    noteEl.innerHTML = `${calendar}<div class="empty"><div class="empty-icon">${iconSvg('notes', 22)}</div><strong>${filtered ? 'Nothing matches this filter' : 'This list is empty'}</strong><span>${filtered ? 'Switch back to All to see every note here.' : 'Write the first note here. It saves as plain text in your vault.'}</span>${filtered ? '' : `<button type="button" class="empty-action" data-empty-list-new>${uiIcon('plus', 13)}New note</button>`}</div>`;
+    const filtered = activeFilter !== 'all' || !!selectedCollection;
+    noteEl.innerHTML = `<div class="empty"><div class="empty-icon">${iconSvg('notes', 22)}</div><strong>${filtered ? 'Nothing matches this filter' : 'This list is empty'}</strong><span>${selectedCollection ? 'Open the collection to review or edit its rules.' : filtered ? 'Switch back to All to see every note here.' : 'Write the first note here. It saves as plain text in your vault.'}</span>${filtered ? '' : `<button type="button" class="empty-action" data-empty-list-new>${uiIcon('plus', 13)}New note</button>`}</div>`;
     noteEl.querySelector('[data-empty-list-new]')?.addEventListener('click', createNote);
-    bindJournalCalendar(noteEl);
     renderTags();
     renderTypes();
     return;
   }
   let lastGroup = '';
   const open = openNoteIds();
-  noteEl.innerHTML = calendar + visible.map((note) => {
+  noteEl.innerHTML = visible.map((note) => {
     const day = inJournal ? note.journal ?? null : null;
     const group = day ? monthGroup(day) : dateGroup(note.updatedAt);
     const heading = group !== lastGroup ? `<h2 class="note-group">${group}</h2>` : '';
@@ -1914,6 +2382,7 @@ function renderNotes() {
     const tagMarkup = note.tags.slice(0, 3).map((tag) => `<span style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag.split('/').pop() ?? tag)}</span>`).join('');
     const extraTags = note.tags.length > 3 ? `<span class="more">+${note.tags.length - 3}</span>` : '';
     const archived = note.folderId === 'archive';
+    const scheduled = targetDate(note);
     return `${heading}
       <article class="note-card ${selectedNote?.id === note.id ? 'selected' : open.has(note.id) ? 'is-open' : ''}" data-note="${note.id}" tabindex="0" draggable="true" aria-current="${selectedNote?.id === note.id}" title="${open.has(note.id) && selectedNote?.id !== note.id ? 'Open in a tab. ' : ''}⌘-click: new tab · ⌥⌘-click: split">
         <div class="note-card-head">
@@ -1921,6 +2390,7 @@ function renderNotes() {
           ${day ? `<time datetime="${escapeHtml(day)}">${relativeDay(day) ?? ''}</time>` : `<time datetime="${escapeHtml(note.updatedAt)}">${formatCardDate(note.updatedAt)}</time>`}
         </div>
         <p>${escapeHtml(note.preview || (day ? 'Nothing written yet' : 'Empty note'))}</p>
+        ${scheduled ? `<div class="note-target-date">${uiIcon('calendar', 11)}${escapeHtml(formatDay(scheduled, 'short'))}</div>` : ''}
         ${tagMarkup || note.starred ? `<footer>${note.starred ? `<span class="starred" title="Pinned" aria-label="Pinned">${uiIcon('pin', 11)}</span>` : ''}${tagMarkup}${extraTags}</footer>` : ''}
         <button class="note-delete" data-delete-note="${note.id}" type="button" title="${archived ? 'Delete permanently' : 'Move to Archive'}" aria-label="${archived ? 'Delete permanently' : 'Move to Archive'}">${archived ? uiIcon('trash', 13) : iconSvg('archive', 13)}</button>
       </article>
@@ -1950,7 +2420,6 @@ function renderNotes() {
       if (found && event.dataTransfer) startNoteDrag(event.dataTransfer, found);
     });
   });
-  bindJournalCalendar(noteEl);
   noteEl.querySelectorAll<HTMLButtonElement>('.note-delete').forEach((button) => {
     button.addEventListener('click', async (event) => {
       event.stopPropagation();
@@ -2055,6 +2524,7 @@ function colorForTag(path: string) {
 }
 
 async function selectTag(path: string) {
+  clearCollection();
   noteMarkerChange();
   selectedTag = path;
   selectedType = null;
@@ -2318,6 +2788,7 @@ function startChildTypeCreate(parent: string) {
 
 /** List the notes of a type. */
 async function selectType(name: string) {
+  clearCollection();
   noteMarkerChange();
   selectedType = findType(name)?.name ?? name;
   selectedTag = null;
@@ -2395,6 +2866,7 @@ async function createTypeTemplate(name: string, parent: string | null = null) {
     return;
   }
   selectedType = typeName;
+  clearCollection();
   selectedTag = null;
   selectedFolder = null;
   await reloadFolders();
@@ -2405,6 +2877,7 @@ async function createTypeTemplate(name: string, parent: string | null = null) {
 
 /** Open `note` in the open tab, a new tab, or a new split beside the open one. */
 async function openNote(note: Note, where: OpenTarget = 'here') {
+  showCollectionView(false);
   if (where === 'split') { await splitPane(note); return; }
   await settlePendingWork();
   const pane = activePane;
@@ -2533,6 +3006,7 @@ function paintProperties(focus?: Parameters<typeof renderPropertiesPanel>[1]['fo
     hidden: getPreference('hiddenProperties'),
     onHide: hideProperty,
   });
+  paintScheduleButton();
 }
 
 let inheritanceRequest = 0;
@@ -2703,10 +3177,18 @@ const tableActions: TableActions = {
   editProperty: (noteId, key, given) => setRowProperty([noteId], key, given),
   editMany: (noteIds, key, given) => setRowProperty(noteIds, key, given),
   editQuery: replaceQuery,
-  createRow: async (newNote, title) => {
+  createRow: (newNote, title) => createQueryRow(newNote, title, isUserFolder(selectedNote?.folderId ?? null) ? selectedNote!.folderId : null),
+  openLink: (target) => void followWikilink(target),
+  decorate: markWikilinks,
+  valueSuggestions: (key) => propertyValueSuggestions(key),
+  valueHint: (key) => { const field = linkFieldFor(key); return field ? linkHint(field) : null; },
+  knownType: propertyKnownType,
+};
+
+async function createQueryRow(newNote: NewNote, title: string, fallbackFolderId: string | null): Promise<boolean> {
     try {
       await settlePendingWork();
-      const folderId = newNote.folderId ?? (isUserFolder(selectedNote?.folderId ?? null) ? selectedNote!.folderId : null);
+      const folderId = newNote.folderId ?? fallbackFolderId;
       const tags = newNote.tags.length ? `${newNote.tags.map((tag) => `#${tag}`).join(' ')}\n` : '';
       // A query for a type adds a note of that type, from its template.
       const type = newNote.properties.find((p) => p.key.toLowerCase() === 'type' && p.type === 'text');
@@ -2732,13 +3214,7 @@ const tableActions: TableActions = {
       await message(String(error), { title: 'Could not add the note', kind: 'warning' });
       return false;
     }
-  },
-  openLink: (target) => void followWikilink(target),
-  decorate: markWikilinks,
-  valueSuggestions: (key) => propertyValueSuggestions(key),
-  valueHint: (key) => { const field = linkFieldFor(key); return field ? linkHint(field) : null; },
-  knownType: propertyKnownType,
-};
+}
 
 /** Property names across the vault, most used first. */
 function vaultPropertyKeys(): string[] {
@@ -2895,7 +3371,7 @@ function daySummaryHtml() {
     group('Open tasks', day.tasks.length, `<ul class="td-query-tasks day-tasks">${day.tasks.map((task) => taskItemHtml(task, { withDay: false, withNote: true })).join('')}</ul>`),
     group('Created', day.created.length, day.created.map((note) => row(note, time(note.createdAt))).join('')),
     group('Edited', day.edited.length, day.edited.map((note) => row(note, time(note.updatedAt))).join('')),
-    group('Dated this day', day.dated.length, day.dated.map(({ note, keys }) => row(note, keys.join(', '))).join('')),
+    group('Dated this day', day.dated.length, day.dated.map(({ note, keys }) => row(note, keys.map((key) => key.toLowerCase() === 'target_date' ? 'Scheduled' : key).join(', '))).join('')),
   ].join('');
   return `
     <section class="backlinks day-summary${isSectionCollapsed('day') ? ' is-collapsed' : ''}" data-day-summary aria-label="This day">
@@ -3329,6 +3805,7 @@ function renderEditor() {
         <span class="doc-location">${crumbHome}</span>
         ${day ? `<span class="journal-day-key">${relativeDay(day) ? `${relativeDay(day)} · ` : ''}${escapeHtml(title)}</span>` : ''}
         <span>Edited ${formatDate(selectedNote.updatedAt)}</span>
+        ${canScheduleNote(selectedNote) ? '<button type="button" class="doc-target-date" data-schedule-note></button>' : ''}
         <span id="counts"></span>
         ${selectedNote.tags.length ? `<span class="doc-tags">${selectedNote.tags.map((tag) => `<button type="button" class="doc-tag" data-doc-tag="${escapeHtml(tag)}" style="--tag-dot:${colorForTag(tag).dot}"><i></i>${escapeHtml(tag)}</button>`).join('')}</span>` : ''}
       </div>
@@ -3370,6 +3847,8 @@ function renderEditor() {
   bindTabStrip(activePane);
   paintTabs(activePane);
   paintProperties();
+  paintScheduleButton();
+  editorRoot.querySelector('[data-schedule-note]')?.addEventListener('click', () => { if (selectedNote) scheduleNote(selectedNote); });
   editorRoot.querySelectorAll<HTMLButtonElement>('[data-journal-day]').forEach((button) => {
     button.addEventListener('click', () => void openJournal(button.dataset.journalDay!));
   });

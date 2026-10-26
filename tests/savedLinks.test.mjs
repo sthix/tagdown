@@ -28,6 +28,7 @@ for (const pasted of [true, false]) {
     let created = 0;
     const context = vm.createContext({
       selectedFolder: null, selectedTag: null, selectedType: null,
+      selectedCollection: null, listLoadVersion: 0,
       selectedNote: null, sort: 'updatedDesc', libraryNotes: [], notes: [],
       folders: [], allNotesCount: 0, knownNotes: new Map(),
       async invoke(command) {
@@ -47,7 +48,7 @@ for (const pasted of [true, false]) {
       },
       async revealNote(id) { opened.push(id); },
       replacePastedLink(_textarea, _url, text) { inserted = text; },
-      reloadTypes() {}, closeMissingTabs() {}, renderFolders() {},
+      reloadTypes() {}, closeMissingTabs() {}, renderFolders() {}, scheduleThoughtsCount() {},
       renderNotes() {}, invalidateQueries() {}, showNotice() {},
       isDayKey() { return false; },
     });

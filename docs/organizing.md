@@ -38,6 +38,42 @@ Switching restarts Tagdown in the other vault, after saving whatever you were wr
 - Deleting a folder moves its notes to the top of the vault. A folder that also holds other files (images, PDFs) isn't deleted; move those out in Finder first.
 - **All Notes** shows every note that isn't archived, [journal](journal.md) pages included.
 
+## Collections
+
+Collections are named, live views of your notes. Click **+** beside **Collections** in the sidebar, or **Save list as collection** beside the note list heading. Starting from a folder, tag, type, or quick filter carries that scope into the collection's rules.
+
+Give it a name, optional emoji (click ☺ beside the icon field to open the macOS emoji palette), and a layout: **List**, **Table**, **Cards**, **Board**, or **Tasks**. Rules use the same syntax as [live queries](queries-and-tasks.md); as you type, the dialog shows how many notes match, or what is wrong with the rules. Press ⌘↩ in the rules field to save. For example:
+
+```text
+type:Book status=reading sort:title
+tag:project show:cards columns:status,due
+is:pinned
+show:tasks date:today sort:date
+```
+
+`is:pinned`, `is:untagged`, and `is:journal` filter by built-in note attributes; prefix with `-is:` to exclude one. Unscoped collections exclude Archive. Use `folder:archive` to view archived notes. Results default to 50 items; `limit:500` raises the limit, and the view tells you when more matches exist.
+
+Click a collection to open it. Changing its layout, sorting a table header, or adding/hiding columns saves the change to that collection. Tables support the same property editing and bulk changes as query blocks; boards support dragging cards between lanes. Click a result to edit its note, then use **Open collection** beside the note list title to return. The back arrow, Esc, or ⌘W leaves a collection for the note behind it. While a collection is open, shortcuts and ⌘K commands for the current note (export, print, graph, version history, view modes and the like) are off, so they never act on a note you can't see. The collection's **…** menu (or a right-click on it) lets you edit its rules or delete it; an empty collection also offers **Edit rules**. Deleting a collection keeps its notes.
+
+Definitions live in `.tagdown/collections.json` in the current vault, including each collection's query, name, and icon. Notes remain ordinary Markdown files, and collections in different vaults are independent.
+
+### Thoughts inbox
+
+**Thoughts** is a built-in collection for reviewing notes that need a title, content, or a connection to another note. Connections count links in either direction, including property links, aliases, and file paths. Self-links and missing targets do not count. Journal pages, templates, and archived notes stay out.
+
+The sidebar shows how many notes Thoughts holds; the badge disappears when the inbox is empty. Each note shows why it is in the inbox. Open it to develop the idea, or click **Mark processed** to remove it from Thoughts. **Undo** restores the previous inbox setting. Marking a note as processed writes `inbox: false` in its frontmatter; it stays out until you choose **Send to Thoughts** from its note menu or set `inbox: true`. This works even for a note that is already complete and connected.
+
+Use **Save as collection** to make a custom view, such as `is:thought type:Book` or `is:thought tag:project`. The same review predicates work in query blocks and through CLI/MCP queries:
+
+| Rule | Matches |
+| --- | --- |
+| `is:thought` | The review queue, respecting explicit inbox choices and the exclusions above |
+| `is:empty` | Notes without body content beyond headings, tags, or empty scaffolding |
+| `is:unlinked` | Notes without a resolved link to or from another active note |
+| `-is:thought` | Notes outside the review queue |
+
+Code, math, images, and embeds count as content. A missing body or title can still put a connected note in Thoughts. Tags alone do not make a note connected. These rules inspect the current vault, so outside edits are reflected when the note lists refresh.
+
 ## Tags
 
 Write `#tag` anywhere in a note, or `#parent/child` for a nested tag. Tags written in the text are collected into the note's frontmatter when it saves, and are lowercased.

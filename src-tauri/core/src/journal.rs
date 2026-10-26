@@ -16,6 +16,7 @@ use crate::{
 };
 
 pub const TEMPLATE_TITLE: &str = "Journal Template";
+pub const TARGET_DATE_KEY: &str = "target_date";
 const ARCHIVE: &str = "archive";
 
 /// The title of a day's journal page.
@@ -186,6 +187,57 @@ mod tests {
         assert!(!created);
         assert_eq!(again.id, note.id);
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn scheduling_rescheduling_and_clearing_keep_the_note_and_task_dates() {
+        let (vault, root) = vault();
+        let note = vault.create_note(None).unwrap();
+        let body = "# Launch\n\n- [ ] Send brief [[2026-10-29]]\n";
+        let note = vault.save_note(&note.id, body.into()).unwrap();
+        vault.set_property(&note.id, "due", Some(PropertyValue::Date(day("2026-10-30"))), None).unwrap();
+        vault.set_property(&note.id, "Target_Date", Some(PropertyValue::Date(day("2026-10-26"))), None).unwrap();
+        let scheduled = vault.set_target_date(&note.id, Some("2026-10-27")).unwrap();
+        assert_eq!(scheduled.created_at, note.created_at);
+        assert_eq!(scheduled.properties.iter().filter(|p| p.key.eq_ignore_ascii_case(TARGET_DATE_KEY)).count(), 1);
+        assert!(scheduled.properties.iter().any(|p| p.key == "Target_Date" && p.value == PropertyValue::Date(day("2026-10-27"))));
+        assert_eq!(vault.get_note_content(&note.id).unwrap().content, body);
+        let summary = day_summary(vault.notes_with_content().unwrap(), day("2026-10-27"), "", &chrono::Utc);
+        assert!(summary.dated.iter().any(|entry| entry.note.id == note.id));
+        vault.set_target_date(&note.id, Some("2026-11-01")).unwrap();
+        let old_day = day_summary(vault.notes_with_content().unwrap(), day("2026-10-27"), "", &chrono::Utc);
+        assert!(!old_day.dated.iter().any(|entry| entry.note.id == note.id));
+        let reopened = Vault::open_existing(root.clone()).unwrap();
+        let new_day = day_summary(reopened.notes_with_content().unwrap(), day("2026-11-01"), "", &chrono::Utc);
+        assert!(new_day.dated.iter().any(|entry| entry.note.id == note.id));
+        let cleared = reopened.set_target_date(&note.id, None).unwrap();
+        assert!(!cleared.properties.iter().any(|p| p.key.eq_ignore_ascii_case(TARGET_DATE_KEY)));
+        assert!(cleared.properties.iter().any(|p| p.key == "due" && p.value == PropertyValue::Date(day("2026-10-30"))));
+        let tasks = parse_tasks(&cleared, &reopened.get_note_content(&note.id).unwrap().content);
+        assert_eq!(tasks[0].date, Some(day("2026-10-29")));
+        assert_eq!(cleared.created_at, note.created_at);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn scheduling_rejects_bad_dates_and_system_notes_without_writing() {
+        let (vault, root) = vault();
+        let note = vault.create_note(None).unwrap();
+        let path = root.join(&note.path);
+        let original = std::fs::read_to_string(&path).unwrap();
+        for value in ["2026-02-30", "2026-1-2", "tomorrow", "2026-10-27 "] {
+            assert!(vault.set_target_date(&note.id, Some(value)).is_err());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        }
+        let (journal, _) = vault.open_journal(day("2026-10-26")).unwrap();
+        assert!(vault.set_target_date(&journal.id, Some("2026-11-01")).is_err());
+        assert!(vault.set_target_date(&journal.id, None).is_err());
+        let template = vault.save_note(&note.id, "# Book Template\n\nKeep this template.\n".into()).unwrap();
+        assert!(vault.set_target_date(&template.id, Some("2026-11-01")).is_err());
+        let regular = vault.save_note(&note.id, "# An archived note\n".into()).unwrap();
+        vault.delete_note(&regular.id).unwrap();
+        assert!(vault.set_target_date(&regular.id, Some("2026-11-01")).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

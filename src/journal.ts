@@ -6,9 +6,16 @@ const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export type CalendarMonth = { year: number; month: number }; // month is 0-based
 
+function localDate(year: number, month: number, day: number) {
+  const date = new Date(0);
+  date.setHours(12, 0, 0, 0);
+  date.setFullYear(year, month, day);
+  return date;
+}
+
 export function dayKey(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export function todayKey() {
@@ -20,7 +27,7 @@ export function parseDayKey(value: string): Date | null {
   const match = value.trim().match(DAY_KEY);
   if (!match) return null;
   const [year, month, day] = [Number(match[1]), Number(match[2]) - 1, Number(match[3])];
-  const date = new Date(year, month, day);
+  const date = localDate(year, month, day);
   return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
 }
 
@@ -59,7 +66,7 @@ export function monthOf(key: string): CalendarMonth {
 }
 
 export function shiftMonth({ year, month }: CalendarMonth, by: number): CalendarMonth {
-  const date = new Date(year, month + by, 1);
+  const date = localDate(year, month + by, 1);
   return { year: date.getFullYear(), month: date.getMonth() };
 }
 
@@ -68,18 +75,20 @@ export function shiftMonth({ year, month }: CalendarMonth, by: number): Calendar
  * browser knows it (Monday otherwise). Days with a page get a dot; buttons
  * carry `data-day` / `data-month-shift` for the caller to bind.
  */
-export function calendarHtml(shown: CalendarMonth, withPages: Set<string>, selected: string | null) {
-  const first = new Date(shown.year, shown.month, 1);
+export function calendarHtml(shown: CalendarMonth, withPages: Set<string>, selected: string | null, scheduled = new Map<string, number>()) {
+  const first = localDate(shown.year, shown.month, 1);
   const weekStart = localeWeekStart();
   const lead = (first.getDay() - weekStart + 7) % 7;
-  const daysInMonth = new Date(shown.year, shown.month + 1, 0).getDate();
+  const daysInMonth = localDate(shown.year, shown.month + 1, 0).getDate();
   const today = todayKey();
   const names = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 7 + ((weekStart + i) % 7)).toLocaleDateString(undefined, { weekday: 'narrow' }));
   const cells: string[] = Array.from({ length: lead }, () => '<span class="journal-cal-pad"></span>');
   for (let day = 1; day <= daysInMonth; day++) {
-    const key = dayKey(new Date(shown.year, shown.month, day));
-    const classes = ['journal-cal-day', key === today ? 'is-today' : '', key === selected ? 'is-selected' : '', withPages.has(key) ? 'has-page' : ''].filter(Boolean).join(' ');
-    cells.push(`<button type="button" class="${classes}" data-day="${key}" aria-label="${formatDay(key)}${withPages.has(key) ? ', has a page' : ''}"${key === selected ? ' aria-current="date"' : ''}>${day}</button>`);
+    const key = dayKey(localDate(shown.year, shown.month, day));
+    const count = scheduled.get(key) ?? 0;
+    const classes = ['journal-cal-day', key === today ? 'is-today' : '', key === selected ? 'is-selected' : '', withPages.has(key) ? 'has-page' : '', count ? 'has-scheduled' : ''].filter(Boolean).join(' ');
+    const label = `${formatDay(key)}${withPages.has(key) ? ', has a page' : ''}${count ? `, ${count} scheduled ${count === 1 ? 'note' : 'notes'}` : ''}`;
+    cells.push(`<button type="button" class="${classes}" data-day="${key}" title="${label}" aria-label="${label}"${key === selected ? ' aria-current="date"' : ''}>${day}</button>`);
   }
   const title = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   return `

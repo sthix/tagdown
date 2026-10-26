@@ -87,6 +87,9 @@ See the [syntax guide](docs/syntax.md) for everything Tagdown adds.
 - **Note types and child types**: use the **+** on a type row to create a child, such as Author under Person. Children inherit properties and icons; switch inherited fields off, override their defaults, or add your own. Parent views and link fields include children. A template property such as `author: "[[Person]]"` suggests and creates notes of that type.
 - **Saved web links**: paste a link on an empty line (or use *Save web link…*) to keep the page as a Link note with its title, description and opening text.
 - **Live queries** such as `<query tag:project show:tasks />`, shown as lists, editable tables (tick rows to set a property on all of them at once), kanban **boards** (drag a card to change its status) or **cards** with cover images.
+- **Saved collections** in the sidebar: keep query rules, sorting, columns, and a list, table, card, board, or task layout per vault. Save the current folder/tag/type list, edit a collection's rules, or open its notes without duplicating files.
+- **Thoughts inbox**: review incomplete or disconnected notes, see why they need attention, and mark them as processed with undo. Send any regular note back from its note menu; inbox choices stay in Markdown frontmatter.
+- **Note scheduling**: set, move, or clear a note's target date from its header or menu, or drag it onto the sidebar calendar. Scheduled notes appear on that journal day, independently of task deadlines and other dates.
 - **Tasks** with a day (`[[2026-10-20]]`), a priority (`!high`) and repeats (`every:week`), ticked right in any list; ticking one ticks its subtasks too. ⌘⇧T shows them as **Today**, **Upcoming** and **Inbox**.
 - **Outside edits** from other editors, git, or sync services are picked up while the app runs.
 

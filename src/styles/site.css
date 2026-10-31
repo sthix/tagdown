@@ -93,7 +93,7 @@
 .site-note-title:hover { text-decoration: underline; text-decoration-color: var(--marker-strong); text-decoration-thickness: 3px; }
 .site-note-meta { margin-left: 8px; color: var(--ink-3); font-size: 12px; }
 .site-note-list p { margin: 4px 0 0; color: var(--ink-2); font-family: var(--font-serif); font-size: 14.5px; line-height: 1.5; }
-.site-footer { max-width: 760px; margin: 0 auto; padding: 24px 32px 40px; color: var(--ink-4); font-size: 12px; }
+.site-footer { max-width: 760px; margin: 0 auto; padding: 24px 32px 40px; color: var(--ink-3); font-size: 12px; }
 
 @media (max-width: 600px) {
   .site-header, .site-index, .site-footer { padding-left: 18px; padding-right: 18px; }

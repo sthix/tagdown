@@ -631,7 +631,7 @@ textarea#source,
   cursor: pointer;
 }
 .wikilink-suggest-row.active { background: var(--marker-soft); }
-.wikilink-suggest-brackets { color: var(--ink-4); font-family: var(--font-mono); font-size: 11px; }
+.wikilink-suggest-brackets { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
 
 /* ---- Slash command menu ---- */
 .slash-menu {
@@ -649,7 +649,7 @@ textarea#source,
 }
 .slash-menu-group {
   padding: 8px 8px 4px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .02em;
@@ -690,7 +690,7 @@ textarea#source,
 }
 .slash-menu-row kbd {
   flex-shrink: 0;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11px;
 }

@@ -47,10 +47,10 @@
   --source-fg: #2b2820;
   --text-primary: #1f1d17;
   --text-secondary: #5f5a4e;
-  --text-muted: #918b7e;
+  --text-muted: #6b6559;
   --ink: #1f1d17;
   --ink-2: #5f5a4e;
-  --ink-3: #918b7e;
+  --ink-3: #6b6559;
   --ink-4: #c4beb0;
 
   /* Highlighter */
@@ -163,11 +163,11 @@
   --backdrop: rgba(10, 9, 6, .5);
   --source-fg: #e5e1d8;
   --text-primary: #eeebe3;
-  --text-secondary: #aba699;
-  --text-muted: #7b766a;
+  --text-secondary: #b8b3a6;
+  --text-muted: #a29c8e;
   --ink: #eeebe3;
-  --ink-2: #aba699;
-  --ink-3: #7b766a;
+  --ink-2: #b8b3a6;
+  --ink-3: #a29c8e;
   --ink-4: #57534a;
   --marker: #ffd60a;
   --marker-strong: #ffe14d;

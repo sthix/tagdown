@@ -754,6 +754,7 @@ async function createNote() {
   await reloadFolders();
   await reloadNotes();
   await openNote(note);
+  selectNewNoteTitle();
 }
 
 /** Folders the user made, as opposed to All Notes, the Journal and the Archive. */

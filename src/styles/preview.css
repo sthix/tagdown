@@ -47,7 +47,7 @@
   tab-size: 2;
 }
 .td-block-editor::selection { background: var(--accent-tint-strong); }
-.td-block-editor::placeholder { color: var(--ink-4); }
+.td-block-editor::placeholder { color: var(--ink-3); }
 /* The open block gets a hairline outline with a soft highlight that slowly
    travels around it, so it reads as active without a heavy focus ring. The
    ring is a conic gradient masked down to a 1px border, laid over the editor.
@@ -87,7 +87,7 @@
   transition: color .12s ease;
 }
 .preview:hover .td-block-append,
-.td-block-append:only-child { color: var(--ink-4); }
+.td-block-append:only-child { color: var(--ink-3); }
 .td-block-append:hover { color: var(--ink-3); }
 .td-block-append:only-child { font-family: var(--font-serif); font-size: 16px; }
 .mode-preview .preview > * { max-width: var(--preview-measure, 760px); margin-left: auto; margin-right: auto; }

@@ -164,12 +164,6 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
 }
-.palette-foot-brand {
-  margin-left: auto;
-  font-family: var(--font-display);
-  font-weight: 600;
-  color: var(--ink-2);
-}
 .template-picker-search {
   display: block;
   box-sizing: border-box;

@@ -1,5 +1,7 @@
 // ⌘K command palette: one place to jump to a note or run an app action.
 
+import { noteExcerpt, noteExcerptRanges } from './noteExcerpt';
+
 export type PaletteNote = {
   id: string;
   title: string;
@@ -68,7 +70,6 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
         <span><kbd>⌘↵</kbd> new tab</span>
         <span><kbd>⌥⌘↵</kbd> split</span>
         <span class="palette-foot-syntax"><code>tag:</code><code>title:</code><code>"phrase"</code><code>-word</code></span>
-        <span class="palette-foot-brand">Tagdown</span>
       </footer>
     </div>`;
   document.body.appendChild(dialog);
@@ -103,9 +104,10 @@ export async function openCommandPalette(source: PaletteSource, initialQuery = '
     const section = (title: string, body: string) => body ? `<div class="palette-section" role="presentation"><h3>${title}</h3>${body}</div>` : '';
     const noteMarkup = noteRows.map(({ note, hit }) => {
       index++;
-      const detail = hit?.highlights.length
-        ? markRanges(hit.excerpt, hit.highlights)
-        : escapeHtml([note.folderName, note.preview].filter(Boolean).join(' — '));
+      const excerpt = hit?.highlights.length ? noteExcerptRanges(hit.excerpt, hit.highlights) : null;
+      const detail = excerpt
+        ? markRanges(excerpt.text, excerpt.ranges)
+        : escapeHtml([note.folderName, noteExcerpt(note.preview)].filter(Boolean).join(' — '));
       return `
         <div class="palette-row ${index === active ? 'active' : ''}" role="option" id="palette-opt-${index}" aria-selected="${index === active}" data-index="${index}">
           <span class="palette-row-icon">${source.noteIcon}</span>

@@ -64,3 +64,15 @@ test('unticking without a fitting memory leaves subtasks alone', () => {
   cascadeTask(lines, 0, false, [false]);
   assert.deepEqual(lines, ['- [ ] Parent', '  - [x] A', '  - [x] B'], 'a subtask was added or removed since');
 });
+
+test('checkbox lines match what the preview shows, so a tick lands on the right task', async () => {
+  const { checkboxLines } = await import(new URL('../dist-test/cascade/taskCascade.js', import.meta.url).href);
+  const lines = ['- [ ] first', '```', '- [ ] in code', '```', '%%', '- [ ] in comment', '%%', '> - [x] quoted', '+ [ ] plus', '- [ ]', 'text'];
+  assert.deepEqual(checkboxLines(lines).map(([i]) => i), [0, 7, 8, 9]);
+  assert.deepEqual(checkboxLines(lines)[1], [7, '> - [', 'x', '] quoted']);
+});
+
+test('a longer fence is only closed by a run as long', async () => {
+  const { checkboxLines } = await import(new URL('../dist-test/cascade/taskCascade.js', import.meta.url).href);
+  assert.deepEqual(checkboxLines(['````', '```', '- [ ] code', '````', '- [ ] real']).map(([i]) => i), [4]);
+});

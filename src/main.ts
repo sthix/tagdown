@@ -32,7 +32,7 @@ import { showContextMenu, type MenuItem } from './contextMenu';
 import { noteIcon } from './propertyValues';
 import type { Property, PropertyType, PropertyValue } from './propertyValues';
 import { asLinks, linkHint, type LinkField } from './linkFields';
-import { cascadeTask, subtaskStates } from './taskCascade';
+import { cascadeTask, checkboxLines, subtaskStates } from './taskCascade';
 import { nextTaskLine } from './taskRepeat';
 import { blockTarget, cachedBlock, fillBlockEmbeds, invalidateBlockEmbeds, lookupBlock } from './blockEmbeds';
 import { figureMarkup, imageFiles, pickImages, resolveLocalImages, saveImage, setVaultRoot } from './localImages';
@@ -4269,33 +4269,27 @@ const subtasksBeforeTick = new Map<string, boolean[]>();
 
 function toggleTaskAt(taskIndex: number) {
   const lines = content.split('\n');
-  let seen = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^(\s*[-*]\s+\[)([ xX])(\]\s+.+)$/);
-    if (!m) continue;
-    if (seen === taskIndex) {
-      const next = m[2] === ' ' ? 'x' : ' ';
-      lines[i] = m[1] + next + m[3];
-      // Subtasks follow a tick, and get their own states back when it's undone.
-      const remembered = `${selectedNote?.id}\n${m[3]}`;
-      if (next === 'x') subtasksBeforeTick.set(remembered, subtaskStates(lines, i));
-      cascadeTask(lines, i, next === 'x', subtasksBeforeTick.get(remembered));
-      if (next === ' ') subtasksBeforeTick.delete(remembered);
-      // A repeating task comes back: its next one goes above it.
-      const again = next === 'x' ? nextTaskLine(lines[i], todayKey()) : null;
-      if (again) lines.splice(i, 0, again);
-      content = lines.join('\n');
-      const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
-      if (source) source.value = content;
-      const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
-      if (livePreview) {
-        paintPreview(livePreview);
-      }
-      scheduleSave();
-      return;
-    }
-    seen++;
+  const found = checkboxLines(lines)[taskIndex];
+  if (!found) return;
+  const [i, before, mark, after] = found;
+  const next = mark === ' ' ? 'x' : ' ';
+  lines[i] = before + next + after;
+  // Subtasks follow a tick, and get their own states back when it's undone.
+  const remembered = `${selectedNote?.id}\n${after}`;
+  if (next === 'x') subtasksBeforeTick.set(remembered, subtaskStates(lines, i));
+  cascadeTask(lines, i, next === 'x', subtasksBeforeTick.get(remembered));
+  if (next === ' ') subtasksBeforeTick.delete(remembered);
+  // A repeating task comes back: its next one goes above it.
+  const again = next === 'x' ? nextTaskLine(lines[i], todayKey()) : null;
+  if (again) lines.splice(i, 0, again);
+  content = lines.join('\n');
+  const source = editorRoot.querySelector<HTMLTextAreaElement>('#source');
+  if (source) source.value = content;
+  const livePreview = editorRoot.querySelector<HTMLDivElement>('.preview');
+  if (livePreview) {
+    paintPreview(livePreview);
   }
+  scheduleSave();
 }
 
 async function flushSave() {

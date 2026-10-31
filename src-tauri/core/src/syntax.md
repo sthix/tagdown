@@ -32,6 +32,19 @@ A paragraph of text.
 Another paragraph.
 ```
 
+### Blockquotes and comments
+
+Start a line with > to quote it. > [!tip] Title makes a callout, as Obsidian writes them. Text between %% marks stays in the source and never appears in the preview or an export.
+
+```tagdown
+> A quoted line.
+
+> [!tip] Pro tip
+> A callout.
+
+%% A note to yourself. %%
+```
+
 ### Universal close
 
 Use </> to close the most recent open Tagdown tag when the tag name is obvious.

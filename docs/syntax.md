@@ -65,6 +65,17 @@ This changes the rendered output.
 </note>
 ```
 
+Obsidian's callouts work too, and any `>` line is a plain blockquote. `%%` marks a comment, which stays in the source and never reaches the preview or an export.
+
+```tagdown
+> [!warning] Careful
+> This changes the rendered output.
+
+> A plain quote.
+
+%% A note to yourself. %%
+```
+
 <figure class="doc-visual">
   <a href="images/guides/syntax-callout.svg">
     <img src="images/guides/syntax-callout.svg" width="960" height="372" loading="lazy" decoding="async" alt="Callout source beside a preview illustration: ::: tip Pro tip opens a titled tip, its Markdown body goes inside, and ::: closes it." />

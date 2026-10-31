@@ -119,3 +119,20 @@ test('lines indented under a line of text render as its children', () => {
   assert.match(html, /^<p><a class="td-wikilink"[^>]*>Page<\/a><\/p><div class="td-children"><ul class="td-tasklist">/);
   assert.equal(html.match(/class="td-task"/g).length, 2);
 });
+
+test('a comment spanning blank lines is one block, so preview editing still maps', () => {
+  const source = 'Above\n\n%%\nhidden\n\nmore\n%%\n\nBelow';
+  assert.deepEqual(splitBlocks(source), [{ start: 0, end: 1 }, { start: 2, end: 7 }, { start: 8, end: 9 }]);
+  const html = tagdown(markSource(source, splitBlocks(source)));
+  assert.equal(html.match(/TDBLOCKMARK/g).length, 2);
+  assert.doesNotMatch(html, /hidden/);
+});
+
+test('fences holding < and quotes map to blocks at the top level', () => {
+  const source = '```rust\nVec<String>\n\nx\n```\n\n> quote\n> more\n\nend';
+  const blocks = splitBlocks(source);
+  assert.equal(blocks.length, 3);
+  const html = tagdown(markSource(source, blocks));
+  assert.match(html, /<p>TDBLOCKMARK1X<\/p><blockquote/);
+  assert.match(html, /<p>TDBLOCKMARK2X<\/p><p>end<\/p>/);
+});

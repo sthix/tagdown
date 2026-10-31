@@ -28,6 +28,11 @@ export const tagdownDocumentation: DocumentationSection[] = [
         syntax: 'A paragraph of text.\n\n---\n\nAnother paragraph.'
       },
       {
+        title: 'Blockquotes and comments',
+        description: 'Start a line with > to quote it. > [!tip] Title makes a callout, as Obsidian writes them. Text between %% marks stays in the source and never appears in the preview or an export.',
+        syntax: '> A quoted line.\n\n> [!tip] Pro tip\n> A callout.\n\n%% A note to yourself. %%'
+      },
+      {
         title: 'Universal close',
         description: 'Use </> to close the most recent open Tagdown tag when the tag name is obvious.',
         syntax: '<quote "Ada Lovelace">\nThat brain of mine is something more than merely mortal.\n</>'

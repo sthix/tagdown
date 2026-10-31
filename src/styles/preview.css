@@ -130,11 +130,12 @@
 }
 .preview blockquote {
   margin: 14px 0;
-  padding: 4px 0 4px 18px;
-  border-left: 3px solid var(--pv-rule);
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--pv-rule);
   color: var(--pv-ink-soft);
-  font-style: italic;
 }
+.preview blockquote > :first-child { margin-top: 0; }
+.preview blockquote > :last-child { margin-bottom: 0; }
 .preview code {
   font-family: var(--font-mono);
   font-size: 90%;
@@ -209,6 +210,9 @@
   text-transform: uppercase;
   color: var(--ink-2);
 }
+details.td-note-fold { display: block; }
+.td-note-fold > summary { cursor: pointer; }
+.td-note-fold[open] > summary { margin-bottom: 10px; }
 .td-note-body > :first-child { margin-top: 0; }
 .td-note-body > :last-child { margin-bottom: 0; }
 .td-note-ok { background: var(--pv-note-ok-bg); border-left-color: var(--pv-note-ok-border); }

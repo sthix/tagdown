@@ -84,6 +84,113 @@ function preprocessGridDivider(input) {
   });
 }
 
+/* ```lang ... ``` or ~~~lang ... ~~~   becomes a placeholder paragraph, and the code
+   waits in _state.fences until tryBlockText renders it. A fence that is never
+   closed runs to the end of the note, as in CommonMark. <code> tags keep their
+   text as written, so a fence shown inside one stays text. */
+const FENCE_OPEN_RE = /^([ \t]*)(`{3,}(?=[^`]*$)|~{3,})[ \t]*(.*)$/;
+const CODE_TAG_OPEN_RE = /<code\b[^>]*>/gi;
+const CODE_TAG_CLOSE_RE = /<\s*\/\s*(?:code\s*)?>/i;
+
+function extractFences(input) {
+  const lines = input.split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const open = lines[i].match(FENCE_OPEN_RE);
+    if (!open) {
+      out.push(lines[i]);
+      const end = codeTagEnd(lines, i);
+      for (let k = i + 1; k < end; k++) out.push(lines[k]);
+      i = end;
+      continue;
+    }
+    const [, indent, marks, info] = open;
+    const close = new RegExp(`^[ \\t]*\\${marks[0]}{${marks.length},}[ \\t]*$`);
+    const body = [];
+    let j = i + 1;
+    while (j < lines.length && !close.test(lines[j])) {
+      body.push(lines[j].startsWith(indent) ? lines[j].slice(indent.length) : lines[j].trimStart());
+      j++;
+    }
+    _state.fences.push({ lang: info.trim().split(/\s+/)[0] || '', code: body.join('\n') });
+    out.push('', `\x03${_state.fences.length - 1}\x03`, '');
+    i = j + 1;
+  }
+  return out.join('\n');
+}
+
+/* Index past the <code> tag left open on lines[i], or i + 1 when there is none. */
+function codeTagEnd(lines, i) {
+  const line = lines[i].replace(/`[^`\n]*`/g, '');
+  const opens = [...line.matchAll(CODE_TAG_OPEN_RE)];
+  if (!opens.length) return i + 1;
+  const last = opens[opens.length - 1];
+  if (CODE_TAG_CLOSE_RE.test(line.slice(last.index + last[0].length))) return i + 1;
+  for (let j = i + 1; j < lines.length; j++) if (CODE_TAG_CLOSE_RE.test(lines[j])) return j + 1;
+  return i + 1;
+}
+
+function renderFence(fence) {
+  if (fence.lang.toLowerCase() === 'mermaid') return `<pre class="mermaid">${esc(fence.code)}</pre>`;
+  return renderCodeBlock(fence.code, { lang: fence.lang });
+}
+
+/* %% a comment %%, on one line or across several, as Obsidian writes them. It
+   stays in the source and never reaches the preview or an export. */
+function stripComments(input) {
+  if (!input.includes('%%')) return input;
+  return input.split(/(`[^`\n]*`)/).map((part, i) => i % 2 ? part : part.replace(/%%[\s\S]*?%%/g, '')).join('');
+}
+
+/* > quoted lines                        becomes  <quote>quoted lines</quote>
+   > [!warning] Title
+   > body                                becomes  <note type=warn title="Title">body</note>
+   A plain line straight after a quote continues it, unless it starts a block of
+   its own. Quotes nest, and can hold anything a note can. */
+const QUOTE_LINE_RE = /^ {0,3}>/;
+const QUOTE_START_RE = /^ {0,3}>[ \t]*\S/;
+const QUOTE_STOP_RE = /^\s*$|^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|<|:::|\||\x03)/;
+const CALLOUT_LINE_RE = /^\[!([\w-]+)\]([+-]?)[ \t]*(.*)$/;
+/* Obsidian's callout types, by the Tagdown note type closest in meaning. */
+const CALLOUT_TYPES = {
+  note: 'note', info: 'info', abstract: 'info', summary: 'info', tldr: 'info', todo: 'info',
+  question: 'info', help: 'info', faq: 'info', example: 'info', quote: 'info', cite: 'info',
+  tip: 'tip', hint: 'tip', important: 'important',
+  success: 'ok', check: 'ok', done: 'ok',
+  warning: 'warn', warn: 'warn', caution: 'warn', attention: 'warn',
+  failure: 'error', fail: 'error', missing: 'error', danger: 'error', error: 'error', bug: 'error',
+};
+
+function preprocessBlockquotes(input) {
+  const lines = input.split('\n');
+  const out = [];
+  let i = 0;
+  // An indented > under a list item belongs to the item: renderList takes it.
+  let inList = false;
+  while (i < lines.length) {
+    inList = LIST_ITEM_RE.test(lines[i]) || (inList && LIST_CONTINUATION_RE.test(lines[i]));
+    if (inList || !QUOTE_START_RE.test(lines[i])) { out.push(lines[i]); i++; continue; }
+    const body = [];
+    while (i < lines.length && (QUOTE_LINE_RE.test(lines[i]) || !QUOTE_STOP_RE.test(lines[i]))) {
+      body.push(lines[i].replace(/^ {0,3}> ?/, ''));
+      i++;
+    }
+    const callout = body[0].match(CALLOUT_LINE_RE);
+    if (callout) body.shift();
+    const inner = preprocessBlockquotes(extractFences(body.join('\n')));
+    if (callout) {
+      const name = callout[1].toLowerCase();
+      const title = (callout[3].trim() || name[0].toUpperCase() + name.slice(1)).replace(/"/g, '”');
+      const fold = callout[2] ? ` fold=${callout[2] === '-' ? 'closed' : 'open'}` : '';
+      out.push(`<note type=${CALLOUT_TYPES[name] ?? 'info'} title="${title}"${fold}>`, inner, '</note>');
+    } else {
+      out.push('<quote plain>', inner, '</quote>');
+    }
+  }
+  return out.join('\n');
+}
+
 /* Inside `inline code spans`, swap < and > for sentinel chars so the tokenizer
    doesn't read them as tags. We swap back to &lt; / &gt; at the very end. */
 function preprocessBacktickAngles(input) {
@@ -93,12 +200,15 @@ function preprocessBacktickAngles(input) {
 }
 
 function restoreSentinels(html) {
-  return html.replace(//g, '&lt;').replace(//g, '&gt;');
+  return html
+    // A placeholder that a raw-text tag kept reads as the code it stands for.
+    .replace(/\x03(\d+)\x03/g, (_, n) => esc(_state.fences[+n].code))
+    .replace(//g, '&lt;').replace(//g, '&gt;');
 }
 
 /* Module-scope state for cross-cutting features (footnotes, TOC, tabs). Reset at the
    start of every preprocess() call. Declared early so preprocess() can reference it. */
-let _state = { frontmatter: null, footnotes: [], headings: [] };
+let _state = { frontmatter: null, footnotes: [], headings: [], fences: [] };
 /* Never reset: separately rendered blocks share one page, so tab radio ids
    must stay unique across renders, not just within one. */
 let _tabsCounter = 0;
@@ -183,20 +293,25 @@ function preprocessFootnotes(input) {
 
 function preprocess(input) {
   // Reset per-document state
-  _state = { frontmatter: null, footnotes: [], headings: [] };
+  _state = { frontmatter: null, footnotes: [], headings: [], fences: [] };
 
   // Frontmatter must be first — runs on raw input
   input = preprocessFrontmatter(input);
 
+  // Fenced code first: nothing after this step can read its contents as syntax.
+  input = extractFences(input);
+
   // Backtick sentinels can run unconditionally — they don't disturb code blocks.
   input = preprocessBacktickAngles(input);
 
-  // Skip <code>...</code>, <defs>...</defs>, and ```...``` regions so their contents
+  // Skip <code>...</code> and <defs>...</defs> regions so their contents
   // aren't re-parsed by the other block preprocessors.
-  const protectRe = /(<code\b[^>]*>[\s\S]*?<\/code>|<defs\b[^>]*>[\s\S]*?<\/defs>|```[\w]*\n[\s\S]*?\n```)/;
+  const protectRe = /(<code\b[^>]*>[\s\S]*?<\/code>|<defs\b[^>]*>[\s\S]*?<\/defs>)/;
   const parts = input.split(protectRe);
   return parts.map(p => {
-    if (p.startsWith('<code') || p.startsWith('<defs') || p.startsWith('```')) return p;
+    if (p.startsWith('<code') || p.startsWith('<defs')) return p;
+    p = stripComments(p);
+    p = preprocessBlockquotes(p);
     p = preprocessGridDivider(p);
     p = preprocessCallouts(p);
     p = preprocessDefs(p);
@@ -704,16 +819,10 @@ function tryBlockText(text) {
   const mb = t.match(/^\$\$([\s\S]+?)\$\$$/);
   if (mb) return `<div class="td-math td-math-block">$$${esc(mb[1])}$$</div>`;
 
-  // Fenced code: ```lang ... ```. Mermaid gets a special wrapper so Pele
-  // upgrades the escaped source to SVG when the preview is displayed.
-  const f = t.match(/^```(\w+)?\n([\s\S]*?)\n?```$/);
-  if (f) {
-    const lang = f[1] || '';
-    if (lang.toLowerCase() === 'mermaid') {
-      return `<pre class="mermaid">${esc(f[2])}</pre>`;
-    }
-    return renderCodeBlock(f[2], { lang });
-  }
+  // Fenced code, held aside by extractFences. Mermaid gets a special wrapper so
+  // Pele upgrades the escaped source to SVG when the preview is displayed.
+  const f = t.match(/^\x03(\d+)\x03$/);
+  if (f) return renderFence(_state.fences[+f[1]]);
 
   // Lists: every line is `- text`, `* text`, `1. text`, `- [ ] task` or an
   // indented continuation of the item above. Indentation nests items.
@@ -750,7 +859,9 @@ function renderList(lines) {
   for (const line of lines) {
     const m = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
     if (!m) {
-      if (stack.length) stack[stack.length - 1].node.text += '\n' + line.trim();
+      const item = stack.length ? stack[stack.length - 1].node : null;
+      if (item && (item.quote.length || /^>/.test(line.trim()))) item.quote.push(line.trim());
+      else if (item) item.text += '\n' + line.trim();
       continue;
     }
     const indent = m[1].replace(/\t/g, '  ').length;
@@ -762,6 +873,7 @@ function renderList(lines) {
       task: task ? task[1] !== ' ' : null,
       text: task ? (task[2] || '') : m[3],
       children: [],
+      quote: [],
     };
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
     (stack.length ? stack[stack.length - 1].node : root).children.push(node);
@@ -832,7 +944,8 @@ function renderListItems(items) {
     while (j < items.length && items[j].ordered === items[i].ordered) j++;
     const group = items.slice(i, j);
     const lis = group.map(item => {
-      const nested = item.children.length ? renderListItems(item.children) : '';
+      const nested = (item.quote.length ? renderBlocks(item.quote.join('\n')) : '')
+        + (item.children.length ? renderListItems(item.children) : '');
       if (item.task !== null) {
         const meta = taskWords(item.text);
         return `<li class="td-task${meta.priority ? ` is-${meta.priority}` : ''}"><input type="checkbox"${item.task ? ' checked' : ''}><span>${markTaskDate(inline(meta.text), item.task)}${taskChips(meta)}</span>${nested}</li>`;
@@ -848,6 +961,11 @@ function renderListItems(items) {
     i = j;
   }
   return out;
+}
+
+/* Text taken out of its place in the document, run through the block steps on its own. */
+function renderBlocks(text) {
+  return renderChildren(parse(tokenize(preprocessBlockquotes(text))), true);
 }
 
 function passThrough(node, blockCtx) {
@@ -918,6 +1036,12 @@ const HANDLERS = {
     type = type || 'info';
     const cfg = NOTE_DEFAULTS[type] || NOTE_DEFAULTS.info;
     const label = a.title || (a._pos && a._pos[0]) || cfg.label;
+    if (a.fold) {
+      return `<details class="td-note td-note-fold ${cfg.cls}"${attrsStr(a, ['id'])}${a.fold === 'open' ? ' open' : ''}>
+      <summary class="td-note-icon">${esc(label)}</summary>
+      <div class="td-note-body">${renderChildren(n, true)}</div>
+    </details>`;
+    }
     return `<aside class="td-note ${cfg.cls}"${attrsStr(a, ['id'])}>
       <div class="td-note-icon">${esc(label)}</div>
       <div class="td-note-body">${renderChildren(n, true)}</div>
@@ -984,6 +1108,8 @@ const HANDLERS = {
 
   quote: (n, a) => {
     // <quote "Knuth"> or <quote by=Knuth>
+    // <quote plain> is a Markdown > quote, which reads as part of the note.
+    if (a.plain) return `<blockquote>${renderChildren(n, true)}</blockquote>`;
     const cite = a.by || a.cite || a.from || (a._pos && a._pos[0]);
     const citeHtml = cite ? `<span class="td-quote-cite">${esc(cite)}</span>` : '';
     return `<blockquote class="td-quote">${renderChildren(n, true)}${citeHtml}</blockquote>`;

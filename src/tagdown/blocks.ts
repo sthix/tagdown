@@ -9,7 +9,8 @@
 
 export type SourceBlock = { start: number; end: number }; // line range [start, end)
 
-const FENCE = /^\s*(`{3,}|~{3,})/;
+const FENCE = /^\s*(`{3,}(?=[^`]*$)|~{3,})/;
+const COMMENT_OPEN = /^\s*%%(?!.*%%)/;
 const CALLOUT_OPEN = /^:::\s*\w/;
 const CALLOUT_CLOSE = /^:::\s*$/;
 const MATH_OPEN = /^\s*\$\$/;
@@ -33,7 +34,7 @@ function containerTag(line: string): string | null {
 }
 
 function startsContainer(line: string) {
-  return FENCE.test(line) || CALLOUT_OPEN.test(line) || MATH_OPEN.test(line) || containerTag(line) !== null;
+  return FENCE.test(line) || COMMENT_OPEN.test(line) || CALLOUT_OPEN.test(line) || MATH_OPEN.test(line) || containerTag(line) !== null;
 }
 
 /** Index just past the end of the container that opens on `lines[i]`, or -1. */
@@ -45,6 +46,10 @@ function containerEnd(lines: string[], i: number): number {
     const close = new RegExp(`^\\s*\\${char}{${fence[1].length},}\\s*$`);
     for (let j = i + 1; j < lines.length; j++) if (close.test(lines[j])) return j + 1;
     return lines.length;
+  }
+  if (COMMENT_OPEN.test(line)) {
+    for (let j = i + 1; j < lines.length; j++) if (lines[j].includes('%%')) return j + 1;
+    return -1;
   }
   if (CALLOUT_OPEN.test(line)) {
     for (let j = i + 1; j < lines.length; j++) if (CALLOUT_CLOSE.test(lines[j])) return j + 1;
